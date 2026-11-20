@@ -1,0 +1,45 @@
+{
+  "name": "pikara-science-ep01",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pikara Science EP01 — AI 是怎麼在你的電腦上運行的？",
+  "scripts": {
+    "dev": "remotion studio src/index.ts",
+    "gpu:check": "node scripts/gpu-check.mjs",
+    "voiceover": "py -3.11 scripts/generate_voiceover.py --seq ep01 --concurrency 1",
+    "voiceover:arttest": "py -3.11 scripts/generate_voiceover.py --seq arttest",
+    "voiceover:test": "py -3.11 scripts/generate_voiceover.py --test",
+    "voiceover:check": "py -3.11 scripts/generate_voiceover.py --check --seq ep01",
+    "voiceover:sync": "py -3.11 scripts/build_timeline.py --seq ep01 --estimate && py -3.11 scripts/mix_audio.py --seq ep01 && py -3.11 scripts/export_voiceover_md.py",
+    "voiceover:mix": "py -3.11 scripts/mix_audio.py --seq ep01",
+    "preview": "node scripts/render.mjs preview --comp EP01 --out EP01_Preview.mp4",
+    "render": "node scripts/render.mjs gpu --comp EP01-30fps --out EP01_Final.mp4",
+    "render:gpu": "node scripts/render.mjs gpu --comp EP01-30fps --out EP01_Final.mp4",
+    "render:cpu": "node scripts/render.mjs cpu --comp EP01-30fps --out EP01_Final_cpu.mp4",
+    "benchmark": "node scripts/benchmark.mjs",
+    "stills": "node scripts/stills.mjs",
+    "typecheck": "tsc --noEmit",
+    "render:act": "node scripts/render.mjs gpu --comp",
+    "render:arttest": "node scripts/render.mjs gpu --comp ArtTest --out preview.mp4",
+    "thumbnail": "node scripts/stills.mjs 0 EP01-Thumbnail src/entries/thumbnail.tsx && ffmpeg -y -loglevel error -i out/stills/EP01-Thumbnail-00000.png -vf scale=1280:720:flags=lanczos EP01_Thumbnail.png",
+    "qa": "py -3.11 scripts/qa_video.py EP01_Final.mp4 --seq ep01",
+    "srt": "py -3.11 scripts/build_timeline.py --seq ep01 --estimate && node -e \"require('fs').copyFileSync('out/subtitles/ep01.srt','EP01.srt')\""
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/three": "^4.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

@@ -1,0 +1,776 @@
+{
+  "voice": {
+    "name": "zh-TW-YunJheNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "volume": "+0%"
+  },
+  "fps": 60,
+  "defaults": {
+    "pauseAfter": 0.38,
+    "sceneGap": 0.8,
+    "leadIn": 0.5,
+    "tail": 1.6
+  },
+  "sequences": {
+    "arttest": {
+      "title": "第一階段 美術測試（有聲）",
+      "tail": 1.4,
+      "scenes": [
+        {
+          "id": "t01",
+          "title": "桌前提問",
+          "lines": [
+            {
+              "id": "t01-1",
+              "subtitle": "當你向 AI 提出一個問題時，你有沒有想過，電腦究竟做了什麼？",
+              "pauseAfter": 0.45
+            }
+          ]
+        },
+        {
+          "id": "t02",
+          "title": "進入主機",
+          "lines": [
+            {
+              "id": "t02-1",
+              "subtitle": "按下 Enter 之後，運算的主力會交給顯示卡，也就是 GPU。",
+              "anchors": {
+                "enter": "按下",
+                "gpu": "GPU"
+              }
+            }
+          ]
+        },
+        {
+          "id": "t03",
+          "title": "VRAM 與晶片",
+          "lines": [
+            {
+              "id": "t03-1",
+              "subtitle": "模型的權重從顯示記憶體流進晶片，在裡面被大量地相乘、相加。",
+              "anchors": {
+                "vram": "顯示記憶體",
+                "flow": "流進",
+                "chip": "晶片",
+                "multiply": "相乘"
+              },
+              "pauseAfter": 0.6
+            }
+          ]
+        },
+        {
+          "id": "t04",
+          "title": "品牌",
+          "lines": [
+            {
+              "id": "t04-1",
+              "subtitle": "這裡是 Pikara Science。",
+              "anchors": {
+                "brand": "這裡是"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "ep01": {
+      "voiceEngine": "cosyvoice",
+      "title": "EP01 AI 是怎麼在你的電腦上運行的？深入理解 llama.cpp",
+      "sceneGap": 1.3,
+      "leadIn": 0.4,
+      "tail": 3.4,
+      "scenes": [
+        {
+          "id": "act01",
+          "title": "AI 就在你的電腦裡",
+          "lines": [
+            {
+              "id": "a1-00",
+              "subtitle": "本機 AI 每吐出一個字，顯示卡就要做幾十億次乘法。",
+              "anchors": {
+                "hook": "幾十億"
+              },
+              "pauseAfter": 0.9,
+              "cosySpeed": 1.35
+            },
+            {
+              "id": "a1-01",
+              "subtitle": "晚上十一點，你打開電腦，問 AI 一個問題。",
+              "anchors": {
+                "open": "晚上"
+              }
+            },
+            {
+              "id": "a1-02",
+              "subtitle": "幾秒鐘之後，答案一小段一小段地冒了出來。",
+              "anchors": {
+                "answer": "答案"
+              }
+            },
+            {
+              "id": "a1-03",
+              "subtitle": "但你有沒有想過，在你按下 Enter 的那一刻，電腦裡到底發生了什麼事？",
+              "anchors": {
+                "enter": "按下"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a1-04",
+              "subtitle": "這台電腦沒有連上任何雲端服務。回答你的，是一個直接在本機執行的模型；而負責大部分計算的，是這張顯示卡，也就是 GPU。",
+              "anchors": {
+                "offline": "沒有連上",
+                "gpu": "GPU"
+              }
+            },
+            {
+              "id": "a1-05",
+              "subtitle": "在 GPU 晶片旁邊，是存放模型權重的顯示記憶體，也就是 VRAM。",
+              "anchors": {
+                "vram": "顯示記憶體"
+              }
+            },
+            {
+              "id": "a1-06",
+              "subtitle": "權重從 VRAM 流進晶片，在裡面被大量地相乘、相加，一次又一次。",
+              "anchors": {
+                "flow": "流進",
+                "chip": "晶片",
+                "multiply": "相乘"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a1-07",
+              "subtitle": "這些數字，是怎麼變成一句通順的回答的？我們從頭說起。",
+              "anchors": {
+                "outro": "從頭"
+              }
+            }
+          ]
+        },
+        {
+          "id": "act02",
+          "title": "本地 AI 與雲端 AI",
+          "lines": [
+            {
+              "id": "a2-00",
+              "subtitle": "你問 AI 的那一句話，可能正在飛越半個地球。",
+              "anchors": {
+                "hook": "飛越"
+              },
+              "pauseAfter": 0.6
+            },
+            {
+              "id": "a2-01",
+              "subtitle": "先說一件很多人沒注意到的事：平常用的 AI 聊天服務，大多不是在你的電腦上算的。",
+              "anchors": {
+                "laptop": "平常",
+                "notlocal": "不是在"
+              }
+            },
+            {
+              "id": "a2-02",
+              "subtitle": "你輸入的文字會變成網路封包，穿過路由器和海底電纜，送到幾百、甚至幾千公里外的資料中心。",
+              "anchors": {
+                "packet": "網路封包",
+                "cable": "海底電纜",
+                "datacenter": "資料中心"
+              }
+            },
+            {
+              "id": "a2-03",
+              "subtitle": "那裡有一排又一排的 GPU 伺服器。算完之後，再把答案傳回來。這叫做雲端推理。",
+              "anchors": {
+                "servers": "伺服器",
+                "return": "傳回來",
+                "cloud": "雲端推理"
+              }
+            },
+            {
+              "id": "a2-04",
+              "subtitle": "本地推理走的是另一條路：模型檔案就放在你自己的硬碟裡，所有計算都在這台電腦上完成，資料不用離開你的桌面。",
+              "anchors": {
+                "local": "本地推理",
+                "disk": "硬碟",
+                "stay": "不用離開"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a2-05",
+              "subtitle": "兩種方式，各有取捨。",
+              "anchors": {
+                "compare": "取捨"
+              }
+            },
+            {
+              "id": "a2-06",
+              "subtitle": "雲端的模型通常更大、更強，你不用煩惱硬體；但必須連上網路，對話內容會傳到別人的伺服器，用量一大，也得付費。",
+              "anchors": {
+                "cloudcol": "雲端的模型",
+                "net": "連上網路",
+                "privacy": "別人的伺服器",
+                "cost": "付費"
+              }
+            },
+            {
+              "id": "a2-07",
+              "subtitle": "本地模型受限於自己的硬體，能跑的模型比較小；但可以離線使用，資料留在自己手上，除了電費，沒有按次計費。",
+              "anchors": {
+                "localcol": "本地模型",
+                "hw": "硬體",
+                "offline": "離線",
+                "power": "電費"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a2-08",
+              "subtitle": "那麼，這個被下載到硬碟裡的「模型」，到底是什麼東西？",
+              "anchors": {
+                "question": "到底是什麼"
+              }
+            }
+          ]
+        },
+        {
+          "id": "act03",
+          "title": "大型語言模型到底是什麼",
+          "lines": [
+            {
+              "id": "a3-00",
+              "subtitle": "一個模型檔案動輒好幾 GB。裡面裝的，到底是什麼？",
+              "anchors": {
+                "hook": "到底是什麼"
+              },
+              "pauseAfter": 0.6,
+              "speak": "一個模型檔案動輒好幾 G-B。裡面裝的，到底是什麼？"
+            },
+            {
+              "id": "a3-01",
+              "subtitle": "很多人以為，AI 模型像一個巨大的資料庫，裡面存著所有問題的答案。其實不是。",
+              "anchors": {
+                "db": "資料庫",
+                "notdb": "其實不是"
+              }
+            },
+            {
+              "id": "a3-02",
+              "subtitle": "打開模型檔案，你看到的主要是數字，非常、非常多的數字。這些數字叫做權重，也就是參數。",
+              "anchors": {
+                "numbers": "數字",
+                "weights": "權重"
+              }
+            },
+            {
+              "id": "a3-03",
+              "subtitle": "它們被排成一張張矩陣。資料進來，先跟矩陣相乘，再經過一些簡單的運算，變成新的數字，傳給下一層。",
+              "anchors": {
+                "matrix": "矩陣",
+                "multiply": "相乘",
+                "nextlayer": "下一層"
+              }
+            },
+            {
+              "id": "a3-04",
+              "subtitle": "現在大部分的語言模型，都採用一種叫做 Transformer 的架構，把很多層這樣的運算，一層一層疊起來。",
+              "anchors": {
+                "transformer": "Transformer",
+                "stack": "疊起來"
+              }
+            },
+            {
+              "id": "a3-05",
+              "subtitle": "常聽到的 4B、8B、70B，B 指的是 billion，十億。4B 就是大約 40 億個參數，70B 則是大約 700 億個。",
+              "anchors": {
+                "sizes": "常聽到",
+                "billion": "十億",
+                "b4": "40 億",
+                "b70": "700 億"
+              },
+              "speak": "常聽到的 4 B、8 B、70 B，B 指的是 billion，十億。4 B 就是大約 40 億個參數，70 B 則是大約 700 億個。"
+            },
+            {
+              "id": "a3-06",
+              "subtitle": "參數越多，模型通常越有能力，但需要的記憶體和計算量也跟著變大。",
+              "anchors": {
+                "bigger": "參數越多",
+                "memory": "記憶體"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a3-07",
+              "subtitle": "這些參數的數值，是在「訓練」時決定的：讓模型讀大量的文字，一次又一次猜下一個字，猜錯了，就微調權重。這需要非常龐大的運算資源。",
+              "anchors": {
+                "train": "訓練",
+                "guess": "猜下一個字",
+                "adjust": "微調"
+              }
+            },
+            {
+              "id": "a3-08",
+              "subtitle": "訓練完成，權重就固定下來。我們在自己電腦上做的是「推理」：拿這些固定的權重來計算答案，過程中不會改變它們。",
+              "anchors": {
+                "freeze": "固定下來",
+                "inference": "推理"
+              }
+            },
+            {
+              "id": "a3-09",
+              "subtitle": "所以，模型記住的不是一條一條的答案，而是從大量文字裡學到的規律。",
+              "anchors": {
+                "patterns": "規律"
+              }
+            }
+          ]
+        },
+        {
+          "id": "act04",
+          "title": "量化與 GGUF",
+          "lines": [
+            {
+              "id": "a4-01",
+              "subtitle": "問題來了：這麼多數字，要怎麼塞進一張小小的顯示卡？",
+              "anchors": {
+                "q": "問題來了"
+              }
+            },
+            {
+              "id": "a4-02",
+              "subtitle": "訓練時常用 FP32，每個數字用 32 個位元的浮點數來表示。推理時常改用 FP16，每個數字 16 個位元，大小直接減半。",
+              "anchors": {
+                "fp32": "32 個位元",
+                "fp16": "16 個位元",
+                "half": "減半"
+              },
+              "speak": "訓練時常用 F P 32，每個數字用 32 個位元的浮點數來表示。推理時常改用 F P 16，每個數字 16 個位元，大小直接減半。"
+            },
+            {
+              "id": "a4-03",
+              "subtitle": "算算看：一個 8B 的模型，如果每個參數都用 FP16 存，光是權重就要大約 16 GB。",
+              "anchors": {
+                "calc": "算算看",
+                "result": "16 GB"
+              },
+              "speak": "算算看：一個 8 B 的模型，如果每個參數都用 F P 16 存，光是權重就要大約 16 GB。"
+            },
+            {
+              "id": "a4-04",
+              "subtitle": "可是很多筆電的顯示卡，VRAM 只有 6 GB 或 8 GB。這就是量化要解決的問題。",
+              "anchors": {
+                "vram6": "6 GB",
+                "quant": "量化"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a4-05",
+              "subtitle": "量化，是用比較少的位元，去近似原本的數字。",
+              "anchors": {
+                "approx": "近似"
+              }
+            },
+            {
+              "id": "a4-06",
+              "subtitle": "做法是先把權重分成一小組、一小組。每一組找出一個縮放係數，組裡的每個數字，就只需要記一個很小的整數。",
+              "anchors": {
+                "group": "一小組",
+                "scale": "縮放係數",
+                "ints": "整數"
+              }
+            },
+            {
+              "id": "a4-07",
+              "subtitle": "要用的時候，把整數乘回縮放係數，就能還原出一個很接近原本的數值。",
+              "anchors": {
+                "restore": "還原"
+              }
+            },
+            {
+              "id": "a4-08",
+              "subtitle": "INT8 每個數字用 8 個位元，誤差很小；4 位元的量化，大小只剩 FP16 的四分之一左右，誤差也跟著變大。",
+              "anchors": {
+                "int8": "8 個位元",
+                "q4": "4 位元",
+                "error": "誤差也跟著"
+              },
+              "speak": "int8 每個數字用 8 個位元，誤差很小；4 位元的量化，大小只剩 F P 16 的四分之一左右，誤差也跟著變大。"
+            },
+            {
+              "id": "a4-09",
+              "subtitle": "要特別注意：量化不是把參數刪掉。參數的數量完全一樣，變少的，是每個數字的精細程度。",
+              "anchors": {
+                "notdelete": "不是把參數刪掉",
+                "same": "完全一樣"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a4-10",
+              "subtitle": "常見的 Q4_K_M 是一種混合做法：大部分權重用 4 位元左右，比較敏感的部分保留更多位元，在檔案大小和回答品質之間取得平衡。",
+              "anchors": {
+                "q4km": "混合",
+                "sensitive": "比較敏感"
+              },
+              "speak": "常見的 Q 4 K M 是一種混合做法：大部分權重用 4 位元左右，比較敏感的部分保留更多位元，在檔案大小和回答品質之間取得平衡。"
+            },
+            {
+              "id": "a4-11",
+              "subtitle": "我們來算理論上的權重大小：參數量，乘上每個參數的位元數，再除以 8，就是位元組。",
+              "anchors": {
+                "formula": "理論上"
+              }
+            },
+            {
+              "id": "a4-12",
+              "subtitle": "以 8B 模型來說：FP32 大約 32 GB，FP16 大約 16 GB，INT8 大約 8 GB，4 位元大約 4 GB。",
+              "anchors": {
+                "c32": "32 GB",
+                "c16": "16 GB",
+                "c8": "大約 8 GB",
+                "c4": "4 GB"
+              },
+              "speak": "以 8 B 模型來說：F P 32 大約 32 GB，F P 16 大約 16 GB，INT 8 大約 8 GB，4 位元大約 4 GB。"
+            },
+            {
+              "id": "a4-13",
+              "subtitle": "70B 的模型，就算用 4 位元，理論上也要大約 35 GB，遠遠超過一般消費級顯示卡的容量。",
+              "anchors": {
+                "b70": "35 GB",
+                "exceed": "遠遠超過"
+              },
+              "speak": "70 B 的模型，就算用 4 位元，理論上也要大約 35 GB，遠遠超過一般消費級顯示卡的容量。"
+            },
+            {
+              "id": "a4-14",
+              "subtitle": "實際下載的檔案，通常會比理論值大一些：每一組數字還要額外存縮放係數，有些層也會保留比較高的精度。",
+              "anchors": {
+                "actual": "實際下載"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a4-15",
+              "subtitle": "這些量化後的權重，常常用 GGUF 格式儲存。",
+              "anchors": {
+                "gguf": "格式"
+              }
+            },
+            {
+              "id": "a4-16",
+              "subtitle": "GGUF 是一種檔案格式：開頭是檔頭，接著是描述模型架構、分詞器等資訊的中繼資料，最後才是一個個張量，也就是真正的權重。",
+              "anchors": {
+                "header": "檔頭",
+                "meta": "中繼資料",
+                "tensors": "張量"
+              },
+              "speak": "G G U F 是一種檔案格式：開頭是檔頭，接著是描述模型架構、分詞器等資訊的中繼資料，最後才是一個個張量，也就是真正的權重。"
+            },
+            {
+              "id": "a4-17",
+              "subtitle": "一個檔案就裝下執行模型需要的一切，下載之後就能直接載入。不過記得，GGUF 是容器，不是模型本身。",
+              "anchors": {
+                "onefile": "一個檔案",
+                "container": "容器"
+              },
+              "speak": "一個檔案就裝下執行模型需要的一切，下載之後就能直接載入。不過記得，G G U F 是容器，不是模型本身。"
+            }
+          ]
+        },
+        {
+          "id": "act05",
+          "title": "llama.cpp 如何運作",
+          "lines": [
+            {
+              "id": "a5-00",
+              "subtitle": "同一個模型，交給 CPU 跑和交給 GPU 跑，速度可能差很多。差在哪裡？",
+              "anchors": {
+                "hook": "差在哪裡"
+              },
+              "pauseAfter": 0.6
+            },
+            {
+              "id": "a5-01",
+              "subtitle": "有了 GGUF 檔案，還需要一個程式把它跑起來。這就是 llama.cpp。",
+              "anchors": {
+                "intro": "這就是"
+              },
+              "speak": "有了 G G U F 檔案，還需要一個程式把它跑起來。這就是 llama C P P。"
+            },
+            {
+              "id": "a5-02",
+              "subtitle": "llama.cpp 是一個用 C 和 C++ 寫成的開源推理引擎，還附帶一整組命令列工具和伺服器。它不是某一個 AI 模型，而是負責執行模型的軟體。",
+              "anchors": {
+                "engine": "推理引擎",
+                "tools": "命令列工具",
+                "notmodel": "不是某一個"
+              },
+              "speak": "llama C P P 是一個用 C 和 C plus plus 寫成的開源推理引擎，還附帶一整組命令列工具和伺服器。它不是某一個 AI 模型，而是負責執行模型的軟體。"
+            },
+            {
+              "id": "a5-03",
+              "subtitle": "它的底層是 GGML，一個專門處理張量運算的函式庫。同一套程式，可以在 CPU 上計算，也可以透過 CUDA，交給 NVIDIA 顯示卡加速。",
+              "anchors": {
+                "ggml": "函式庫",
+                "cpu": "CPU",
+                "cuda": "CUDA"
+              },
+              "pauseAfter": 0.5,
+              "speak": "它的底層是 G G M L，一個專門處理張量運算的函式庫。同一套程式，可以在 CPU 上計算，也可以透過 CUDA，交給 NVIDIA 顯示卡加速。"
+            },
+            {
+              "id": "a5-04",
+              "subtitle": "我們用一台常見的筆電來看整個流程：處理器是 Ryzen 7，系統記憶體 32 GB，顯示卡是 RTX 4050 Laptop，有 6 GB 的 VRAM。",
+              "anchors": {
+                "laptop": "筆電",
+                "ryzen": "Ryzen",
+                "ram": "32 GB",
+                "rtx": "R T X 4050"
+              },
+              "speak": "我們用一台常見的筆電來看整個流程：處理器是 Ryzen 7，系統記憶體 32 GB，顯示卡是 R T X 4050 Laptop，有 6 GB 的 VRAM。"
+            },
+            {
+              "id": "a5-05",
+              "subtitle": "啟動時，llama.cpp 從 SSD 讀取 GGUF 檔案，把權重載入記憶體。",
+              "anchors": {
+                "ssd": "S S D",
+                "load": "載入"
+              },
+              "speak": "啟動時，llama C P P 從 S S D 讀取 G G U F 檔案，把權重載入記憶體。"
+            },
+            {
+              "id": "a5-06",
+              "subtitle": "透過 GPU Offload，可以指定要把幾層模型放進 VRAM。放得進去的層，交給 GPU；放不下的，就留在系統記憶體，由 CPU 計算。",
+              "anchors": {
+                "offload": "Offload",
+                "gpulayers": "交給 GPU",
+                "cpulayers": "由 CPU"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a5-07",
+              "subtitle": "為什麼要盡量放進 GPU？除了 GPU 擅長大量平行的乘加運算，還有一個常被忽略的關鍵：記憶體頻寬。",
+              "anchors": {
+                "why": "為什麼",
+                "parallel": "平行",
+                "bandwidth": "記憶體頻寬"
+              }
+            },
+            {
+              "id": "a5-08",
+              "subtitle": "每生成一個新的 token，模型幾乎都要把所有權重讀過一遍。所以速度往往不是卡在計算，而是卡在數字搬得夠不夠快。",
+              "anchors": {
+                "readall": "讀過一遍",
+                "bottleneck": "搬得夠不夠快"
+              }
+            },
+            {
+              "id": "a5-09",
+              "subtitle": "GPU 讀取 VRAM 的速度，通常比 CPU 讀取系統記憶體快上不少。就像從隔壁拿東西，和從另一棟樓搬東西的差別。",
+              "anchors": {
+                "fast": "快上不少",
+                "analogy": "隔壁"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a5-10",
+              "subtitle": "還有一塊空間也很重要：KV Cache。模型每處理一個 token，就把一些中間結果存起來，後面的 token 可以直接參考，不必從頭重算。",
+              "anchors": {
+                "kv": "K V Cache",
+                "store": "存起來"
+              },
+              "speak": "還有一塊空間也很重要：K V Cache。模型每處理一個 token，就把一些中間結果存起來，後面的 token 可以直接參考，不必從頭重算。"
+            },
+            {
+              "id": "a5-11",
+              "subtitle": "Context Size 決定模型一次能看多長的上下文。上下文越長，KV Cache 就越大，也會跟模型權重搶 VRAM。",
+              "anchors": {
+                "context": "Context",
+                "grow": "越大",
+                "compete": "搶"
+              },
+              "speak": "Context Size 決定模型一次能看多長的上下文。上下文越長，K V Cache 就越大，也會跟模型權重搶 VRAM。"
+            },
+            {
+              "id": "a5-12",
+              "subtitle": "所以在 6 GB 的顯示卡上，常常要在模型大小、量化等級和上下文長度之間取捨。",
+              "anchors": {
+                "tradeoff": "取捨"
+              }
+            }
+          ]
+        },
+        {
+          "id": "act06",
+          "title": "AI 如何一個字一個字地回答你",
+          "lines": [
+            {
+              "id": "a6-00",
+              "subtitle": "AI 真的懂你在問什麼嗎？其實，它每一步只在做一件事：猜下一個字。",
+              "anchors": {
+                "hook": "猜下一個字"
+              },
+              "pauseAfter": 0.7
+            },
+            {
+              "id": "a6-01",
+              "subtitle": "好，硬體都準備好了。現在，終於輪到你的問題了。",
+              "anchors": {
+                "ready": "輪到"
+              }
+            },
+            {
+              "id": "a6-02",
+              "subtitle": "第一步是 Tokenization：把文字切成一小塊一小塊的 token，每個 token 對應詞彙表裡的一個編號。",
+              "anchors": {
+                "tokenize": "Tokenization",
+                "ids": "編號"
+              }
+            },
+            {
+              "id": "a6-03",
+              "subtitle": "token 不一定等於一個字。一個常見的英文單字可能就是一個 token；一個中文字，有時是一個 token，有時會被拆成好幾個。",
+              "anchors": {
+                "notchar": "不一定",
+                "english": "英文單字",
+                "chinese": "中文字"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a6-04",
+              "subtitle": "接著是 Embedding：每個編號換成一長串數字，也就是向量。意思相近的詞，向量也會比較接近。",
+              "anchors": {
+                "embed": "Embedding",
+                "vector": "向量",
+                "similar": "比較接近"
+              }
+            },
+            {
+              "id": "a6-05",
+              "subtitle": "然後，這些向量進入一層又一層的 Transformer。每一層裡最關鍵的機制，叫做 Attention，注意力。",
+              "anchors": {
+                "layers": "Transformer",
+                "attention": "Attention"
+              }
+            },
+            {
+              "id": "a6-06",
+              "subtitle": "舉個例子：「我把蘋果放進冰箱，因為它快壞了。」這裡的「它」指的是什麼？Attention 讓「它」去參考前面的每一個詞，發現跟「蘋果」最相關。",
+              "anchors": {
+                "example": "舉個例子",
+                "it": "指的是什麼",
+                "apple": "最相關"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a6-07",
+              "subtitle": "經過所有層之後，模型會替詞彙表裡的每一個 token 打一個分數，叫做 logits。分數越高，代表越可能是下一個 token。",
+              "anchors": {
+                "logits": "logits",
+                "score": "分數越高"
+              }
+            },
+            {
+              "id": "a6-08",
+              "subtitle": "接下來是取樣。Temperature 越低，模型越傾向選分數最高的那一個；越高，選擇就越多樣，也越可能出乎意料。",
+              "anchors": {
+                "sample": "取樣",
+                "lowT": "越低",
+                "highT": "越高"
+              },
+              "pauseAfter": 0.5
+            },
+            {
+              "id": "a6-09",
+              "subtitle": "選出一個 token，就把它接到輸入的最後面，整個流程再跑一次，選出下一個。這就是自回歸生成。",
+              "anchors": {
+                "append": "接到",
+                "loop": "再跑一次",
+                "autoreg": "自回歸"
+              }
+            },
+            {
+              "id": "a6-10",
+              "subtitle": "這個過程分成兩個階段。一開始讀你的問題時，所有 token 可以一起平行處理，叫做 Prefill；之後的回答只能一個一個產生，叫做 Decode。",
+              "anchors": {
+                "prefill": "Prefill",
+                "decode": "Decode"
+              }
+            },
+            {
+              "id": "a6-11",
+              "subtitle": "常聽到的 token/s，就是每秒能產生多少個 token。它決定了你看到文字冒出來的速度。",
+              "anchors": {
+                "tps": "每秒",
+                "speed": "速度"
+              },
+              "speak": "常聽到的 每秒 token 數，就是每秒能產生多少個 token。它決定了你看到文字冒出來的速度。"
+            }
+          ]
+        },
+        {
+          "id": "act07",
+          "title": "總結",
+          "lines": [
+            {
+              "id": "a7-01",
+              "subtitle": "回到一開始的問題：你按下 Enter 之後，到底發生了什麼？",
+              "anchors": {
+                "back": "回到"
+              }
+            },
+            {
+              "id": "a7-02",
+              "subtitle": "訓練好的權重，經過量化，裝進 GGUF 檔案。llama.cpp 把它從 SSD 載入記憶體，盡量放進 VRAM。",
+              "anchors": {
+                "weights": "訓練好",
+                "gguf": "裝進",
+                "load": "載入"
+              },
+              "speak": "訓練好的權重，經過量化，裝進 G G U F 檔案。llama C P P 把它從 S S D 載入記憶體，盡量放進 VRAM。"
+            },
+            {
+              "id": "a7-03",
+              "subtitle": "你的文字被切成 token、變成向量，在 GPU 裡經過一層又一層的矩陣運算，最後算出下一個 token 的機率。",
+              "anchors": {
+                "tokens": "切成",
+                "gpu": "GPU",
+                "prob": "機率"
+              }
+            },
+            {
+              "id": "a7-04",
+              "subtitle": "一個 token 接著一個 token，數字，最後又變回了文字。",
+              "anchors": {
+                "text": "變回了文字"
+              },
+              "pauseAfter": 0.7
+            },
+            {
+              "id": "a7-05",
+              "subtitle": "下次看著 AI 回答你的時候，你會知道：那是你的電腦，正在很認真地做數學。",
+              "anchors": {
+                "math": "做數學"
+              },
+              "pauseAfter": 0.8
+            },
+            {
+              "id": "a7-06",
+              "subtitle": "這裡是 Pikara Science，我們下次見。",
+              "anchors": {
+                "brand": "這裡是"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

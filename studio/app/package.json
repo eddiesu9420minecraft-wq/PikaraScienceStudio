@@ -1,0 +1,17 @@
+{
+  "name": "pikara-science-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pikara Science Studio — desktop studio that wraps the Pikara Science video pipeline",
+  "license": "MIT",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:nobundle": "tauri build --no-bundle",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

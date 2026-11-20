@@ -1,0 +1,17 @@
+node_modules/
+studio/app/src-tauri/target/
+studio/app/src-tauri/gen/
+studio/dist/
+pipeline/build/
+pipeline/build-*/
+pipeline/out/
+pipeline/tools/
+pipeline/src_cn/
+pipeline/public/assets/audio/
+*.mp4
+*.wav
+*.mp3
+*.part
+__pycache__/
+.studio/
+.env

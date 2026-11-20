@@ -1,0 +1,5773 @@
+{
+  "arttest": {
+    "id": "arttest",
+    "fps": 60,
+    "duration": 23.214,
+    "totalFrames": 1393,
+    "lines": [
+      {
+        "id": "t01-1",
+        "scene": "t01",
+        "subtitle": "當你向 AI 提出一個問題時，你有沒有想過，電腦究竟做了什麼？",
+        "speak": "當你向 AI 提出一個問題時，你有沒有想過，電腦究竟做了什麼？",
+        "audio": "assets/audio/voiceover/arttest/t01-1.mp3",
+        "start": 0.5,
+        "duration": 5.52,
+        "end": 6.02,
+        "startFrame": 30,
+        "durationFrames": 331,
+        "voice": {
+          "name": "zh-TW-YunJheNeural",
+          "rate": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%"
+        },
+        "timingSource": "edge-tts WordBoundary"
+      },
+      {
+        "id": "t02-1",
+        "scene": "t02",
+        "subtitle": "按下 Enter 之後，運算的主力會交給顯示卡，也就是 GPU。",
+        "speak": "按下 Enter 之後，運算的主力會交給顯示卡，也就是 GPU。",
+        "audio": "assets/audio/voiceover/arttest/t02-1.mp3",
+        "start": 6.47,
+        "duration": 5.28,
+        "end": 11.75,
+        "startFrame": 388,
+        "durationFrames": 317,
+        "voice": {
+          "name": "zh-TW-YunJheNeural",
+          "rate": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%"
+        },
+        "timingSource": "edge-tts WordBoundary"
+      },
+      {
+        "id": "t03-1",
+        "scene": "t03",
+        "subtitle": "模型的權重從顯示記憶體流進晶片，在裡面被大量地相乘、相加。",
+        "speak": "模型的權重從顯示記憶體流進晶片，在裡面被大量地相乘、相加。",
+        "audio": "assets/audio/voiceover/arttest/t03-1.mp3",
+        "start": 12.55,
+        "duration": 6.144,
+        "end": 18.694,
+        "startFrame": 753,
+        "durationFrames": 369,
+        "voice": {
+          "name": "zh-TW-YunJheNeural",
+          "rate": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%"
+        },
+        "timingSource": "edge-tts WordBoundary"
+      },
+      {
+        "id": "t04-1",
+        "scene": "t04",
+        "subtitle": "這裡是 Pikara Science。",
+        "speak": "這裡是 Pikara Science。",
+        "audio": "assets/audio/voiceover/arttest/t04-1.mp3",
+        "start": 19.294,
+        "duration": 2.52,
+        "end": 21.814,
+        "startFrame": 1158,
+        "durationFrames": 151,
+        "voice": {
+          "name": "zh-TW-YunJheNeural",
+          "rate": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%"
+        },
+        "timingSource": "edge-tts WordBoundary"
+      }
+    ],
+    "cues": [
+      {
+        "text": "當你向 AI 提出一個問題時，你有沒有想過",
+        "start": 0.5,
+        "end": 3.913,
+        "from": 30,
+        "to": 235
+      },
+      {
+        "text": "電腦究竟做了什麼？",
+        "start": 3.913,
+        "end": 5.15,
+        "from": 235,
+        "to": 309
+      },
+      {
+        "text": "按下 Enter 之後",
+        "start": 6.47,
+        "end": 7.932,
+        "from": 388,
+        "to": 476
+      },
+      {
+        "text": "運算的主力會交給顯示卡，也就是 GPU。",
+        "start": 7.932,
+        "end": 10.857,
+        "from": 476,
+        "to": 651
+      },
+      {
+        "text": "模型的權重從顯示記憶體流進晶片",
+        "start": 12.55,
+        "end": 15.525,
+        "from": 753,
+        "to": 932
+      },
+      {
+        "text": "在裡面被大量地相乘、相加。",
+        "start": 15.525,
+        "end": 17.825,
+        "from": 932,
+        "to": 1070
+      },
+      {
+        "text": "這裡是 Pikara Science。",
+        "start": 19.294,
+        "end": 20.969,
+        "from": 1158,
+        "to": 1258
+      }
+    ],
+    "anchors": {
+      "enter": {
+        "time": 6.57,
+        "frame": 394,
+        "line": "t02-1",
+        "word": "按下"
+      },
+      "gpu": {
+        "time": 10.32,
+        "frame": 619,
+        "line": "t02-1",
+        "word": "GPU"
+      },
+      "vram": {
+        "time": 13.663,
+        "frame": 820,
+        "line": "t03-1",
+        "word": "顯示記憶體"
+      },
+      "flow": {
+        "time": 14.45,
+        "frame": 867,
+        "line": "t03-1",
+        "word": "流進"
+      },
+      "chip": {
+        "time": 14.7,
+        "frame": 882,
+        "line": "t03-1",
+        "word": "晶片"
+      },
+      "multiply": {
+        "time": 16.45,
+        "frame": 987,
+        "line": "t03-1",
+        "word": "相乘"
+      },
+      "brand": {
+        "time": 19.394,
+        "frame": 1164,
+        "line": "t04-1",
+        "word": "這裡是"
+      }
+    },
+    "warnings": [],
+    "mix": "assets/audio/mix/arttest.wav"
+  },
+  "ep01": {
+    "id": "ep01",
+    "fps": 60,
+    "voiceEngine": "cosyvoice",
+    "duration": 837.44,
+    "totalFrames": 50246,
+    "lines": [
+      {
+        "id": "a1-00",
+        "scene": "act01",
+        "subtitle": "本機 AI 每吐出一個字，顯示卡就要做幾十億次乘法。",
+        "speak": "本機 AI 每吐出一個字，顯示卡就要做幾十億次乘法。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-00.mp3",
+        "start": 0.4,
+        "duration": 5.68,
+        "end": 6.08,
+        "startFrame": 24,
+        "durationFrames": 341,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.35,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-01",
+        "scene": "act01",
+        "subtitle": "晚上十一點，你打開電腦，問 AI 一個問題。",
+        "speak": "晚上十一點，你打開電腦，問 AI 一個問題。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-01.mp3",
+        "start": 6.98,
+        "duration": 4.32,
+        "end": 11.3,
+        "startFrame": 419,
+        "durationFrames": 259,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-02",
+        "scene": "act01",
+        "subtitle": "幾秒鐘之後，答案一小段一小段地冒了出來。",
+        "speak": "幾秒鐘之後，答案一小段一小段地冒了出來。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-02.mp3",
+        "start": 11.68,
+        "duration": 4.04,
+        "end": 15.72,
+        "startFrame": 701,
+        "durationFrames": 242,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-03",
+        "scene": "act01",
+        "subtitle": "但你有沒有想過，在你按下 Enter 的那一刻，電腦裡到底發生了什麼事？",
+        "speak": "但你有沒有想過，在你按下 Enter 的那一刻，電腦裡到底發生了什麼事？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-03.mp3",
+        "start": 16.1,
+        "duration": 8.36,
+        "end": 24.46,
+        "startFrame": 966,
+        "durationFrames": 502,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-04",
+        "scene": "act01",
+        "subtitle": "這台電腦沒有連上任何雲端服務。回答你的，是一個直接在本機執行的模型；而負責大部分計算的，是這張顯示卡，也就是 GPU。",
+        "speak": "這台電腦沒有連上任何雲端服務。回答你的，是一個直接在本機執行的模型；而負責大部分計算的，是這張顯示卡，也就是 GPU。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-04.mp3",
+        "start": 24.96,
+        "duration": 13.84,
+        "end": 38.8,
+        "startFrame": 1498,
+        "durationFrames": 830,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-05",
+        "scene": "act01",
+        "subtitle": "在 GPU 晶片旁邊，是存放模型權重的顯示記憶體，也就是 VRAM。",
+        "speak": "在 GPU 晶片旁邊，是存放模型權重的顯示記憶體，也就是 VRAM。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-05.mp3",
+        "start": 39.18,
+        "duration": 9.08,
+        "end": 48.26,
+        "startFrame": 2351,
+        "durationFrames": 545,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-06",
+        "scene": "act01",
+        "subtitle": "權重從 VRAM 流進晶片，在裡面被大量地相乘、相加，一次又一次。",
+        "speak": "權重從 VRAM 流進晶片，在裡面被大量地相乘、相加，一次又一次。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-06.mp3",
+        "start": 48.64,
+        "duration": 11.56,
+        "end": 60.2,
+        "startFrame": 2918,
+        "durationFrames": 694,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a1-07",
+        "scene": "act01",
+        "subtitle": "這些數字，是怎麼變成一句通順的回答的？我們從頭說起。",
+        "speak": "這些數字，是怎麼變成一句通順的回答的？我們從頭說起。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a1-07.mp3",
+        "start": 60.7,
+        "duration": 6.48,
+        "end": 67.18,
+        "startFrame": 3642,
+        "durationFrames": 389,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-00",
+        "scene": "act02",
+        "subtitle": "你問 AI 的那一句話，可能正在飛越半個地球。",
+        "speak": "你問 AI 的那一句話，可能正在飛越半個地球。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-00.mp3",
+        "start": 68.48,
+        "duration": 5.24,
+        "end": 73.72,
+        "startFrame": 4109,
+        "durationFrames": 314,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-01",
+        "scene": "act02",
+        "subtitle": "先說一件很多人沒注意到的事：平常用的 AI 聊天服務，大多不是在你的電腦上算的。",
+        "speak": "先說一件很多人沒注意到的事：平常用的 AI 聊天服務，大多不是在你的電腦上算的。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-01.mp3",
+        "start": 74.32,
+        "duration": 9.0,
+        "end": 83.32,
+        "startFrame": 4459,
+        "durationFrames": 540,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-02",
+        "scene": "act02",
+        "subtitle": "你輸入的文字會變成網路封包，穿過路由器和海底電纜，送到幾百、甚至幾千公里外的資料中心。",
+        "speak": "你輸入的文字會變成網路封包，穿過路由器和海底電纜，送到幾百、甚至幾千公里外的資料中心。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-02.mp3",
+        "start": 83.7,
+        "duration": 10.4,
+        "end": 94.1,
+        "startFrame": 5022,
+        "durationFrames": 624,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-03",
+        "scene": "act02",
+        "subtitle": "那裡有一排又一排的 GPU 伺服器。算完之後，再把答案傳回來。這叫做雲端推理。",
+        "speak": "那裡有一排又一排的 GPU 伺服器。算完之後，再把答案傳回來。這叫做雲端推理。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-03.mp3",
+        "start": 94.48,
+        "duration": 9.0,
+        "end": 103.48,
+        "startFrame": 5669,
+        "durationFrames": 540,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-04",
+        "scene": "act02",
+        "subtitle": "本地推理走的是另一條路：模型檔案就放在你自己的硬碟裡，所有計算都在這台電腦上完成，資料不用離開你的桌面。",
+        "speak": "本地推理走的是另一條路：模型檔案就放在你自己的硬碟裡，所有計算都在這台電腦上完成，資料不用離開你的桌面。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-04.mp3",
+        "start": 103.86,
+        "duration": 13.44,
+        "end": 117.3,
+        "startFrame": 6232,
+        "durationFrames": 806,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-05",
+        "scene": "act02",
+        "subtitle": "兩種方式，各有取捨。",
+        "speak": "兩種方式，各有取捨。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-05.mp3",
+        "start": 117.8,
+        "duration": 3.24,
+        "end": 121.04,
+        "startFrame": 7068,
+        "durationFrames": 194,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-06",
+        "scene": "act02",
+        "subtitle": "雲端的模型通常更大、更強，你不用煩惱硬體；但必須連上網路，對話內容會傳到別人的伺服器，用量一大，也得付費。",
+        "speak": "雲端的模型通常更大、更強，你不用煩惱硬體；但必須連上網路，對話內容會傳到別人的伺服器，用量一大，也得付費。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-06.mp3",
+        "start": 121.42,
+        "duration": 14.68,
+        "end": 136.1,
+        "startFrame": 7285,
+        "durationFrames": 881,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-07",
+        "scene": "act02",
+        "subtitle": "本地模型受限於自己的硬體，能跑的模型比較小；但可以離線使用，資料留在自己手上，除了電費，沒有按次計費。",
+        "speak": "本地模型受限於自己的硬體，能跑的模型比較小；但可以離線使用，資料留在自己手上，除了電費，沒有按次計費。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-07.mp3",
+        "start": 136.48,
+        "duration": 12.4,
+        "end": 148.88,
+        "startFrame": 8189,
+        "durationFrames": 744,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a2-08",
+        "scene": "act02",
+        "subtitle": "那麼，這個被下載到硬碟裡的「模型」，到底是什麼東西？",
+        "speak": "那麼，這個被下載到硬碟裡的「模型」，到底是什麼東西？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a2-08.mp3",
+        "start": 149.38,
+        "duration": 4.96,
+        "end": 154.34,
+        "startFrame": 8963,
+        "durationFrames": 298,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-00",
+        "scene": "act03",
+        "subtitle": "一個模型檔案動輒好幾 GB。裡面裝的，到底是什麼？",
+        "speak": "一個模型檔案動輒好幾 G-B。裡面裝的，到底是什麼？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-00.mp3",
+        "start": 155.64,
+        "duration": 9.88,
+        "end": 165.52,
+        "startFrame": 9338,
+        "durationFrames": 593,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-01",
+        "scene": "act03",
+        "subtitle": "很多人以為，AI 模型像一個巨大的資料庫，裡面存著所有問題的答案。其實不是。",
+        "speak": "很多人以為，AI 模型像一個巨大的資料庫，裡面存著所有問題的答案。其實不是。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-01.mp3",
+        "start": 166.12,
+        "duration": 11.56,
+        "end": 177.68,
+        "startFrame": 9967,
+        "durationFrames": 694,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-02",
+        "scene": "act03",
+        "subtitle": "打開模型檔案，你看到的主要是數字，非常、非常多的數字。這些數字叫做權重，也就是參數。",
+        "speak": "打開模型檔案，你看到的主要是數字，非常、非常多的數字。這些數字叫做權重，也就是參數。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-02.mp3",
+        "start": 178.06,
+        "duration": 11.6,
+        "end": 189.66,
+        "startFrame": 10684,
+        "durationFrames": 696,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-03",
+        "scene": "act03",
+        "subtitle": "它們被排成一張張矩陣。資料進來，先跟矩陣相乘，再經過一些簡單的運算，變成新的數字，傳給下一層。",
+        "speak": "它們被排成一張張矩陣。資料進來，先跟矩陣相乘，再經過一些簡單的運算，變成新的數字，傳給下一層。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-03.mp3",
+        "start": 190.04,
+        "duration": 13.88,
+        "end": 203.92,
+        "startFrame": 11402,
+        "durationFrames": 833,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-04",
+        "scene": "act03",
+        "subtitle": "現在大部分的語言模型，都採用一種叫做 Transformer 的架構，把很多層這樣的運算，一層一層疊起來。",
+        "speak": "現在大部分的語言模型，都採用一種叫做 Transformer 的架構，把很多層這樣的運算，一層一層疊起來。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-04.mp3",
+        "start": 204.3,
+        "duration": 12.16,
+        "end": 216.46,
+        "startFrame": 12258,
+        "durationFrames": 730,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-05",
+        "scene": "act03",
+        "subtitle": "常聽到的 4B、8B、70B，B 指的是 billion，十億。4B 就是大約 40 億個參數，70B 則是大約 700 億個。",
+        "speak": "常聽到的 4 B、8 B、70 B，B 指的是 billion，十億。4 B 就是大約 40 億個參數，70 B 則是大約 700 億個。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-05.mp3",
+        "start": 216.84,
+        "duration": 12.56,
+        "end": 229.4,
+        "startFrame": 13010,
+        "durationFrames": 754,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-06",
+        "scene": "act03",
+        "subtitle": "參數越多，模型通常越有能力，但需要的記憶體和計算量也跟著變大。",
+        "speak": "參數越多，模型通常越有能力，但需要的記憶體和計算量也跟著變大。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-06.mp3",
+        "start": 229.78,
+        "duration": 8.88,
+        "end": 238.66,
+        "startFrame": 13787,
+        "durationFrames": 533,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-07",
+        "scene": "act03",
+        "subtitle": "這些參數的數值，是在「訓練」時決定的：讓模型讀大量的文字，一次又一次猜下一個字，猜錯了，就微調權重。這需要非常龐大的運算資源。",
+        "speak": "這些參數的數值，是在「訓練」時決定的：讓模型讀大量的文字，一次又一次猜下一個字，猜錯了，就微調權重。這需要非常龐大的運算資源。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-07.mp3",
+        "start": 239.16,
+        "duration": 14.56,
+        "end": 253.72,
+        "startFrame": 14350,
+        "durationFrames": 874,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-08",
+        "scene": "act03",
+        "subtitle": "訓練完成，權重就固定下來。我們在自己電腦上做的是「推理」：拿這些固定的權重來計算答案，過程中不會改變它們。",
+        "speak": "訓練完成，權重就固定下來。我們在自己電腦上做的是「推理」：拿這些固定的權重來計算答案，過程中不會改變它們。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-08.mp3",
+        "start": 254.1,
+        "duration": 15.84,
+        "end": 269.94,
+        "startFrame": 15246,
+        "durationFrames": 950,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a3-09",
+        "scene": "act03",
+        "subtitle": "所以，模型記住的不是一條一條的答案，而是從大量文字裡學到的規律。",
+        "speak": "所以，模型記住的不是一條一條的答案，而是從大量文字裡學到的規律。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a3-09.mp3",
+        "start": 270.32,
+        "duration": 9.36,
+        "end": 279.68,
+        "startFrame": 16219,
+        "durationFrames": 562,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-01",
+        "scene": "act04",
+        "subtitle": "問題來了：這麼多數字，要怎麼塞進一張小小的顯示卡？",
+        "speak": "問題來了：這麼多數字，要怎麼塞進一張小小的顯示卡？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-01.mp3",
+        "start": 280.98,
+        "duration": 6.96,
+        "end": 287.94,
+        "startFrame": 16859,
+        "durationFrames": 418,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-02",
+        "scene": "act04",
+        "subtitle": "訓練時常用 FP32，每個數字用 32 個位元的浮點數來表示。推理時常改用 FP16，每個數字 16 個位元，大小直接減半。",
+        "speak": "訓練時常用 F P 32，每個數字用 32 個位元的浮點數來表示。推理時常改用 F P 16，每個數字 16 個位元，大小直接減半。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-02.mp3",
+        "start": 288.32,
+        "duration": 13.96,
+        "end": 302.28,
+        "startFrame": 17299,
+        "durationFrames": 838,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-03",
+        "scene": "act04",
+        "subtitle": "算算看：一個 8B 的模型，如果每個參數都用 FP16 存，光是權重就要大約 16 GB。",
+        "speak": "算算看：一個 8 B 的模型，如果每個參數都用 F P 16 存，光是權重就要大約 16 GB。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-03.mp3",
+        "start": 302.66,
+        "duration": 12.0,
+        "end": 314.66,
+        "startFrame": 18160,
+        "durationFrames": 720,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-04",
+        "scene": "act04",
+        "subtitle": "可是很多筆電的顯示卡，VRAM 只有 6 GB 或 8 GB。這就是量化要解決的問題。",
+        "speak": "可是很多筆電的顯示卡，VRAM 只有 6 GB 或 8 GB。這就是量化要解決的問題。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-04.mp3",
+        "start": 315.04,
+        "duration": 10.04,
+        "end": 325.08,
+        "startFrame": 18902,
+        "durationFrames": 602,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-05",
+        "scene": "act04",
+        "subtitle": "量化，是用比較少的位元，去近似原本的數字。",
+        "speak": "量化，是用比較少的位元，去近似原本的數字。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-05.mp3",
+        "start": 325.58,
+        "duration": 5.64,
+        "end": 331.22,
+        "startFrame": 19535,
+        "durationFrames": 338,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-06",
+        "scene": "act04",
+        "subtitle": "做法是先把權重分成一小組、一小組。每一組找出一個縮放係數，組裡的每個數字，就只需要記一個很小的整數。",
+        "speak": "做法是先把權重分成一小組、一小組。每一組找出一個縮放係數，組裡的每個數字，就只需要記一個很小的整數。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-06.mp3",
+        "start": 331.6,
+        "duration": 12.2,
+        "end": 343.8,
+        "startFrame": 19896,
+        "durationFrames": 732,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-07",
+        "scene": "act04",
+        "subtitle": "要用的時候，把整數乘回縮放係數，就能還原出一個很接近原本的數值。",
+        "speak": "要用的時候，把整數乘回縮放係數，就能還原出一個很接近原本的數值。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-07.mp3",
+        "start": 344.18,
+        "duration": 7.8,
+        "end": 351.98,
+        "startFrame": 20651,
+        "durationFrames": 468,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-08",
+        "scene": "act04",
+        "subtitle": "INT8 每個數字用 8 個位元，誤差很小；4 位元的量化，大小只剩 FP16 的四分之一左右，誤差也跟著變大。",
+        "speak": "int8 每個數字用 8 個位元，誤差很小；4 位元的量化，大小只剩 F P 16 的四分之一左右，誤差也跟著變大。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-08.mp3",
+        "start": 352.36,
+        "duration": 12.28,
+        "end": 364.64,
+        "startFrame": 21142,
+        "durationFrames": 737,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-09",
+        "scene": "act04",
+        "subtitle": "要特別注意：量化不是把參數刪掉。參數的數量完全一樣，變少的，是每個數字的精細程度。",
+        "speak": "要特別注意：量化不是把參數刪掉。參數的數量完全一樣，變少的，是每個數字的精細程度。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-09.mp3",
+        "start": 365.02,
+        "duration": 10.24,
+        "end": 375.26,
+        "startFrame": 21901,
+        "durationFrames": 614,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-10",
+        "scene": "act04",
+        "subtitle": "常見的 Q4_K_M 是一種混合做法：大部分權重用 4 位元左右，比較敏感的部分保留更多位元，在檔案大小和回答品質之間取得平衡。",
+        "speak": "常見的 Q 4 K M 是一種混合做法：大部分權重用 4 位元左右，比較敏感的部分保留更多位元，在檔案大小和回答品質之間取得平衡。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-10.mp3",
+        "start": 375.76,
+        "duration": 13.12,
+        "end": 388.88,
+        "startFrame": 22546,
+        "durationFrames": 787,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-11",
+        "scene": "act04",
+        "subtitle": "我們來算理論上的權重大小：參數量，乘上每個參數的位元數，再除以 8，就是位元組。",
+        "speak": "我們來算理論上的權重大小：參數量，乘上每個參數的位元數，再除以 8，就是位元組。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-11.mp3",
+        "start": 389.26,
+        "duration": 11.04,
+        "end": 400.3,
+        "startFrame": 23356,
+        "durationFrames": 662,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-12",
+        "scene": "act04",
+        "subtitle": "以 8B 模型來說：FP32 大約 32 GB，FP16 大約 16 GB，INT8 大約 8 GB，4 位元大約 4 GB。",
+        "speak": "以 8 B 模型來說：F P 32 大約 32 GB，F P 16 大約 16 GB，INT 8 大約 8 GB，4 位元大約 4 GB。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-12.mp3",
+        "start": 400.68,
+        "duration": 12.52,
+        "end": 413.2,
+        "startFrame": 24041,
+        "durationFrames": 751,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-13",
+        "scene": "act04",
+        "subtitle": "70B 的模型，就算用 4 位元，理論上也要大約 35 GB，遠遠超過一般消費級顯示卡的容量。",
+        "speak": "70 B 的模型，就算用 4 位元，理論上也要大約 35 GB，遠遠超過一般消費級顯示卡的容量。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-13.mp3",
+        "start": 413.58,
+        "duration": 10.04,
+        "end": 423.62,
+        "startFrame": 24815,
+        "durationFrames": 602,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-14",
+        "scene": "act04",
+        "subtitle": "實際下載的檔案，通常會比理論值大一些：每一組數字還要額外存縮放係數，有些層也會保留比較高的精度。",
+        "speak": "實際下載的檔案，通常會比理論值大一些：每一組數字還要額外存縮放係數，有些層也會保留比較高的精度。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-14.mp3",
+        "start": 424.0,
+        "duration": 11.4,
+        "end": 435.4,
+        "startFrame": 25440,
+        "durationFrames": 684,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-15",
+        "scene": "act04",
+        "subtitle": "這些量化後的權重，常常用 GGUF 格式儲存。",
+        "speak": "這些量化後的權重，常常用 GGUF 格式儲存。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-15.mp3",
+        "start": 435.9,
+        "duration": 5.4,
+        "end": 441.3,
+        "startFrame": 26154,
+        "durationFrames": 324,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-16",
+        "scene": "act04",
+        "subtitle": "GGUF 是一種檔案格式：開頭是檔頭，接著是描述模型架構、分詞器等資訊的中繼資料，最後才是一個個張量，也就是真正的權重。",
+        "speak": "G G U F 是一種檔案格式：開頭是檔頭，接著是描述模型架構、分詞器等資訊的中繼資料，最後才是一個個張量，也就是真正的權重。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-16.mp3",
+        "start": 441.68,
+        "duration": 15.0,
+        "end": 456.68,
+        "startFrame": 26501,
+        "durationFrames": 900,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a4-17",
+        "scene": "act04",
+        "subtitle": "一個檔案就裝下執行模型需要的一切，下載之後就能直接載入。不過記得，GGUF 是容器，不是模型本身。",
+        "speak": "一個檔案就裝下執行模型需要的一切，下載之後就能直接載入。不過記得，G G U F 是容器，不是模型本身。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a4-17.mp3",
+        "start": 457.06,
+        "duration": 11.72,
+        "end": 468.78,
+        "startFrame": 27424,
+        "durationFrames": 703,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-00",
+        "scene": "act05",
+        "subtitle": "同一個模型，交給 CPU 跑和交給 GPU 跑，速度可能差很多。差在哪裡？",
+        "speak": "同一個模型，交給 CPU 跑和交給 GPU 跑，速度可能差很多。差在哪裡？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-00.mp3",
+        "start": 470.08,
+        "duration": 7.92,
+        "end": 478.0,
+        "startFrame": 28205,
+        "durationFrames": 475,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-01",
+        "scene": "act05",
+        "subtitle": "有了 GGUF 檔案，還需要一個程式把它跑起來。這就是 llama.cpp。",
+        "speak": "有了 G G U F 檔案，還需要一個程式把它跑起來。這就是 llama C P P。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-01.mp3",
+        "start": 478.6,
+        "duration": 8.88,
+        "end": 487.48,
+        "startFrame": 28716,
+        "durationFrames": 533,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-02",
+        "scene": "act05",
+        "subtitle": "llama.cpp 是一個用 C 和 C++ 寫成的開源推理引擎，還附帶一整組命令列工具和伺服器。它不是某一個 AI 模型，而是負責執行模型的軟體。",
+        "speak": "llama C P P 是一個用 C 和 C plus plus 寫成的開源推理引擎，還附帶一整組命令列工具和伺服器。它不是某一個 AI 模型，而是負責執行模型的軟體。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-02.mp3",
+        "start": 487.86,
+        "duration": 14.72,
+        "end": 502.58,
+        "startFrame": 29272,
+        "durationFrames": 883,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-03",
+        "scene": "act05",
+        "subtitle": "它的底層是 GGML，一個專門處理張量運算的函式庫。同一套程式，可以在 CPU 上計算，也可以透過 CUDA，交給 NVIDIA 顯示卡加速。",
+        "speak": "它的底層是 G G M L，一個專門處理張量運算的函式庫。同一套程式，可以在 CPU 上計算，也可以透過 CUDA，交給 NVIDIA 顯示卡加速。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-03.mp3",
+        "start": 502.96,
+        "duration": 14.24,
+        "end": 517.2,
+        "startFrame": 30178,
+        "durationFrames": 854,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-04",
+        "scene": "act05",
+        "subtitle": "我們用一台常見的筆電來看整個流程：處理器是 Ryzen 7，系統記憶體 32 GB，顯示卡是 RTX 4050 Laptop，有 6 GB 的 VRAM。",
+        "speak": "我們用一台常見的筆電來看整個流程：處理器是 Ryzen 7，系統記憶體 32 GB，顯示卡是 R T X 4050 Laptop，有 6 GB 的 VRAM。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-04.mp3",
+        "start": 517.7,
+        "duration": 14.24,
+        "end": 531.94,
+        "startFrame": 31062,
+        "durationFrames": 854,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-05",
+        "scene": "act05",
+        "subtitle": "啟動時，llama.cpp 從 SSD 讀取 GGUF 檔案，把權重載入記憶體。",
+        "speak": "啟動時，llama C P P 從 S S D 讀取 G G U F 檔案，把權重載入記憶體。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-05.mp3",
+        "start": 532.32,
+        "duration": 10.72,
+        "end": 543.04,
+        "startFrame": 31939,
+        "durationFrames": 643,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-06",
+        "scene": "act05",
+        "subtitle": "透過 GPU Offload，可以指定要把幾層模型放進 VRAM。放得進去的層，交給 GPU；放不下的，就留在系統記憶體，由 CPU 計算。",
+        "speak": "透過 GPU Offload，可以指定要把幾層模型放進 VRAM。放得進去的層，交給 GPU；放不下的，就留在系統記憶體，由 CPU 計算。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-06.mp3",
+        "start": 543.42,
+        "duration": 13.64,
+        "end": 557.06,
+        "startFrame": 32605,
+        "durationFrames": 818,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-07",
+        "scene": "act05",
+        "subtitle": "為什麼要盡量放進 GPU？除了 GPU 擅長大量平行的乘加運算，還有一個常被忽略的關鍵：記憶體頻寬。",
+        "speak": "為什麼要盡量放進 GPU？除了 GPU 擅長大量平行的乘加運算，還有一個常被忽略的關鍵：記憶體頻寬。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-07.mp3",
+        "start": 557.56,
+        "duration": 10.36,
+        "end": 567.92,
+        "startFrame": 33454,
+        "durationFrames": 622,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-08",
+        "scene": "act05",
+        "subtitle": "每生成一個新的 token，模型幾乎都要把所有權重讀過一遍。所以速度往往不是卡在計算，而是卡在數字搬得夠不夠快。",
+        "speak": "每生成一個新的 token，模型幾乎都要把所有權重讀過一遍。所以速度往往不是卡在計算，而是卡在數字搬得夠不夠快。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-08.mp3",
+        "start": 568.3,
+        "duration": 14.04,
+        "end": 582.34,
+        "startFrame": 34098,
+        "durationFrames": 842,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-09",
+        "scene": "act05",
+        "subtitle": "GPU 讀取 VRAM 的速度，通常比 CPU 讀取系統記憶體快上不少。就像從隔壁拿東西，和從另一棟樓搬東西的差別。",
+        "speak": "GPU 讀取 VRAM 的速度，通常比 CPU 讀取系統記憶體快上不少。就像從隔壁拿東西，和從另一棟樓搬東西的差別。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-09.mp3",
+        "start": 582.72,
+        "duration": 12.24,
+        "end": 594.96,
+        "startFrame": 34963,
+        "durationFrames": 734,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-10",
+        "scene": "act05",
+        "subtitle": "還有一塊空間也很重要：KV Cache。模型每處理一個 token，就把一些中間結果存起來，後面的 token 可以直接參考，不必從頭重算。",
+        "speak": "還有一塊空間也很重要：K V Cache。模型每處理一個 token，就把一些中間結果存起來，後面的 token 可以直接參考，不必從頭重算。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-10.mp3",
+        "start": 595.46,
+        "duration": 12.92,
+        "end": 608.38,
+        "startFrame": 35728,
+        "durationFrames": 775,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-11",
+        "scene": "act05",
+        "subtitle": "Context Size 決定模型一次能看多長的上下文。上下文越長，KV Cache 就越大，也會跟模型權重搶 VRAM。",
+        "speak": "Context Size 決定模型一次能看多長的上下文。上下文越長，K V Cache 就越大，也會跟模型權重搶 VRAM。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-11.mp3",
+        "start": 608.76,
+        "duration": 11.4,
+        "end": 620.16,
+        "startFrame": 36526,
+        "durationFrames": 684,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a5-12",
+        "scene": "act05",
+        "subtitle": "所以在 6 GB 的顯示卡上，常常要在模型大小、量化等級和上下文長度之間取捨。",
+        "speak": "所以在 6 GB 的顯示卡上，常常要在模型大小、量化等級和上下文長度之間取捨。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a5-12.mp3",
+        "start": 620.54,
+        "duration": 12.32,
+        "end": 632.86,
+        "startFrame": 37232,
+        "durationFrames": 739,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-00",
+        "scene": "act06",
+        "subtitle": "AI 真的懂你在問什麼嗎？其實，它每一步只在做一件事：猜下一個字。",
+        "speak": "AI 真的懂你在問什麼嗎？其實，它每一步只在做一件事：猜下一個字。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-00.mp3",
+        "start": 634.16,
+        "duration": 9.52,
+        "end": 643.68,
+        "startFrame": 38050,
+        "durationFrames": 571,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-01",
+        "scene": "act06",
+        "subtitle": "好，硬體都準備好了。現在，終於輪到你的問題了。",
+        "speak": "好，硬體都準備好了。現在，終於輪到你的問題了。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-01.mp3",
+        "start": 644.38,
+        "duration": 8.72,
+        "end": 653.1,
+        "startFrame": 38663,
+        "durationFrames": 523,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-02",
+        "scene": "act06",
+        "subtitle": "第一步是 Tokenization：把文字切成一小塊一小塊的 token，每個 token 對應詞彙表裡的一個編號。",
+        "speak": "第一步是 Tokenization：把文字切成一小塊一小塊的 token，每個 token 對應詞彙表裡的一個編號。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-02.mp3",
+        "start": 653.48,
+        "duration": 9.84,
+        "end": 663.32,
+        "startFrame": 39209,
+        "durationFrames": 590,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-03",
+        "scene": "act06",
+        "subtitle": "token 不一定等於一個字。一個常見的英文單字可能就是一個 token；一個中文字，有時是一個 token，有時會被拆成好幾個。",
+        "speak": "token 不一定等於一個字。一個常見的英文單字可能就是一個 token；一個中文字，有時是一個 token，有時會被拆成好幾個。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-03.mp3",
+        "start": 663.7,
+        "duration": 13.84,
+        "end": 677.54,
+        "startFrame": 39822,
+        "durationFrames": 830,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-04",
+        "scene": "act06",
+        "subtitle": "接著是 Embedding：每個編號換成一長串數字，也就是向量。意思相近的詞，向量也會比較接近。",
+        "speak": "接著是 Embedding：每個編號換成一長串數字，也就是向量。意思相近的詞，向量也會比較接近。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-04.mp3",
+        "start": 678.04,
+        "duration": 12.12,
+        "end": 690.16,
+        "startFrame": 40682,
+        "durationFrames": 727,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-05",
+        "scene": "act06",
+        "subtitle": "然後，這些向量進入一層又一層的 Transformer。每一層裡最關鍵的機制，叫做 Attention，注意力。",
+        "speak": "然後，這些向量進入一層又一層的 Transformer。每一層裡最關鍵的機制，叫做 Attention，注意力。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-05.mp3",
+        "start": 690.54,
+        "duration": 12.48,
+        "end": 703.02,
+        "startFrame": 41432,
+        "durationFrames": 749,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-06",
+        "scene": "act06",
+        "subtitle": "舉個例子：「我把蘋果放進冰箱，因為它快壞了。」這裡的「它」指的是什麼？Attention 讓「它」去參考前面的每一個詞，發現跟「蘋果」最相關。",
+        "speak": "舉個例子：「我把蘋果放進冰箱，因為它快壞了。」這裡的「它」指的是什麼？Attention 讓「它」去參考前面的每一個詞，發現跟「蘋果」最相關。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-06.mp3",
+        "start": 703.4,
+        "duration": 15.32,
+        "end": 718.72,
+        "startFrame": 42204,
+        "durationFrames": 919,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-07",
+        "scene": "act06",
+        "subtitle": "經過所有層之後，模型會替詞彙表裡的每一個 token 打一個分數，叫做 logits。分數越高，代表越可能是下一個 token。",
+        "speak": "經過所有層之後，模型會替詞彙表裡的每一個 token 打一個分數，叫做 logits。分數越高，代表越可能是下一個 token。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-07.mp3",
+        "start": 719.22,
+        "duration": 10.68,
+        "end": 729.9,
+        "startFrame": 43153,
+        "durationFrames": 641,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-08",
+        "scene": "act06",
+        "subtitle": "接下來是取樣。Temperature 越低，模型越傾向選分數最高的那一個；越高，選擇就越多樣，也越可能出乎意料。",
+        "speak": "接下來是取樣。Temperature 越低，模型越傾向選分數最高的那一個；越高，選擇就越多樣，也越可能出乎意料。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-08.mp3",
+        "start": 730.28,
+        "duration": 12.92,
+        "end": 743.2,
+        "startFrame": 43817,
+        "durationFrames": 775,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-09",
+        "scene": "act06",
+        "subtitle": "選出一個 token，就把它接到輸入的最後面，整個流程再跑一次，選出下一個。這就是自回歸生成。",
+        "speak": "選出一個 token，就把它接到輸入的最後面，整個流程再跑一次，選出下一個。這就是自回歸生成。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-09.mp3",
+        "start": 743.7,
+        "duration": 9.52,
+        "end": 753.22,
+        "startFrame": 44622,
+        "durationFrames": 571,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-10",
+        "scene": "act06",
+        "subtitle": "這個過程分成兩個階段。一開始讀你的問題時，所有 token 可以一起平行處理，叫做 Prefill；之後的回答只能一個一個產生，叫做 Decode。",
+        "speak": "這個過程分成兩個階段。一開始讀你的問題時，所有 token 可以一起平行處理，叫做 Prefill；之後的回答只能一個一個產生，叫做 Decode。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-10.mp3",
+        "start": 753.6,
+        "duration": 14.56,
+        "end": 768.16,
+        "startFrame": 45216,
+        "durationFrames": 874,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a6-11",
+        "scene": "act06",
+        "subtitle": "常聽到的 token/s，就是每秒能產生多少個 token。它決定了你看到文字冒出來的速度。",
+        "speak": "常聽到的 每秒 token 數，就是每秒能產生多少個 token。它決定了你看到文字冒出來的速度。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a6-11.mp3",
+        "start": 768.54,
+        "duration": 11.28,
+        "end": 779.82,
+        "startFrame": 46112,
+        "durationFrames": 677,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-01",
+        "scene": "act07",
+        "subtitle": "回到一開始的問題：你按下 Enter 之後，到底發生了什麼？",
+        "speak": "回到一開始的問題：你按下 Enter 之後，到底發生了什麼？",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-01.mp3",
+        "start": 781.12,
+        "duration": 6.56,
+        "end": 787.68,
+        "startFrame": 46867,
+        "durationFrames": 394,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-02",
+        "scene": "act07",
+        "subtitle": "訓練好的權重，經過量化，裝進 GGUF 檔案。llama.cpp 把它從 SSD 載入記憶體，盡量放進 VRAM。",
+        "speak": "訓練好的權重，經過量化，裝進 G G U F 檔案。llama C P P 把它從 S S D 載入記憶體，盡量放進 VRAM。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-02.mp3",
+        "start": 788.06,
+        "duration": 12.56,
+        "end": 800.62,
+        "startFrame": 47284,
+        "durationFrames": 754,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-03",
+        "scene": "act07",
+        "subtitle": "你的文字被切成 token、變成向量，在 GPU 裡經過一層又一層的矩陣運算，最後算出下一個 token 的機率。",
+        "speak": "你的文字被切成 token、變成向量，在 GPU 裡經過一層又一層的矩陣運算，最後算出下一個 token 的機率。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-03.mp3",
+        "start": 801.0,
+        "duration": 11.0,
+        "end": 812.0,
+        "startFrame": 48060,
+        "durationFrames": 660,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-04",
+        "scene": "act07",
+        "subtitle": "一個 token 接著一個 token，數字，最後又變回了文字。",
+        "speak": "一個 token 接著一個 token，數字，最後又變回了文字。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-04.mp3",
+        "start": 812.38,
+        "duration": 6.76,
+        "end": 819.14,
+        "startFrame": 48743,
+        "durationFrames": 406,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-05",
+        "scene": "act07",
+        "subtitle": "下次看著 AI 回答你的時候，你會知道：那是你的電腦，正在很認真地做數學。",
+        "speak": "下次看著 AI 回答你的時候，你會知道：那是你的電腦，正在很認真地做數學。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-05.mp3",
+        "start": 819.84,
+        "duration": 9.72,
+        "end": 829.56,
+        "startFrame": 49190,
+        "durationFrames": 583,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      },
+      {
+        "id": "a7-06",
+        "scene": "act07",
+        "subtitle": "這裡是 Pikara Science，我們下次見。",
+        "speak": "這裡是 Pikara Science，我們下次見。",
+        "audio": "assets/audio/voiceover_cosy/ep01/a7-06.mp3",
+        "start": 830.36,
+        "duration": 3.68,
+        "end": 834.04,
+        "startFrame": 49822,
+        "durationFrames": 221,
+        "voice": {
+          "engine": "cosyvoice3",
+          "model": "Fun-CosyVoice3-0.5B-2512",
+          "mode": "zero_shot",
+          "reference": "tools/CosyVoice/reference/reference.wav",
+          "reference_sha": "5283ade606ac1fe5",
+          "reference_text": "他們將其改造為香草實驗室，報告書依規定是不會做修改，計程車在路上。",
+          "speed": 1.0,
+          "precision": "fp16"
+        },
+        "timingSource": "cosyvoice3 + whisper alignment",
+        "estimated": false
+      }
+    ],
+    "cues": [
+      {
+        "text": "本機 AI 每吐出一個字",
+        "start": 0.4,
+        "end": 3.24,
+        "from": 24,
+        "to": 194
+      },
+      {
+        "text": "顯示卡就要做幾十億次乘法。",
+        "start": 3.24,
+        "end": 5.58,
+        "from": 194,
+        "to": 335
+      },
+      {
+        "text": "晚上十一點，你打開電腦，問 AI 一個問題。",
+        "start": 6.98,
+        "end": 10.62,
+        "from": 419,
+        "to": 637
+      },
+      {
+        "text": "幾秒鐘之後，答案一小段一小段地冒了出來。",
+        "start": 11.68,
+        "end": 15.18,
+        "from": 701,
+        "to": 911
+      },
+      {
+        "text": "但你有沒有想過",
+        "start": 16.1,
+        "end": 19.0,
+        "from": 966,
+        "to": 1140
+      },
+      {
+        "text": "在你按下 Enter 的那一刻",
+        "start": 19.0,
+        "end": 21.72,
+        "from": 1140,
+        "to": 1303
+      },
+      {
+        "text": "電腦裡到底發生了什麼事？",
+        "start": 21.72,
+        "end": 23.84,
+        "from": 1303,
+        "to": 1430
+      },
+      {
+        "text": "這台電腦沒有連上任何雲端服務。回答你的",
+        "start": 24.96,
+        "end": 29.84,
+        "from": 1498,
+        "to": 1790
+      },
+      {
+        "text": "是一個直接在本機執行的模型",
+        "start": 29.84,
+        "end": 32.5,
+        "from": 1790,
+        "to": 1950
+      },
+      {
+        "text": "而負責大部分計算的，是這張顯示卡",
+        "start": 32.5,
+        "end": 36.28,
+        "from": 1950,
+        "to": 2177
+      },
+      {
+        "text": "也就是 GPU。",
+        "start": 36.28,
+        "end": 38.12,
+        "from": 2177,
+        "to": 2287
+      },
+      {
+        "text": "在 GPU 晶片旁邊",
+        "start": 39.18,
+        "end": 41.3,
+        "from": 2351,
+        "to": 2478
+      },
+      {
+        "text": "是存放模型權重的顯示記憶體",
+        "start": 41.3,
+        "end": 44.72,
+        "from": 2478,
+        "to": 2683
+      },
+      {
+        "text": "也就是 VRAM。",
+        "start": 44.72,
+        "end": 47.7,
+        "from": 2683,
+        "to": 2862
+      },
+      {
+        "text": "權重從 VRAM 流進晶片",
+        "start": 48.64,
+        "end": 53.84,
+        "from": 2918,
+        "to": 3230
+      },
+      {
+        "text": "在裡面被大量地相乘、相加，一次又一次。",
+        "start": 53.84,
+        "end": 59.34,
+        "from": 3230,
+        "to": 3560
+      },
+      {
+        "text": "這些數字，是怎麼變成一句通順的回答的？",
+        "start": 60.7,
+        "end": 65.28,
+        "from": 3642,
+        "to": 3917
+      },
+      {
+        "text": "我們從頭說起。",
+        "start": 65.28,
+        "end": 66.62,
+        "from": 3917,
+        "to": 3997
+      },
+      {
+        "text": "你問 AI 的那一句話",
+        "start": 68.48,
+        "end": 70.94,
+        "from": 4109,
+        "to": 4256
+      },
+      {
+        "text": "可能正在飛越半個地球。",
+        "start": 70.94,
+        "end": 73.2,
+        "from": 4256,
+        "to": 4392
+      },
+      {
+        "text": "先說一件很多人沒注意到的事",
+        "start": 74.32,
+        "end": 78.36,
+        "from": 4459,
+        "to": 4702
+      },
+      {
+        "text": "平常用的 AI 聊天服務",
+        "start": 78.36,
+        "end": 80.64,
+        "from": 4702,
+        "to": 4838
+      },
+      {
+        "text": "大多不是在你的電腦上算的。",
+        "start": 80.64,
+        "end": 82.84,
+        "from": 4838,
+        "to": 4970
+      },
+      {
+        "text": "你輸入的文字會變成網路封包",
+        "start": 83.7,
+        "end": 87.9,
+        "from": 5022,
+        "to": 5274
+      },
+      {
+        "text": "穿過路由器和海底電纜，送到幾百",
+        "start": 87.9,
+        "end": 91.28,
+        "from": 5274,
+        "to": 5477
+      },
+      {
+        "text": "甚至幾千公里外的資料中心。",
+        "start": 91.28,
+        "end": 93.6,
+        "from": 5477,
+        "to": 5616
+      },
+      {
+        "text": "那裡有一排又一排的 GPU 伺服器。",
+        "start": 94.48,
+        "end": 96.88,
+        "from": 5669,
+        "to": 5813
+      },
+      {
+        "text": "算完之後，再把答案傳回來。這叫做雲端推理。",
+        "start": 96.88,
+        "end": 102.76,
+        "from": 5813,
+        "to": 6166
+      },
+      {
+        "text": "本地推理走的是另一條路",
+        "start": 103.86,
+        "end": 107.64,
+        "from": 6232,
+        "to": 6458
+      },
+      {
+        "text": "模型檔案就放在你自己的硬碟裡",
+        "start": 107.64,
+        "end": 111.9,
+        "from": 6458,
+        "to": 6714
+      },
+      {
+        "text": "所有計算都在這台電腦上完成",
+        "start": 111.9,
+        "end": 114.643,
+        "from": 6714,
+        "to": 6879
+      },
+      {
+        "text": "資料不用離開你的桌面。",
+        "start": 114.643,
+        "end": 116.84,
+        "from": 6879,
+        "to": 7010
+      },
+      {
+        "text": "兩種方式，各有取捨。",
+        "start": 117.8,
+        "end": 120.91,
+        "from": 7068,
+        "to": 7255
+      },
+      {
+        "text": "雲端的模型通常更大、更強，你不用煩惱硬體",
+        "start": 121.42,
+        "end": 127.0,
+        "from": 7285,
+        "to": 7620
+      },
+      {
+        "text": "但必須連上網路",
+        "start": 127.0,
+        "end": 130.12,
+        "from": 7620,
+        "to": 7807
+      },
+      {
+        "text": "對話內容會傳到別人的伺服器，用量一大",
+        "start": 130.12,
+        "end": 134.24,
+        "from": 7807,
+        "to": 8054
+      },
+      {
+        "text": "也得付費。",
+        "start": 134.24,
+        "end": 135.22,
+        "from": 8054,
+        "to": 8113
+      },
+      {
+        "text": "本地模型受限於自己的硬體",
+        "start": 136.48,
+        "end": 139.2,
+        "from": 8189,
+        "to": 8352
+      },
+      {
+        "text": "能跑的模型比較小；但可以離線使用",
+        "start": 139.2,
+        "end": 143.18,
+        "from": 8352,
+        "to": 8591
+      },
+      {
+        "text": "資料留在自己手上，除了電費，沒有按次計費。",
+        "start": 143.18,
+        "end": 147.98,
+        "from": 8591,
+        "to": 8879
+      },
+      {
+        "text": "那麼，這個被下載到硬碟裡的「模型」",
+        "start": 149.38,
+        "end": 152.42,
+        "from": 8963,
+        "to": 9145
+      },
+      {
+        "text": "到底是什麼東西？",
+        "start": 152.42,
+        "end": 153.66,
+        "from": 9145,
+        "to": 9220
+      },
+      {
+        "text": "一個模型檔案動輒好幾 GB。裡面裝的",
+        "start": 155.64,
+        "end": 164.42,
+        "from": 9338,
+        "to": 9865
+      },
+      {
+        "text": "到底是什麼？",
+        "start": 164.42,
+        "end": 165.32,
+        "from": 9865,
+        "to": 9919
+      },
+      {
+        "text": "很多人以為，AI 模型像一個巨大的資料庫",
+        "start": 166.12,
+        "end": 173.14,
+        "from": 9967,
+        "to": 10388
+      },
+      {
+        "text": "裡面存著所有問題的答案。其實不是。",
+        "start": 173.14,
+        "end": 177.18,
+        "from": 10388,
+        "to": 10631
+      },
+      {
+        "text": "打開模型檔案，你看到的主要是數字，非常",
+        "start": 178.06,
+        "end": 183.42,
+        "from": 10684,
+        "to": 11005
+      },
+      {
+        "text": "非常多的數字。這些數字叫做權重",
+        "start": 183.42,
+        "end": 187.96,
+        "from": 11005,
+        "to": 11278
+      },
+      {
+        "text": "也就是參數。",
+        "start": 187.96,
+        "end": 189.32,
+        "from": 11278,
+        "to": 11359
+      },
+      {
+        "text": "它們被排成一張張矩陣。資料進來",
+        "start": 190.04,
+        "end": 195.4,
+        "from": 11402,
+        "to": 11724
+      },
+      {
+        "text": "先跟矩陣相乘，再經過一些簡單的運算",
+        "start": 195.4,
+        "end": 199.42,
+        "from": 11724,
+        "to": 11965
+      },
+      {
+        "text": "變成新的數字，傳給下一層。",
+        "start": 199.42,
+        "end": 203.28,
+        "from": 11965,
+        "to": 12197
+      },
+      {
+        "text": "現在大部分的語言模型",
+        "start": 204.3,
+        "end": 206.64,
+        "from": 12258,
+        "to": 12398
+      },
+      {
+        "text": "都採用一種叫做 Transformer 的架構",
+        "start": 206.64,
+        "end": 211.58,
+        "from": 12398,
+        "to": 12695
+      },
+      {
+        "text": "把很多層這樣的運算，一層一層疊起來。",
+        "start": 211.58,
+        "end": 215.98,
+        "from": 12695,
+        "to": 12959
+      },
+      {
+        "text": "常聽到的 4B、8B、70B",
+        "start": 216.84,
+        "end": 221.0,
+        "from": 13010,
+        "to": 13260
+      },
+      {
+        "text": "B 指的是 billion，十億。",
+        "start": 221.0,
+        "end": 223.94,
+        "from": 13260,
+        "to": 13436
+      },
+      {
+        "text": "4B 就是大約 40 億個參數",
+        "start": 223.94,
+        "end": 226.64,
+        "from": 13436,
+        "to": 13598
+      },
+      {
+        "text": "70B 則是大約 700 億個。",
+        "start": 226.64,
+        "end": 229.1,
+        "from": 13598,
+        "to": 13746
+      },
+      {
+        "text": "參數越多，模型通常越有能力",
+        "start": 229.78,
+        "end": 234.26,
+        "from": 13787,
+        "to": 14056
+      },
+      {
+        "text": "但需要的記憶體和計算量也跟著變大。",
+        "start": 234.26,
+        "end": 238.18,
+        "from": 14056,
+        "to": 14291
+      },
+      {
+        "text": "這些參數的數值，是在「訓練」時決定的",
+        "start": 239.16,
+        "end": 242.675,
+        "from": 14350,
+        "to": 14560
+      },
+      {
+        "text": "讓模型讀大量的文字",
+        "start": 242.675,
+        "end": 244.72,
+        "from": 14560,
+        "to": 14683
+      },
+      {
+        "text": "一次又一次猜下一個字，猜錯了，就微調權重。",
+        "start": 244.72,
+        "end": 250.2,
+        "from": 14683,
+        "to": 15012
+      },
+      {
+        "text": "這需要非常龐大的運算資源。",
+        "start": 250.2,
+        "end": 253.04,
+        "from": 15012,
+        "to": 15182
+      },
+      {
+        "text": "訓練完成，權重就固定下來。",
+        "start": 254.1,
+        "end": 259.26,
+        "from": 15246,
+        "to": 15556
+      },
+      {
+        "text": "我們在自己電腦上做的是「推理」",
+        "start": 259.26,
+        "end": 263.48,
+        "from": 15556,
+        "to": 15809
+      },
+      {
+        "text": "拿這些固定的權重來計算答案",
+        "start": 263.48,
+        "end": 267.16,
+        "from": 15809,
+        "to": 16030
+      },
+      {
+        "text": "過程中不會改變它們。",
+        "start": 267.16,
+        "end": 269.32,
+        "from": 16030,
+        "to": 16159
+      },
+      {
+        "text": "所以，模型記住的不是一條一條的答案",
+        "start": 270.32,
+        "end": 276.38,
+        "from": 16219,
+        "to": 16583
+      },
+      {
+        "text": "而是從大量文字裡學到的規律。",
+        "start": 276.38,
+        "end": 279.42,
+        "from": 16583,
+        "to": 16765
+      },
+      {
+        "text": "問題來了：這麼多數字",
+        "start": 280.98,
+        "end": 285.34,
+        "from": 16859,
+        "to": 17120
+      },
+      {
+        "text": "要怎麼塞進一張小小的顯示卡？",
+        "start": 285.34,
+        "end": 287.76,
+        "from": 17120,
+        "to": 17266
+      },
+      {
+        "text": "訓練時常用 FP32",
+        "start": 288.32,
+        "end": 291.02,
+        "from": 17299,
+        "to": 17461
+      },
+      {
+        "text": "每個數字用 32 個位元的浮點數來表示。",
+        "start": 291.02,
+        "end": 295.62,
+        "from": 17461,
+        "to": 17737
+      },
+      {
+        "text": "推理時常改用 FP16",
+        "start": 295.62,
+        "end": 298.28,
+        "from": 17737,
+        "to": 17897
+      },
+      {
+        "text": "每個數字 16 個位元，大小直接減半。",
+        "start": 298.28,
+        "end": 301.98,
+        "from": 17897,
+        "to": 18119
+      },
+      {
+        "text": "算算看：一個 8B 的模型",
+        "start": 302.66,
+        "end": 305.64,
+        "from": 18160,
+        "to": 18338
+      },
+      {
+        "text": "如果每個參數都用 FP16 存",
+        "start": 305.64,
+        "end": 309.84,
+        "from": 18338,
+        "to": 18590
+      },
+      {
+        "text": "光是權重就要大約 16 GB。",
+        "start": 309.84,
+        "end": 313.82,
+        "from": 18590,
+        "to": 18829
+      },
+      {
+        "text": "可是很多筆電的顯示卡",
+        "start": 315.04,
+        "end": 318.355,
+        "from": 18902,
+        "to": 19101
+      },
+      {
+        "text": "VRAM 只有 6 GB 或 8 GB。",
+        "start": 318.355,
+        "end": 321.38,
+        "from": 19101,
+        "to": 19283
+      },
+      {
+        "text": "這就是量化要解決的問題。",
+        "start": 321.38,
+        "end": 324.52,
+        "from": 19283,
+        "to": 19471
+      },
+      {
+        "text": "量化，是用比較少的位元，去近似原本的數字。",
+        "start": 325.58,
+        "end": 330.64,
+        "from": 19535,
+        "to": 19838
+      },
+      {
+        "text": "做法是先把權重分成一小組、一小組。",
+        "start": 331.6,
+        "end": 336.2,
+        "from": 19896,
+        "to": 20172
+      },
+      {
+        "text": "每一組找出一個縮放係數，組裡的每個數字",
+        "start": 336.2,
+        "end": 340.76,
+        "from": 20172,
+        "to": 20446
+      },
+      {
+        "text": "就只需要記一個很小的整數。",
+        "start": 340.76,
+        "end": 343.34,
+        "from": 20446,
+        "to": 20600
+      },
+      {
+        "text": "要用的時候，把整數乘回縮放係數",
+        "start": 344.18,
+        "end": 348.2,
+        "from": 20651,
+        "to": 20892
+      },
+      {
+        "text": "就能還原出一個很接近原本的數值。",
+        "start": 348.2,
+        "end": 351.36,
+        "from": 20892,
+        "to": 21082
+      },
+      {
+        "text": "INT8 每個數字用 8 個位元，誤差很小",
+        "start": 352.36,
+        "end": 357.2,
+        "from": 21142,
+        "to": 21432
+      },
+      {
+        "text": "4 位元的量化",
+        "start": 357.2,
+        "end": 358.62,
+        "from": 21432,
+        "to": 21517
+      },
+      {
+        "text": "大小只剩 FP16 的四分之一左右",
+        "start": 358.62,
+        "end": 362.38,
+        "from": 21517,
+        "to": 21743
+      },
+      {
+        "text": "誤差也跟著變大。",
+        "start": 362.38,
+        "end": 364.1,
+        "from": 21743,
+        "to": 21846
+      },
+      {
+        "text": "要特別注意：量化不是把參數刪掉。",
+        "start": 365.02,
+        "end": 368.7,
+        "from": 21901,
+        "to": 22122
+      },
+      {
+        "text": "參數的數量完全一樣，變少的",
+        "start": 368.7,
+        "end": 371.94,
+        "from": 22122,
+        "to": 22316
+      },
+      {
+        "text": "是每個數字的精細程度。",
+        "start": 371.94,
+        "end": 374.66,
+        "from": 22316,
+        "to": 22480
+      },
+      {
+        "text": "常見的 Q4_K_M 是一種混合做法",
+        "start": 375.76,
+        "end": 380.14,
+        "from": 22546,
+        "to": 22808
+      },
+      {
+        "text": "大部分權重用 4 位元左右",
+        "start": 380.14,
+        "end": 382.42,
+        "from": 22808,
+        "to": 22945
+      },
+      {
+        "text": "比較敏感的部分保留更多位元",
+        "start": 382.42,
+        "end": 385.18,
+        "from": 22945,
+        "to": 23111
+      },
+      {
+        "text": "在檔案大小和回答品質之間取得平衡。",
+        "start": 385.18,
+        "end": 388.42,
+        "from": 23111,
+        "to": 23305
+      },
+      {
+        "text": "我們來算理論上的權重大小：參數量",
+        "start": 389.26,
+        "end": 394.88,
+        "from": 23356,
+        "to": 23693
+      },
+      {
+        "text": "乘上每個參數的位元數，再除以 8",
+        "start": 394.88,
+        "end": 398.6,
+        "from": 23693,
+        "to": 23916
+      },
+      {
+        "text": "就是位元組。",
+        "start": 398.6,
+        "end": 400.14,
+        "from": 23916,
+        "to": 24008
+      },
+      {
+        "text": "以 8B 模型來說：FP32 大約 32 GB",
+        "start": 400.68,
+        "end": 405.36,
+        "from": 24041,
+        "to": 24322
+      },
+      {
+        "text": "FP16 大約 16 GB",
+        "start": 405.36,
+        "end": 408.3,
+        "from": 24322,
+        "to": 24498
+      },
+      {
+        "text": "INT8 大約 8 GB，4 位元大約 4 GB。",
+        "start": 408.3,
+        "end": 412.5,
+        "from": 24498,
+        "to": 24750
+      },
+      {
+        "text": "70B 的模型，就算用 4 位元",
+        "start": 413.58,
+        "end": 416.88,
+        "from": 24815,
+        "to": 25013
+      },
+      {
+        "text": "理論上也要大約 35 GB",
+        "start": 416.88,
+        "end": 420.04,
+        "from": 25013,
+        "to": 25202
+      },
+      {
+        "text": "遠遠超過一般消費級顯示卡的容量。",
+        "start": 420.04,
+        "end": 423.26,
+        "from": 25202,
+        "to": 25396
+      },
+      {
+        "text": "實際下載的檔案，通常會比理論值大一些",
+        "start": 424.0,
+        "end": 428.84,
+        "from": 25440,
+        "to": 25730
+      },
+      {
+        "text": "每一組數字還要額外存縮放係數",
+        "start": 428.84,
+        "end": 431.94,
+        "from": 25730,
+        "to": 25916
+      },
+      {
+        "text": "有些層也會保留比較高的精度。",
+        "start": 431.94,
+        "end": 434.96,
+        "from": 25916,
+        "to": 26098
+      },
+      {
+        "text": "這些量化後的權重",
+        "start": 435.9,
+        "end": 438.14,
+        "from": 26154,
+        "to": 26288
+      },
+      {
+        "text": "常常用 GGUF 格式儲存。",
+        "start": 438.14,
+        "end": 440.94,
+        "from": 26288,
+        "to": 26456
+      },
+      {
+        "text": "GGUF 是一種檔案格式：開頭是檔頭",
+        "start": 441.68,
+        "end": 446.26,
+        "from": 26501,
+        "to": 26776
+      },
+      {
+        "text": "接著是描述模型架構",
+        "start": 446.26,
+        "end": 449.08,
+        "from": 26776,
+        "to": 26945
+      },
+      {
+        "text": "分詞器等資訊的中繼資料",
+        "start": 449.08,
+        "end": 451.72,
+        "from": 26945,
+        "to": 27103
+      },
+      {
+        "text": "最後才是一個個張量，也就是真正的權重。",
+        "start": 451.72,
+        "end": 456.26,
+        "from": 27103,
+        "to": 27376
+      },
+      {
+        "text": "一個檔案就裝下執行模型需要的一切",
+        "start": 457.06,
+        "end": 461.16,
+        "from": 27424,
+        "to": 27670
+      },
+      {
+        "text": "下載之後就能直接載入。不過記得",
+        "start": 461.16,
+        "end": 464.96,
+        "from": 27670,
+        "to": 27898
+      },
+      {
+        "text": "GGUF 是容器，不是模型本身。",
+        "start": 464.96,
+        "end": 467.94,
+        "from": 27898,
+        "to": 28076
+      },
+      {
+        "text": "同一個模型，交給 CPU 跑和交給 GPU 跑",
+        "start": 470.08,
+        "end": 474.96,
+        "from": 28205,
+        "to": 28498
+      },
+      {
+        "text": "速度可能差很多。差在哪裡？",
+        "start": 474.96,
+        "end": 477.3,
+        "from": 28498,
+        "to": 28638
+      },
+      {
+        "text": "有了 GGUF 檔案",
+        "start": 478.6,
+        "end": 481.12,
+        "from": 28716,
+        "to": 28867
+      },
+      {
+        "text": "還需要一個程式把它跑起來。",
+        "start": 481.12,
+        "end": 484.3,
+        "from": 28867,
+        "to": 29058
+      },
+      {
+        "text": "這就是 llama.cpp。",
+        "start": 484.3,
+        "end": 486.9,
+        "from": 29058,
+        "to": 29214
+      },
+      {
+        "text": "llama.cpp 是一個用 C 和 C++ 寫成的開源推理引擎",
+        "start": 487.86,
+        "end": 492.58,
+        "from": 29272,
+        "to": 29555
+      },
+      {
+        "text": "還附帶一整組命令列工具和伺服器。",
+        "start": 492.58,
+        "end": 496.72,
+        "from": 29555,
+        "to": 29803
+      },
+      {
+        "text": "它不是某一個 AI 模型",
+        "start": 496.72,
+        "end": 499.5,
+        "from": 29803,
+        "to": 29970
+      },
+      {
+        "text": "而是負責執行模型的軟體。",
+        "start": 499.5,
+        "end": 502.36,
+        "from": 29970,
+        "to": 30142
+      },
+      {
+        "text": "它的底層是 GGML",
+        "start": 502.96,
+        "end": 505.28,
+        "from": 30178,
+        "to": 30317
+      },
+      {
+        "text": "一個專門處理張量運算的函式庫。",
+        "start": 505.28,
+        "end": 509.14,
+        "from": 30317,
+        "to": 30548
+      },
+      {
+        "text": "同一套程式，可以在 CPU 上計算",
+        "start": 509.14,
+        "end": 512.74,
+        "from": 30548,
+        "to": 30764
+      },
+      {
+        "text": "也可以透過 CUDA",
+        "start": 512.74,
+        "end": 514.5,
+        "from": 30764,
+        "to": 30870
+      },
+      {
+        "text": "交給 NVIDIA 顯示卡加速。",
+        "start": 514.5,
+        "end": 516.88,
+        "from": 30870,
+        "to": 31013
+      },
+      {
+        "text": "我們用一台常見的筆電來看整個流程",
+        "start": 517.7,
+        "end": 520.68,
+        "from": 31062,
+        "to": 31241
+      },
+      {
+        "text": "處理器是 Ryzen 7",
+        "start": 520.68,
+        "end": 522.58,
+        "from": 31241,
+        "to": 31355
+      },
+      {
+        "text": "系統記憶體 32 GB",
+        "start": 522.58,
+        "end": 525.88,
+        "from": 31355,
+        "to": 31553
+      },
+      {
+        "text": "顯示卡是 RTX 4050 Laptop",
+        "start": 525.88,
+        "end": 529.4,
+        "from": 31553,
+        "to": 31764
+      },
+      {
+        "text": "有 6 GB 的 VRAM。",
+        "start": 529.4,
+        "end": 531.44,
+        "from": 31764,
+        "to": 31886
+      },
+      {
+        "text": "啟動時",
+        "start": 532.32,
+        "end": 533.76,
+        "from": 31939,
+        "to": 32026
+      },
+      {
+        "text": "llama.cpp 從 SSD 讀取 GGUF 檔案",
+        "start": 533.76,
+        "end": 540.5,
+        "from": 32026,
+        "to": 32430
+      },
+      {
+        "text": "把權重載入記憶體。",
+        "start": 540.5,
+        "end": 542.5,
+        "from": 32430,
+        "to": 32550
+      },
+      {
+        "text": "透過 GPU Offload",
+        "start": 543.42,
+        "end": 545.16,
+        "from": 32605,
+        "to": 32710
+      },
+      {
+        "text": "可以指定要把幾層模型放進 VRAM。",
+        "start": 545.16,
+        "end": 549.68,
+        "from": 32710,
+        "to": 32981
+      },
+      {
+        "text": "放得進去的層，交給 GPU；放不下的",
+        "start": 549.68,
+        "end": 554.14,
+        "from": 32981,
+        "to": 33248
+      },
+      {
+        "text": "就留在系統記憶體，由 CPU 計算。",
+        "start": 554.14,
+        "end": 556.78,
+        "from": 33248,
+        "to": 33407
+      },
+      {
+        "text": "為什麼要盡量放進 GPU？",
+        "start": 557.56,
+        "end": 559.98,
+        "from": 33454,
+        "to": 33599
+      },
+      {
+        "text": "除了 GPU 擅長大量平行的乘加運算",
+        "start": 559.98,
+        "end": 564.16,
+        "from": 33599,
+        "to": 33850
+      },
+      {
+        "text": "還有一個常被忽略的關鍵：記憶體頻寬。",
+        "start": 564.16,
+        "end": 567.44,
+        "from": 33850,
+        "to": 34046
+      },
+      {
+        "text": "每生成一個新的 token",
+        "start": 568.3,
+        "end": 570.18,
+        "from": 34098,
+        "to": 34211
+      },
+      {
+        "text": "模型幾乎都要把所有權重讀過一遍。",
+        "start": 570.18,
+        "end": 574.92,
+        "from": 34211,
+        "to": 34495
+      },
+      {
+        "text": "所以速度往往不是卡在計算",
+        "start": 574.92,
+        "end": 578.26,
+        "from": 34495,
+        "to": 34696
+      },
+      {
+        "text": "而是卡在數字搬得夠不夠快。",
+        "start": 578.26,
+        "end": 581.84,
+        "from": 34696,
+        "to": 34910
+      },
+      {
+        "text": "GPU 讀取 VRAM 的速度",
+        "start": 582.72,
+        "end": 585.32,
+        "from": 34963,
+        "to": 35119
+      },
+      {
+        "text": "通常比 CPU 讀取系統記憶體快上不少。",
+        "start": 585.32,
+        "end": 590.02,
+        "from": 35119,
+        "to": 35401
+      },
+      {
+        "text": "就像從隔壁拿東西",
+        "start": 590.02,
+        "end": 591.86,
+        "from": 35401,
+        "to": 35512
+      },
+      {
+        "text": "和從另一棟樓搬東西的差別。",
+        "start": 591.86,
+        "end": 594.44,
+        "from": 35512,
+        "to": 35666
+      },
+      {
+        "text": "還有一塊空間也很重要：KV Cache。",
+        "start": 595.46,
+        "end": 599.22,
+        "from": 35728,
+        "to": 35953
+      },
+      {
+        "text": "模型每處理一個 token",
+        "start": 599.22,
+        "end": 601.46,
+        "from": 35953,
+        "to": 36088
+      },
+      {
+        "text": "就把一些中間結果存起來",
+        "start": 601.46,
+        "end": 603.98,
+        "from": 36088,
+        "to": 36239
+      },
+      {
+        "text": "後面的 token 可以直接參考",
+        "start": 603.98,
+        "end": 606.44,
+        "from": 36239,
+        "to": 36386
+      },
+      {
+        "text": "不必從頭重算。",
+        "start": 606.44,
+        "end": 607.78,
+        "from": 36386,
+        "to": 36467
+      },
+      {
+        "text": "Context Size 決定模型一次能看多長的上下文。",
+        "start": 608.76,
+        "end": 613.38,
+        "from": 36526,
+        "to": 36803
+      },
+      {
+        "text": "上下文越長，KV Cache 就越大",
+        "start": 613.38,
+        "end": 616.92,
+        "from": 36803,
+        "to": 37015
+      },
+      {
+        "text": "也會跟模型權重搶 VRAM。",
+        "start": 616.92,
+        "end": 619.66,
+        "from": 37015,
+        "to": 37180
+      },
+      {
+        "text": "所以在 6 GB 的顯示卡上",
+        "start": 620.54,
+        "end": 624.34,
+        "from": 37232,
+        "to": 37460
+      },
+      {
+        "text": "常常要在模型大小",
+        "start": 624.34,
+        "end": 628.94,
+        "from": 37460,
+        "to": 37736
+      },
+      {
+        "text": "量化等級和上下文長度之間取捨。",
+        "start": 628.94,
+        "end": 632.66,
+        "from": 37736,
+        "to": 37960
+      },
+      {
+        "text": "AI 真的懂你在問什麼嗎？其實",
+        "start": 634.16,
+        "end": 638.68,
+        "from": 38050,
+        "to": 38321
+      },
+      {
+        "text": "它每一步只在做一件事：猜下一個字。",
+        "start": 638.68,
+        "end": 643.18,
+        "from": 38321,
+        "to": 38591
+      },
+      {
+        "text": "好，硬體都準備好了。現在",
+        "start": 644.38,
+        "end": 649.82,
+        "from": 38663,
+        "to": 38989
+      },
+      {
+        "text": "終於輪到你的問題了。",
+        "start": 649.82,
+        "end": 652.64,
+        "from": 38989,
+        "to": 39158
+      },
+      {
+        "text": "第一步是 Tokenization",
+        "start": 653.48,
+        "end": 655.3,
+        "from": 39209,
+        "to": 39318
+      },
+      {
+        "text": "把文字切成一小塊一小塊的 token",
+        "start": 655.3,
+        "end": 659.0,
+        "from": 39318,
+        "to": 39540
+      },
+      {
+        "text": "每個 token 對應詞彙表裡的一個編號。",
+        "start": 659.0,
+        "end": 662.78,
+        "from": 39540,
+        "to": 39767
+      },
+      {
+        "text": "token 不一定等於一個字。",
+        "start": 663.7,
+        "end": 667.82,
+        "from": 39822,
+        "to": 40069
+      },
+      {
+        "text": "一個常見的英文單字可能就是一個 token",
+        "start": 667.82,
+        "end": 671.7,
+        "from": 40069,
+        "to": 40302
+      },
+      {
+        "text": "一個中文字，有時是一個 token",
+        "start": 671.7,
+        "end": 675.22,
+        "from": 40302,
+        "to": 40513
+      },
+      {
+        "text": "有時會被拆成好幾個。",
+        "start": 675.22,
+        "end": 677.34,
+        "from": 40513,
+        "to": 40640
+      },
+      {
+        "text": "接著是 Embedding",
+        "start": 678.04,
+        "end": 680.52,
+        "from": 40682,
+        "to": 40831
+      },
+      {
+        "text": "每個編號換成一長串數字，也就是向量。",
+        "start": 680.52,
+        "end": 685.98,
+        "from": 40831,
+        "to": 41159
+      },
+      {
+        "text": "意思相近的詞，向量也會比較接近。",
+        "start": 685.98,
+        "end": 689.88,
+        "from": 41159,
+        "to": 41393
+      },
+      {
+        "text": "然後",
+        "start": 690.54,
+        "end": 692.34,
+        "from": 41432,
+        "to": 41540
+      },
+      {
+        "text": "這些向量進入一層又一層的 Transformer。",
+        "start": 692.34,
+        "end": 696.22,
+        "from": 41540,
+        "to": 41773
+      },
+      {
+        "text": "每一層裡最關鍵的機制",
+        "start": 696.22,
+        "end": 698.28,
+        "from": 41773,
+        "to": 41897
+      },
+      {
+        "text": "叫做 Attention，注意力。",
+        "start": 698.28,
+        "end": 702.48,
+        "from": 41897,
+        "to": 42149
+      },
+      {
+        "text": "舉個例子：「我把蘋果放進冰箱，因為它快壞了。",
+        "start": 703.4,
+        "end": 709.58,
+        "from": 42204,
+        "to": 42575
+      },
+      {
+        "text": "」這裡的「它」指的是什麼？",
+        "start": 709.58,
+        "end": 712.16,
+        "from": 42575,
+        "to": 42730
+      },
+      {
+        "text": "Attention 讓「它」去參考前面的每一個詞",
+        "start": 712.16,
+        "end": 715.98,
+        "from": 42730,
+        "to": 42959
+      },
+      {
+        "text": "發現跟「蘋果」最相關。",
+        "start": 715.98,
+        "end": 718.36,
+        "from": 42959,
+        "to": 43102
+      },
+      {
+        "text": "經過所有層之後",
+        "start": 719.22,
+        "end": 720.96,
+        "from": 43153,
+        "to": 43258
+      },
+      {
+        "text": "模型會替詞彙表裡的每一個 token 打一個分數",
+        "start": 720.96,
+        "end": 725.08,
+        "from": 43258,
+        "to": 43505
+      },
+      {
+        "text": "叫做 logits。分數越高",
+        "start": 725.08,
+        "end": 727.86,
+        "from": 43505,
+        "to": 43672
+      },
+      {
+        "text": "代表越可能是下一個 token。",
+        "start": 727.86,
+        "end": 729.56,
+        "from": 43672,
+        "to": 43774
+      },
+      {
+        "text": "接下來是取樣。",
+        "start": 730.28,
+        "end": 732.24,
+        "from": 43817,
+        "to": 43934
+      },
+      {
+        "text": "Temperature 越低",
+        "start": 732.24,
+        "end": 733.54,
+        "from": 43934,
+        "to": 44012
+      },
+      {
+        "text": "模型越傾向選分數最高的那一個；越高",
+        "start": 733.54,
+        "end": 738.54,
+        "from": 44012,
+        "to": 44312
+      },
+      {
+        "text": "選擇就越多樣，也越可能出乎意料。",
+        "start": 738.54,
+        "end": 742.52,
+        "from": 44312,
+        "to": 44551
+      },
+      {
+        "text": "選出一個 token",
+        "start": 743.7,
+        "end": 745.1,
+        "from": 44622,
+        "to": 44706
+      },
+      {
+        "text": "就把它接到輸入的最後面",
+        "start": 745.1,
+        "end": 747.38,
+        "from": 44706,
+        "to": 44843
+      },
+      {
+        "text": "整個流程再跑一次，選出下一個。",
+        "start": 747.38,
+        "end": 751.04,
+        "from": 44843,
+        "to": 45062
+      },
+      {
+        "text": "這就是自回歸生成。",
+        "start": 751.04,
+        "end": 753.04,
+        "from": 45062,
+        "to": 45182
+      },
+      {
+        "text": "這個過程分成兩個階段。",
+        "start": 753.6,
+        "end": 757.42,
+        "from": 45216,
+        "to": 45445
+      },
+      {
+        "text": "一開始讀你的問題時",
+        "start": 757.42,
+        "end": 759.5,
+        "from": 45445,
+        "to": 45570
+      },
+      {
+        "text": "所有 token 可以一起平行處理",
+        "start": 759.5,
+        "end": 762.1,
+        "from": 45570,
+        "to": 45726
+      },
+      {
+        "text": "叫做 Prefill",
+        "start": 762.1,
+        "end": 763.42,
+        "from": 45726,
+        "to": 45805
+      },
+      {
+        "text": "之後的回答只能一個一個產生",
+        "start": 763.42,
+        "end": 766.68,
+        "from": 45805,
+        "to": 46001
+      },
+      {
+        "text": "叫做 Decode。",
+        "start": 766.68,
+        "end": 768.08,
+        "from": 46001,
+        "to": 46085
+      },
+      {
+        "text": "常聽到的 token/s",
+        "start": 768.54,
+        "end": 771.18,
+        "from": 46112,
+        "to": 46271
+      },
+      {
+        "text": "就是每秒能產生多少個 token。",
+        "start": 771.18,
+        "end": 775.58,
+        "from": 46271,
+        "to": 46535
+      },
+      {
+        "text": "它決定了你看到文字冒出來的速度。",
+        "start": 775.58,
+        "end": 779.52,
+        "from": 46535,
+        "to": 46771
+      },
+      {
+        "text": "回到一開始的問題：你按下 Enter 之後",
+        "start": 781.12,
+        "end": 785.76,
+        "from": 46867,
+        "to": 47146
+      },
+      {
+        "text": "到底發生了什麼？",
+        "start": 785.76,
+        "end": 787.0,
+        "from": 47146,
+        "to": 47220
+      },
+      {
+        "text": "訓練好的權重，經過量化，裝進 GGUF 檔案。",
+        "start": 788.06,
+        "end": 792.72,
+        "from": 47284,
+        "to": 47563
+      },
+      {
+        "text": "llama.cpp 把它從 SSD 載入記憶體",
+        "start": 792.72,
+        "end": 798.0,
+        "from": 47563,
+        "to": 47880
+      },
+      {
+        "text": "盡量放進 VRAM。",
+        "start": 798.0,
+        "end": 800.34,
+        "from": 47880,
+        "to": 48020
+      },
+      {
+        "text": "你的文字被切成 token、變成向量",
+        "start": 801.0,
+        "end": 804.42,
+        "from": 48060,
+        "to": 48265
+      },
+      {
+        "text": "在 GPU 裡經過一層又一層的矩陣運算",
+        "start": 804.42,
+        "end": 808.48,
+        "from": 48265,
+        "to": 48509
+      },
+      {
+        "text": "最後算出下一個 token 的機率。",
+        "start": 808.48,
+        "end": 811.4,
+        "from": 48509,
+        "to": 48684
+      },
+      {
+        "text": "一個 token 接著一個 token，數字",
+        "start": 812.38,
+        "end": 816.9,
+        "from": 48743,
+        "to": 49014
+      },
+      {
+        "text": "最後又變回了文字。",
+        "start": 816.9,
+        "end": 818.58,
+        "from": 49014,
+        "to": 49115
+      },
+      {
+        "text": "下次看著 AI 回答你的時候，你會知道",
+        "start": 819.84,
+        "end": 824.26,
+        "from": 49190,
+        "to": 49456
+      },
+      {
+        "text": "那是你的電腦，正在很認真地做數學。",
+        "start": 824.26,
+        "end": 829.26,
+        "from": 49456,
+        "to": 49756
+      },
+      {
+        "text": "這裡是 Pikara Science",
+        "start": 830.36,
+        "end": 832.8,
+        "from": 49822,
+        "to": 49968
+      },
+      {
+        "text": "我們下次見。",
+        "start": 832.8,
+        "end": 833.7,
+        "from": 49968,
+        "to": 50022
+      }
+    ],
+    "anchors": {
+      "hook": {
+        "time": 4.4,
+        "frame": 264,
+        "line": "a1-00",
+        "word": "幾十億",
+        "local": 264
+      },
+      "open": {
+        "time": 6.98,
+        "frame": 419,
+        "line": "a1-01",
+        "word": "晚上",
+        "local": 419
+      },
+      "answer": {
+        "time": 12.96,
+        "frame": 778,
+        "line": "a1-02",
+        "word": "答案",
+        "local": 778
+      },
+      "enter": {
+        "time": 19.56,
+        "frame": 1174,
+        "line": "a1-03",
+        "word": "按下",
+        "local": 1174
+      },
+      "offline": {
+        "time": 25.94,
+        "frame": 1556,
+        "line": "a1-04",
+        "word": "沒有連上",
+        "local": 1556
+      },
+      "gpu": {
+        "time": 37.5,
+        "frame": 2250,
+        "line": "a1-04",
+        "word": "GPU",
+        "local": 2250
+      },
+      "vram": {
+        "time": 43.66,
+        "frame": 2620,
+        "line": "a1-05",
+        "word": "顯示記憶體",
+        "local": 2620
+      },
+      "flow": {
+        "time": 51.52,
+        "frame": 3091,
+        "line": "a1-06",
+        "word": "流進",
+        "local": 3091
+      },
+      "chip": {
+        "time": 52.08,
+        "frame": 3125,
+        "line": "a1-06",
+        "word": "晶片",
+        "local": 3125
+      },
+      "multiply": {
+        "time": 55.78,
+        "frame": 3347,
+        "line": "a1-06",
+        "word": "相乘",
+        "local": 3347
+      },
+      "outro": {
+        "time": 65.72,
+        "frame": 3943,
+        "line": "a1-07",
+        "word": "從頭",
+        "local": 3943
+      },
+      "laptop": {
+        "time": 78.36,
+        "frame": 4702,
+        "line": "a2-01",
+        "word": "平常",
+        "local": 632
+      },
+      "notlocal": {
+        "time": 81.08,
+        "frame": 4865,
+        "line": "a2-01",
+        "word": "不是在",
+        "local": 795
+      },
+      "packet": {
+        "time": 85.8,
+        "frame": 5148,
+        "line": "a2-02",
+        "word": "網路封包",
+        "local": 1078
+      },
+      "cable": {
+        "time": 89.14,
+        "frame": 5348,
+        "line": "a2-02",
+        "word": "海底電纜",
+        "local": 1278
+      },
+      "datacenter": {
+        "time": 92.76,
+        "frame": 5566,
+        "line": "a2-02",
+        "word": "資料中心",
+        "local": 1496
+      },
+      "servers": {
+        "time": 96.22,
+        "frame": 5773,
+        "line": "a2-03",
+        "word": "伺服器",
+        "local": 1703
+      },
+      "return": {
+        "time": 99.3,
+        "frame": 5958,
+        "line": "a2-03",
+        "word": "傳回來",
+        "local": 1888
+      },
+      "cloud": {
+        "time": 101.66,
+        "frame": 6100,
+        "line": "a2-03",
+        "word": "雲端推理",
+        "local": 2030
+      },
+      "local": {
+        "time": 103.86,
+        "frame": 6232,
+        "line": "a2-04",
+        "word": "本地推理",
+        "local": 2162
+      },
+      "disk": {
+        "time": 109.96,
+        "frame": 6598,
+        "line": "a2-04",
+        "word": "硬碟",
+        "local": 2528
+      },
+      "stay": {
+        "time": 115.36,
+        "frame": 6922,
+        "line": "a2-04",
+        "word": "不用離開",
+        "local": 2852
+      },
+      "compare": {
+        "time": 120.36,
+        "frame": 7222,
+        "line": "a2-05",
+        "word": "取捨",
+        "local": 3152
+      },
+      "cloudcol": {
+        "time": 121.42,
+        "frame": 7285,
+        "line": "a2-06",
+        "word": "雲端的模型",
+        "local": 3215
+      },
+      "net": {
+        "time": 128.2,
+        "frame": 7692,
+        "line": "a2-06",
+        "word": "連上網路",
+        "local": 3622
+      },
+      "privacy": {
+        "time": 131.82,
+        "frame": 7909,
+        "line": "a2-06",
+        "word": "別人的伺服器",
+        "local": 3839
+      },
+      "cost": {
+        "time": 134.72,
+        "frame": 8083,
+        "line": "a2-06",
+        "word": "付費",
+        "local": 4013
+      },
+      "localcol": {
+        "time": 136.48,
+        "frame": 8189,
+        "line": "a2-07",
+        "word": "本地模型",
+        "local": 4119
+      },
+      "hw": {
+        "time": 138.82,
+        "frame": 8329,
+        "line": "a2-07",
+        "word": "硬體",
+        "local": 4259
+      },
+      "power": {
+        "time": 145.96,
+        "frame": 8758,
+        "line": "a2-07",
+        "word": "電費",
+        "local": 4688
+      },
+      "question": {
+        "time": 152.42,
+        "frame": 9145,
+        "line": "a2-08",
+        "word": "到底是什麼",
+        "local": 5075
+      },
+      "db": {
+        "time": 172.42,
+        "frame": 10345,
+        "line": "a3-01",
+        "word": "資料庫",
+        "local": 1046
+      },
+      "notdb": {
+        "time": 175.84,
+        "frame": 10550,
+        "line": "a3-01",
+        "word": "其實不是",
+        "local": 1251
+      },
+      "numbers": {
+        "time": 181.3,
+        "frame": 10878,
+        "line": "a3-02",
+        "word": "數字",
+        "local": 1579
+      },
+      "weights": {
+        "time": 186.7,
+        "frame": 11202,
+        "line": "a3-02",
+        "word": "權重",
+        "local": 1903
+      },
+      "matrix": {
+        "time": 191.74,
+        "frame": 11504,
+        "line": "a3-03",
+        "word": "矩陣",
+        "local": 2205
+      },
+      "nextlayer": {
+        "time": 202.74,
+        "frame": 12164,
+        "line": "a3-03",
+        "word": "下一層",
+        "local": 2865
+      },
+      "transformer": {
+        "time": 208.98,
+        "frame": 12539,
+        "line": "a3-04",
+        "word": "Transformer",
+        "local": 3240
+      },
+      "stack": {
+        "time": 215.3,
+        "frame": 12918,
+        "line": "a3-04",
+        "word": "疊起來",
+        "local": 3619
+      },
+      "sizes": {
+        "time": 216.84,
+        "frame": 13010,
+        "line": "a3-05",
+        "word": "常聽到",
+        "local": 3711
+      },
+      "billion": {
+        "time": 222.836,
+        "frame": 13370,
+        "line": "a3-05",
+        "word": "十億",
+        "local": 4071
+      },
+      "b4": {
+        "time": 225.48,
+        "frame": 13529,
+        "line": "a3-05",
+        "word": "40 億",
+        "local": 4230
+      },
+      "b70": {
+        "time": 228.26,
+        "frame": 13696,
+        "line": "a3-05",
+        "word": "700 億",
+        "local": 4397
+      },
+      "bigger": {
+        "time": 229.78,
+        "frame": 13787,
+        "line": "a3-06",
+        "word": "參數越多",
+        "local": 4488
+      },
+      "memory": {
+        "time": 235.3,
+        "frame": 14118,
+        "line": "a3-06",
+        "word": "記憶體",
+        "local": 4819
+      },
+      "train": {
+        "time": 241.34,
+        "frame": 14480,
+        "line": "a3-07",
+        "word": "訓練",
+        "local": 5181
+      },
+      "guess": {
+        "time": 245.685,
+        "frame": 14741,
+        "line": "a3-07",
+        "word": "猜下一個字",
+        "local": 5442
+      },
+      "adjust": {
+        "time": 249.44,
+        "frame": 14966,
+        "line": "a3-07",
+        "word": "微調",
+        "local": 5667
+      },
+      "freeze": {
+        "time": 256.66,
+        "frame": 15400,
+        "line": "a3-08",
+        "word": "固定下來",
+        "local": 6101
+      },
+      "inference": {
+        "time": 261.52,
+        "frame": 15691,
+        "line": "a3-08",
+        "word": "推理",
+        "local": 6392
+      },
+      "patterns": {
+        "time": 278.98,
+        "frame": 16739,
+        "line": "a3-09",
+        "word": "規律",
+        "local": 7440
+      },
+      "q": {
+        "time": 281.48,
+        "frame": 16889,
+        "line": "a4-01",
+        "word": "問題來了",
+        "local": 69
+      },
+      "fp32": {
+        "time": 292.14,
+        "frame": 17528,
+        "line": "a4-02",
+        "word": "32 個位元",
+        "local": 708
+      },
+      "fp16": {
+        "time": 299.1,
+        "frame": 17946,
+        "line": "a4-02",
+        "word": "16 個位元",
+        "local": 1126
+      },
+      "half": {
+        "time": 301.5,
+        "frame": 18090,
+        "line": "a4-02",
+        "word": "減半",
+        "local": 1270
+      },
+      "calc": {
+        "time": 302.66,
+        "frame": 18160,
+        "line": "a4-03",
+        "word": "算算看",
+        "local": 1340
+      },
+      "result": {
+        "time": 312.48,
+        "frame": 18749,
+        "line": "a4-03",
+        "word": "16 GB",
+        "local": 1929
+      },
+      "vram6": {
+        "time": 319.92,
+        "frame": 19195,
+        "line": "a4-04",
+        "word": "6 GB",
+        "local": 2375
+      },
+      "quant": {
+        "time": 322.82,
+        "frame": 19369,
+        "line": "a4-04",
+        "word": "量化",
+        "local": 2549
+      },
+      "approx": {
+        "time": 329.313,
+        "frame": 19759,
+        "line": "a4-05",
+        "word": "近似",
+        "local": 2939
+      },
+      "group": {
+        "time": 333.86,
+        "frame": 20032,
+        "line": "a4-06",
+        "word": "一小組",
+        "local": 3212
+      },
+      "scale": {
+        "time": 337.72,
+        "frame": 20263,
+        "line": "a4-06",
+        "word": "縮放係數",
+        "local": 3443
+      },
+      "ints": {
+        "time": 342.92,
+        "frame": 20575,
+        "line": "a4-06",
+        "word": "整數",
+        "local": 3755
+      },
+      "restore": {
+        "time": 348.82,
+        "frame": 20929,
+        "line": "a4-07",
+        "word": "還原",
+        "local": 4109
+      },
+      "int8": {
+        "time": 354.24,
+        "frame": 21254,
+        "line": "a4-08",
+        "word": "8 個位元",
+        "local": 4434
+      },
+      "q4": {
+        "time": 357.2,
+        "frame": 21432,
+        "line": "a4-08",
+        "word": "4 位元",
+        "local": 4612
+      },
+      "error": {
+        "time": 362.38,
+        "frame": 21743,
+        "line": "a4-08",
+        "word": "誤差也跟著",
+        "local": 4923
+      },
+      "notdelete": {
+        "time": 367.22,
+        "frame": 22033,
+        "line": "a4-09",
+        "word": "不是把參數刪掉",
+        "local": 5213
+      },
+      "same": {
+        "time": 370.24,
+        "frame": 22214,
+        "line": "a4-09",
+        "word": "完全一樣",
+        "local": 5394
+      },
+      "q4km": {
+        "time": 378.1,
+        "frame": 22686,
+        "line": "a4-10",
+        "word": "混合",
+        "local": 5866
+      },
+      "sensitive": {
+        "time": 382.16,
+        "frame": 22930,
+        "line": "a4-10",
+        "word": "比較敏感",
+        "local": 6110
+      },
+      "formula": {
+        "time": 390.16,
+        "frame": 23410,
+        "line": "a4-11",
+        "word": "理論上",
+        "local": 6590
+      },
+      "c32": {
+        "time": 403.98,
+        "frame": 24239,
+        "line": "a4-12",
+        "word": "32 GB",
+        "local": 7419
+      },
+      "c16": {
+        "time": 407.04,
+        "frame": 24422,
+        "line": "a4-12",
+        "word": "16 GB",
+        "local": 7602
+      },
+      "c8": {
+        "time": 409.26,
+        "frame": 24556,
+        "line": "a4-12",
+        "word": "大約 8 GB",
+        "local": 7736
+      },
+      "c4": {
+        "time": 411.96,
+        "frame": 24718,
+        "line": "a4-12",
+        "word": "4 GB",
+        "local": 7898
+      },
+      "exceed": {
+        "time": 420.04,
+        "frame": 25202,
+        "line": "a4-13",
+        "word": "遠遠超過",
+        "local": 8382
+      },
+      "actual": {
+        "time": 424.48,
+        "frame": 25469,
+        "line": "a4-14",
+        "word": "實際下載",
+        "local": 8649
+      },
+      "gguf": {
+        "time": 439.94,
+        "frame": 26396,
+        "line": "a4-15",
+        "word": "格式",
+        "local": 9576
+      },
+      "header": {
+        "time": 445.82,
+        "frame": 26749,
+        "line": "a4-16",
+        "word": "檔頭",
+        "local": 9929
+      },
+      "meta": {
+        "time": 450.88,
+        "frame": 27053,
+        "line": "a4-16",
+        "word": "中繼資料",
+        "local": 10233
+      },
+      "tensors": {
+        "time": 453.545,
+        "frame": 27213,
+        "line": "a4-16",
+        "word": "張量",
+        "local": 10393
+      },
+      "onefile": {
+        "time": 457.06,
+        "frame": 27424,
+        "line": "a4-17",
+        "word": "一個檔案",
+        "local": 10604
+      },
+      "container": {
+        "time": 466.06,
+        "frame": 27964,
+        "line": "a4-17",
+        "word": "容器",
+        "local": 11144
+      },
+      "intro": {
+        "time": 484.3,
+        "frame": 29058,
+        "line": "a5-01",
+        "word": "這就是",
+        "local": 892
+      },
+      "engine": {
+        "time": 492.4,
+        "frame": 29544,
+        "line": "a5-02",
+        "word": "推理引擎",
+        "local": 1378
+      },
+      "tools": {
+        "time": 495.38,
+        "frame": 29723,
+        "line": "a5-02",
+        "word": "命令列工具",
+        "local": 1557
+      },
+      "notmodel": {
+        "time": 498.2,
+        "frame": 29892,
+        "line": "a5-02",
+        "word": "不是某一個",
+        "local": 1726
+      },
+      "ggml": {
+        "time": 507.86,
+        "frame": 30472,
+        "line": "a5-03",
+        "word": "函式庫",
+        "local": 2306
+      },
+      "cpu": {
+        "time": 510.94,
+        "frame": 30656,
+        "line": "a5-03",
+        "word": "CPU",
+        "local": 2490
+      },
+      "cuda": {
+        "time": 513.78,
+        "frame": 30827,
+        "line": "a5-03",
+        "word": "CUDA",
+        "local": 2661
+      },
+      "ryzen": {
+        "time": 521.66,
+        "frame": 31300,
+        "line": "a5-04",
+        "word": "Ryzen",
+        "local": 3134
+      },
+      "ram": {
+        "time": 523.72,
+        "frame": 31423,
+        "line": "a5-04",
+        "word": "32 GB",
+        "local": 3257
+      },
+      "rtx": {
+        "time": 526.94,
+        "frame": 31616,
+        "line": "a5-04",
+        "word": "R T X 4050",
+        "local": 3450
+      },
+      "ssd": {
+        "time": 537.16,
+        "frame": 32230,
+        "line": "a5-05",
+        "word": "S S D",
+        "local": 4064
+      },
+      "load": {
+        "time": 541.5,
+        "frame": 32490,
+        "line": "a5-05",
+        "word": "載入",
+        "local": 4324
+      },
+      "offload": {
+        "time": 544.46,
+        "frame": 32668,
+        "line": "a5-06",
+        "word": "Offload",
+        "local": 4502
+      },
+      "gpulayers": {
+        "time": 552.02,
+        "frame": 33121,
+        "line": "a5-06",
+        "word": "交給 GPU",
+        "local": 4955
+      },
+      "cpulayers": {
+        "time": 555.66,
+        "frame": 33340,
+        "line": "a5-06",
+        "word": "由 CPU",
+        "local": 5174
+      },
+      "why": {
+        "time": 557.56,
+        "frame": 33454,
+        "line": "a5-07",
+        "word": "為什麼",
+        "local": 5288
+      },
+      "parallel": {
+        "time": 562.06,
+        "frame": 33724,
+        "line": "a5-07",
+        "word": "平行",
+        "local": 5558
+      },
+      "bandwidth": {
+        "time": 566.3,
+        "frame": 33978,
+        "line": "a5-07",
+        "word": "記憶體頻寬",
+        "local": 5812
+      },
+      "readall": {
+        "time": 573.1,
+        "frame": 34386,
+        "line": "a5-08",
+        "word": "讀過一遍",
+        "local": 6220
+      },
+      "bottleneck": {
+        "time": 580.6,
+        "frame": 34836,
+        "line": "a5-08",
+        "word": "搬得夠不夠快",
+        "local": 6670
+      },
+      "fast": {
+        "time": 588.06,
+        "frame": 35284,
+        "line": "a5-09",
+        "word": "快上不少",
+        "local": 7118
+      },
+      "analogy": {
+        "time": 590.82,
+        "frame": 35449,
+        "line": "a5-09",
+        "word": "隔壁",
+        "local": 7283
+      },
+      "kv": {
+        "time": 598.28,
+        "frame": 35897,
+        "line": "a5-10",
+        "word": "K V Cache",
+        "local": 7731
+      },
+      "store": {
+        "time": 603.28,
+        "frame": 36197,
+        "line": "a5-10",
+        "word": "存起來",
+        "local": 8031
+      },
+      "context": {
+        "time": 608.76,
+        "frame": 36526,
+        "line": "a5-11",
+        "word": "Context",
+        "local": 8360
+      },
+      "grow": {
+        "time": 615.68,
+        "frame": 36941,
+        "line": "a5-11",
+        "word": "越大",
+        "local": 8775
+      },
+      "compete": {
+        "time": 618.54,
+        "frame": 37112,
+        "line": "a5-11",
+        "word": "搶",
+        "local": 8946
+      },
+      "tradeoff": {
+        "time": 632.2,
+        "frame": 37932,
+        "line": "a5-12",
+        "word": "取捨",
+        "local": 9766
+      },
+      "ready": {
+        "time": 651.18,
+        "frame": 39071,
+        "line": "a6-01",
+        "word": "輪到",
+        "local": 1060
+      },
+      "tokenize": {
+        "time": 654.56,
+        "frame": 39274,
+        "line": "a6-02",
+        "word": "Tokenization",
+        "local": 1263
+      },
+      "ids": {
+        "time": 662.3,
+        "frame": 39738,
+        "line": "a6-02",
+        "word": "編號",
+        "local": 1727
+      },
+      "notchar": {
+        "time": 664.46,
+        "frame": 39868,
+        "line": "a6-03",
+        "word": "不一定",
+        "local": 1857
+      },
+      "english": {
+        "time": 668.84,
+        "frame": 40130,
+        "line": "a6-03",
+        "word": "英文單字",
+        "local": 2119
+      },
+      "chinese": {
+        "time": 672.14,
+        "frame": 40328,
+        "line": "a6-03",
+        "word": "中文字",
+        "local": 2317
+      },
+      "embed": {
+        "time": 678.96,
+        "frame": 40738,
+        "line": "a6-04",
+        "word": "Embedding",
+        "local": 2727
+      },
+      "vector": {
+        "time": 684.06,
+        "frame": 41044,
+        "line": "a6-04",
+        "word": "向量",
+        "local": 3033
+      },
+      "similar": {
+        "time": 689.16,
+        "frame": 41350,
+        "line": "a6-04",
+        "word": "比較接近",
+        "local": 3339
+      },
+      "layers": {
+        "time": 694.76,
+        "frame": 41686,
+        "line": "a6-05",
+        "word": "Transformer",
+        "local": 3675
+      },
+      "attention": {
+        "time": 698.86,
+        "frame": 41932,
+        "line": "a6-05",
+        "word": "Attention",
+        "local": 3921
+      },
+      "example": {
+        "time": 704.16,
+        "frame": 42250,
+        "line": "a6-06",
+        "word": "舉個例子",
+        "local": 4239
+      },
+      "it": {
+        "time": 710.38,
+        "frame": 42623,
+        "line": "a6-06",
+        "word": "指的是什麼",
+        "local": 4612
+      },
+      "apple": {
+        "time": 717.52,
+        "frame": 43051,
+        "line": "a6-06",
+        "word": "最相關",
+        "local": 5040
+      },
+      "logits": {
+        "time": 725.8,
+        "frame": 43548,
+        "line": "a6-07",
+        "word": "logits",
+        "local": 5537
+      },
+      "score": {
+        "time": 726.84,
+        "frame": 43610,
+        "line": "a6-07",
+        "word": "分數越高",
+        "local": 5599
+      },
+      "sample": {
+        "time": 731.14,
+        "frame": 43868,
+        "line": "a6-08",
+        "word": "取樣",
+        "local": 5857
+      },
+      "lowT": {
+        "time": 732.92,
+        "frame": 43975,
+        "line": "a6-08",
+        "word": "越低",
+        "local": 5964
+      },
+      "highT": {
+        "time": 737.4,
+        "frame": 44244,
+        "line": "a6-08",
+        "word": "越高",
+        "local": 6233
+      },
+      "append": {
+        "time": 745.52,
+        "frame": 44731,
+        "line": "a6-09",
+        "word": "接到",
+        "local": 6720
+      },
+      "loop": {
+        "time": 748.7,
+        "frame": 44922,
+        "line": "a6-09",
+        "word": "再跑一次",
+        "local": 6911
+      },
+      "autoreg": {
+        "time": 752.0,
+        "frame": 45120,
+        "line": "a6-09",
+        "word": "自回歸",
+        "local": 7109
+      },
+      "prefill": {
+        "time": 762.82,
+        "frame": 45769,
+        "line": "a6-10",
+        "word": "Prefill",
+        "local": 7758
+      },
+      "decode": {
+        "time": 767.32,
+        "frame": 46039,
+        "line": "a6-10",
+        "word": "Decode",
+        "local": 8028
+      },
+      "tps": {
+        "time": 770.44,
+        "frame": 46226,
+        "line": "a6-11",
+        "word": "每秒",
+        "local": 8215
+      },
+      "speed": {
+        "time": 779.02,
+        "frame": 46741,
+        "line": "a6-11",
+        "word": "速度",
+        "local": 8730
+      },
+      "back": {
+        "time": 781.12,
+        "frame": 46867,
+        "line": "a7-01",
+        "word": "回到",
+        "local": 39
+      },
+      "tokens": {
+        "time": 802.34,
+        "frame": 48140,
+        "line": "a7-03",
+        "word": "切成",
+        "local": 1312
+      },
+      "prob": {
+        "time": 811.04,
+        "frame": 48662,
+        "line": "a7-03",
+        "word": "機率",
+        "local": 1834
+      },
+      "text": {
+        "time": 817.68,
+        "frame": 49061,
+        "line": "a7-04",
+        "word": "變回了文字",
+        "local": 2233
+      },
+      "math": {
+        "time": 828.2,
+        "frame": 49692,
+        "line": "a7-05",
+        "word": "做數學",
+        "local": 2864
+      },
+      "brand": {
+        "time": 830.36,
+        "frame": 49822,
+        "line": "a7-06",
+        "word": "這裡是",
+        "local": 2994
+      }
+    },
+    "scenes": [
+      {
+        "id": "act01",
+        "title": "AI 就在你的電腦裡",
+        "voiceStart": 0.4,
+        "anchors": {
+          "hook": {
+            "time": 4.4,
+            "frame": 264,
+            "line": "a1-00",
+            "word": "幾十億",
+            "local": 264
+          },
+          "open": {
+            "time": 6.98,
+            "frame": 419,
+            "line": "a1-01",
+            "word": "晚上",
+            "local": 419
+          },
+          "answer": {
+            "time": 12.96,
+            "frame": 778,
+            "line": "a1-02",
+            "word": "答案",
+            "local": 778
+          },
+          "enter": {
+            "time": 19.56,
+            "frame": 1174,
+            "line": "a1-03",
+            "word": "按下",
+            "local": 1174
+          },
+          "offline": {
+            "time": 25.94,
+            "frame": 1556,
+            "line": "a1-04",
+            "word": "沒有連上",
+            "local": 1556
+          },
+          "gpu": {
+            "time": 37.5,
+            "frame": 2250,
+            "line": "a1-04",
+            "word": "GPU",
+            "local": 2250
+          },
+          "vram": {
+            "time": 43.66,
+            "frame": 2620,
+            "line": "a1-05",
+            "word": "顯示記憶體",
+            "local": 2620
+          },
+          "flow": {
+            "time": 51.52,
+            "frame": 3091,
+            "line": "a1-06",
+            "word": "流進",
+            "local": 3091
+          },
+          "chip": {
+            "time": 52.08,
+            "frame": 3125,
+            "line": "a1-06",
+            "word": "晶片",
+            "local": 3125
+          },
+          "multiply": {
+            "time": 55.78,
+            "frame": 3347,
+            "line": "a1-06",
+            "word": "相乘",
+            "local": 3347
+          },
+          "outro": {
+            "time": 65.72,
+            "frame": 3943,
+            "line": "a1-07",
+            "word": "從頭",
+            "local": 3943
+          }
+        },
+        "voiceEnd": 67.18,
+        "start": 0.0,
+        "end": 67.83,
+        "startFrame": 0,
+        "endFrame": 4070,
+        "durationFrames": 4070
+      },
+      {
+        "id": "act02",
+        "title": "本地 AI 與雲端 AI",
+        "voiceStart": 68.48,
+        "anchors": {
+          "hook": {
+            "time": 72.06,
+            "frame": 4324,
+            "line": "a2-00",
+            "word": "飛越",
+            "local": 254
+          },
+          "laptop": {
+            "time": 78.36,
+            "frame": 4702,
+            "line": "a2-01",
+            "word": "平常",
+            "local": 632
+          },
+          "notlocal": {
+            "time": 81.08,
+            "frame": 4865,
+            "line": "a2-01",
+            "word": "不是在",
+            "local": 795
+          },
+          "packet": {
+            "time": 85.8,
+            "frame": 5148,
+            "line": "a2-02",
+            "word": "網路封包",
+            "local": 1078
+          },
+          "cable": {
+            "time": 89.14,
+            "frame": 5348,
+            "line": "a2-02",
+            "word": "海底電纜",
+            "local": 1278
+          },
+          "datacenter": {
+            "time": 92.76,
+            "frame": 5566,
+            "line": "a2-02",
+            "word": "資料中心",
+            "local": 1496
+          },
+          "servers": {
+            "time": 96.22,
+            "frame": 5773,
+            "line": "a2-03",
+            "word": "伺服器",
+            "local": 1703
+          },
+          "return": {
+            "time": 99.3,
+            "frame": 5958,
+            "line": "a2-03",
+            "word": "傳回來",
+            "local": 1888
+          },
+          "cloud": {
+            "time": 101.66,
+            "frame": 6100,
+            "line": "a2-03",
+            "word": "雲端推理",
+            "local": 2030
+          },
+          "local": {
+            "time": 103.86,
+            "frame": 6232,
+            "line": "a2-04",
+            "word": "本地推理",
+            "local": 2162
+          },
+          "disk": {
+            "time": 109.96,
+            "frame": 6598,
+            "line": "a2-04",
+            "word": "硬碟",
+            "local": 2528
+          },
+          "stay": {
+            "time": 115.36,
+            "frame": 6922,
+            "line": "a2-04",
+            "word": "不用離開",
+            "local": 2852
+          },
+          "compare": {
+            "time": 120.36,
+            "frame": 7222,
+            "line": "a2-05",
+            "word": "取捨",
+            "local": 3152
+          },
+          "cloudcol": {
+            "time": 121.42,
+            "frame": 7285,
+            "line": "a2-06",
+            "word": "雲端的模型",
+            "local": 3215
+          },
+          "net": {
+            "time": 128.2,
+            "frame": 7692,
+            "line": "a2-06",
+            "word": "連上網路",
+            "local": 3622
+          },
+          "privacy": {
+            "time": 131.82,
+            "frame": 7909,
+            "line": "a2-06",
+            "word": "別人的伺服器",
+            "local": 3839
+          },
+          "cost": {
+            "time": 134.72,
+            "frame": 8083,
+            "line": "a2-06",
+            "word": "付費",
+            "local": 4013
+          },
+          "localcol": {
+            "time": 136.48,
+            "frame": 8189,
+            "line": "a2-07",
+            "word": "本地模型",
+            "local": 4119
+          },
+          "hw": {
+            "time": 138.82,
+            "frame": 8329,
+            "line": "a2-07",
+            "word": "硬體",
+            "local": 4259
+          },
+          "offline": {
+            "time": 142.26,
+            "frame": 8536,
+            "line": "a2-07",
+            "word": "離線",
+            "local": 4466
+          },
+          "power": {
+            "time": 145.96,
+            "frame": 8758,
+            "line": "a2-07",
+            "word": "電費",
+            "local": 4688
+          },
+          "question": {
+            "time": 152.42,
+            "frame": 9145,
+            "line": "a2-08",
+            "word": "到底是什麼",
+            "local": 5075
+          }
+        },
+        "voiceEnd": 154.34,
+        "start": 67.83,
+        "end": 154.99,
+        "startFrame": 4070,
+        "endFrame": 9299,
+        "durationFrames": 5229
+      },
+      {
+        "id": "act03",
+        "title": "大型語言模型到底是什麼",
+        "voiceStart": 155.64,
+        "anchors": {
+          "hook": {
+            "time": 164.42,
+            "frame": 9865,
+            "line": "a3-00",
+            "word": "到底是什麼",
+            "local": 566
+          },
+          "db": {
+            "time": 172.42,
+            "frame": 10345,
+            "line": "a3-01",
+            "word": "資料庫",
+            "local": 1046
+          },
+          "notdb": {
+            "time": 175.84,
+            "frame": 10550,
+            "line": "a3-01",
+            "word": "其實不是",
+            "local": 1251
+          },
+          "numbers": {
+            "time": 181.3,
+            "frame": 10878,
+            "line": "a3-02",
+            "word": "數字",
+            "local": 1579
+          },
+          "weights": {
+            "time": 186.7,
+            "frame": 11202,
+            "line": "a3-02",
+            "word": "權重",
+            "local": 1903
+          },
+          "matrix": {
+            "time": 191.74,
+            "frame": 11504,
+            "line": "a3-03",
+            "word": "矩陣",
+            "local": 2205
+          },
+          "multiply": {
+            "time": 196.12,
+            "frame": 11767,
+            "line": "a3-03",
+            "word": "相乘",
+            "local": 2468
+          },
+          "nextlayer": {
+            "time": 202.74,
+            "frame": 12164,
+            "line": "a3-03",
+            "word": "下一層",
+            "local": 2865
+          },
+          "transformer": {
+            "time": 208.98,
+            "frame": 12539,
+            "line": "a3-04",
+            "word": "Transformer",
+            "local": 3240
+          },
+          "stack": {
+            "time": 215.3,
+            "frame": 12918,
+            "line": "a3-04",
+            "word": "疊起來",
+            "local": 3619
+          },
+          "sizes": {
+            "time": 216.84,
+            "frame": 13010,
+            "line": "a3-05",
+            "word": "常聽到",
+            "local": 3711
+          },
+          "billion": {
+            "time": 222.836,
+            "frame": 13370,
+            "line": "a3-05",
+            "word": "十億",
+            "local": 4071
+          },
+          "b4": {
+            "time": 225.48,
+            "frame": 13529,
+            "line": "a3-05",
+            "word": "40 億",
+            "local": 4230
+          },
+          "b70": {
+            "time": 228.26,
+            "frame": 13696,
+            "line": "a3-05",
+            "word": "700 億",
+            "local": 4397
+          },
+          "bigger": {
+            "time": 229.78,
+            "frame": 13787,
+            "line": "a3-06",
+            "word": "參數越多",
+            "local": 4488
+          },
+          "memory": {
+            "time": 235.3,
+            "frame": 14118,
+            "line": "a3-06",
+            "word": "記憶體",
+            "local": 4819
+          },
+          "train": {
+            "time": 241.34,
+            "frame": 14480,
+            "line": "a3-07",
+            "word": "訓練",
+            "local": 5181
+          },
+          "guess": {
+            "time": 245.685,
+            "frame": 14741,
+            "line": "a3-07",
+            "word": "猜下一個字",
+            "local": 5442
+          },
+          "adjust": {
+            "time": 249.44,
+            "frame": 14966,
+            "line": "a3-07",
+            "word": "微調",
+            "local": 5667
+          },
+          "freeze": {
+            "time": 256.66,
+            "frame": 15400,
+            "line": "a3-08",
+            "word": "固定下來",
+            "local": 6101
+          },
+          "inference": {
+            "time": 261.52,
+            "frame": 15691,
+            "line": "a3-08",
+            "word": "推理",
+            "local": 6392
+          },
+          "patterns": {
+            "time": 278.98,
+            "frame": 16739,
+            "line": "a3-09",
+            "word": "規律",
+            "local": 7440
+          }
+        },
+        "voiceEnd": 279.68,
+        "start": 154.99,
+        "end": 280.33,
+        "startFrame": 9299,
+        "endFrame": 16820,
+        "durationFrames": 7521
+      },
+      {
+        "id": "act04",
+        "title": "量化與 GGUF",
+        "voiceStart": 280.98,
+        "anchors": {
+          "q": {
+            "time": 281.48,
+            "frame": 16889,
+            "line": "a4-01",
+            "word": "問題來了",
+            "local": 69
+          },
+          "fp32": {
+            "time": 292.14,
+            "frame": 17528,
+            "line": "a4-02",
+            "word": "32 個位元",
+            "local": 708
+          },
+          "fp16": {
+            "time": 299.1,
+            "frame": 17946,
+            "line": "a4-02",
+            "word": "16 個位元",
+            "local": 1126
+          },
+          "half": {
+            "time": 301.5,
+            "frame": 18090,
+            "line": "a4-02",
+            "word": "減半",
+            "local": 1270
+          },
+          "calc": {
+            "time": 302.66,
+            "frame": 18160,
+            "line": "a4-03",
+            "word": "算算看",
+            "local": 1340
+          },
+          "result": {
+            "time": 312.48,
+            "frame": 18749,
+            "line": "a4-03",
+            "word": "16 GB",
+            "local": 1929
+          },
+          "vram6": {
+            "time": 319.92,
+            "frame": 19195,
+            "line": "a4-04",
+            "word": "6 GB",
+            "local": 2375
+          },
+          "quant": {
+            "time": 322.82,
+            "frame": 19369,
+            "line": "a4-04",
+            "word": "量化",
+            "local": 2549
+          },
+          "approx": {
+            "time": 329.313,
+            "frame": 19759,
+            "line": "a4-05",
+            "word": "近似",
+            "local": 2939
+          },
+          "group": {
+            "time": 333.86,
+            "frame": 20032,
+            "line": "a4-06",
+            "word": "一小組",
+            "local": 3212
+          },
+          "scale": {
+            "time": 337.72,
+            "frame": 20263,
+            "line": "a4-06",
+            "word": "縮放係數",
+            "local": 3443
+          },
+          "ints": {
+            "time": 342.92,
+            "frame": 20575,
+            "line": "a4-06",
+            "word": "整數",
+            "local": 3755
+          },
+          "restore": {
+            "time": 348.82,
+            "frame": 20929,
+            "line": "a4-07",
+            "word": "還原",
+            "local": 4109
+          },
+          "int8": {
+            "time": 354.24,
+            "frame": 21254,
+            "line": "a4-08",
+            "word": "8 個位元",
+            "local": 4434
+          },
+          "q4": {
+            "time": 357.2,
+            "frame": 21432,
+            "line": "a4-08",
+            "word": "4 位元",
+            "local": 4612
+          },
+          "error": {
+            "time": 362.38,
+            "frame": 21743,
+            "line": "a4-08",
+            "word": "誤差也跟著",
+            "local": 4923
+          },
+          "notdelete": {
+            "time": 367.22,
+            "frame": 22033,
+            "line": "a4-09",
+            "word": "不是把參數刪掉",
+            "local": 5213
+          },
+          "same": {
+            "time": 370.24,
+            "frame": 22214,
+            "line": "a4-09",
+            "word": "完全一樣",
+            "local": 5394
+          },
+          "q4km": {
+            "time": 378.1,
+            "frame": 22686,
+            "line": "a4-10",
+            "word": "混合",
+            "local": 5866
+          },
+          "sensitive": {
+            "time": 382.16,
+            "frame": 22930,
+            "line": "a4-10",
+            "word": "比較敏感",
+            "local": 6110
+          },
+          "formula": {
+            "time": 390.16,
+            "frame": 23410,
+            "line": "a4-11",
+            "word": "理論上",
+            "local": 6590
+          },
+          "c32": {
+            "time": 403.98,
+            "frame": 24239,
+            "line": "a4-12",
+            "word": "32 GB",
+            "local": 7419
+          },
+          "c16": {
+            "time": 407.04,
+            "frame": 24422,
+            "line": "a4-12",
+            "word": "16 GB",
+            "local": 7602
+          },
+          "c8": {
+            "time": 409.26,
+            "frame": 24556,
+            "line": "a4-12",
+            "word": "大約 8 GB",
+            "local": 7736
+          },
+          "c4": {
+            "time": 411.96,
+            "frame": 24718,
+            "line": "a4-12",
+            "word": "4 GB",
+            "local": 7898
+          },
+          "b70": {
+            "time": 418.5,
+            "frame": 25110,
+            "line": "a4-13",
+            "word": "35 GB",
+            "local": 8290
+          },
+          "exceed": {
+            "time": 420.04,
+            "frame": 25202,
+            "line": "a4-13",
+            "word": "遠遠超過",
+            "local": 8382
+          },
+          "actual": {
+            "time": 424.48,
+            "frame": 25469,
+            "line": "a4-14",
+            "word": "實際下載",
+            "local": 8649
+          },
+          "gguf": {
+            "time": 439.94,
+            "frame": 26396,
+            "line": "a4-15",
+            "word": "格式",
+            "local": 9576
+          },
+          "header": {
+            "time": 445.82,
+            "frame": 26749,
+            "line": "a4-16",
+            "word": "檔頭",
+            "local": 9929
+          },
+          "meta": {
+            "time": 450.88,
+            "frame": 27053,
+            "line": "a4-16",
+            "word": "中繼資料",
+            "local": 10233
+          },
+          "tensors": {
+            "time": 453.545,
+            "frame": 27213,
+            "line": "a4-16",
+            "word": "張量",
+            "local": 10393
+          },
+          "onefile": {
+            "time": 457.06,
+            "frame": 27424,
+            "line": "a4-17",
+            "word": "一個檔案",
+            "local": 10604
+          },
+          "container": {
+            "time": 466.06,
+            "frame": 27964,
+            "line": "a4-17",
+            "word": "容器",
+            "local": 11144
+          }
+        },
+        "voiceEnd": 468.78,
+        "start": 280.33,
+        "end": 469.43,
+        "startFrame": 16820,
+        "endFrame": 28166,
+        "durationFrames": 11346
+      },
+      {
+        "id": "act05",
+        "title": "llama.cpp 如何運作",
+        "voiceStart": 470.08,
+        "anchors": {
+          "hook": {
+            "time": 476.36,
+            "frame": 28582,
+            "line": "a5-00",
+            "word": "差在哪裡",
+            "local": 416
+          },
+          "intro": {
+            "time": 484.3,
+            "frame": 29058,
+            "line": "a5-01",
+            "word": "這就是",
+            "local": 892
+          },
+          "engine": {
+            "time": 492.4,
+            "frame": 29544,
+            "line": "a5-02",
+            "word": "推理引擎",
+            "local": 1378
+          },
+          "tools": {
+            "time": 495.38,
+            "frame": 29723,
+            "line": "a5-02",
+            "word": "命令列工具",
+            "local": 1557
+          },
+          "notmodel": {
+            "time": 498.2,
+            "frame": 29892,
+            "line": "a5-02",
+            "word": "不是某一個",
+            "local": 1726
+          },
+          "ggml": {
+            "time": 507.86,
+            "frame": 30472,
+            "line": "a5-03",
+            "word": "函式庫",
+            "local": 2306
+          },
+          "cpu": {
+            "time": 510.94,
+            "frame": 30656,
+            "line": "a5-03",
+            "word": "CPU",
+            "local": 2490
+          },
+          "cuda": {
+            "time": 513.78,
+            "frame": 30827,
+            "line": "a5-03",
+            "word": "CUDA",
+            "local": 2661
+          },
+          "laptop": {
+            "time": 519.36,
+            "frame": 31162,
+            "line": "a5-04",
+            "word": "筆電",
+            "local": 2996
+          },
+          "ryzen": {
+            "time": 521.66,
+            "frame": 31300,
+            "line": "a5-04",
+            "word": "Ryzen",
+            "local": 3134
+          },
+          "ram": {
+            "time": 523.72,
+            "frame": 31423,
+            "line": "a5-04",
+            "word": "32 GB",
+            "local": 3257
+          },
+          "rtx": {
+            "time": 526.94,
+            "frame": 31616,
+            "line": "a5-04",
+            "word": "R T X 4050",
+            "local": 3450
+          },
+          "ssd": {
+            "time": 537.16,
+            "frame": 32230,
+            "line": "a5-05",
+            "word": "S S D",
+            "local": 4064
+          },
+          "load": {
+            "time": 541.5,
+            "frame": 32490,
+            "line": "a5-05",
+            "word": "載入",
+            "local": 4324
+          },
+          "offload": {
+            "time": 544.46,
+            "frame": 32668,
+            "line": "a5-06",
+            "word": "Offload",
+            "local": 4502
+          },
+          "gpulayers": {
+            "time": 552.02,
+            "frame": 33121,
+            "line": "a5-06",
+            "word": "交給 GPU",
+            "local": 4955
+          },
+          "cpulayers": {
+            "time": 555.66,
+            "frame": 33340,
+            "line": "a5-06",
+            "word": "由 CPU",
+            "local": 5174
+          },
+          "why": {
+            "time": 557.56,
+            "frame": 33454,
+            "line": "a5-07",
+            "word": "為什麼",
+            "local": 5288
+          },
+          "parallel": {
+            "time": 562.06,
+            "frame": 33724,
+            "line": "a5-07",
+            "word": "平行",
+            "local": 5558
+          },
+          "bandwidth": {
+            "time": 566.3,
+            "frame": 33978,
+            "line": "a5-07",
+            "word": "記憶體頻寬",
+            "local": 5812
+          },
+          "readall": {
+            "time": 573.1,
+            "frame": 34386,
+            "line": "a5-08",
+            "word": "讀過一遍",
+            "local": 6220
+          },
+          "bottleneck": {
+            "time": 580.6,
+            "frame": 34836,
+            "line": "a5-08",
+            "word": "搬得夠不夠快",
+            "local": 6670
+          },
+          "fast": {
+            "time": 588.06,
+            "frame": 35284,
+            "line": "a5-09",
+            "word": "快上不少",
+            "local": 7118
+          },
+          "analogy": {
+            "time": 590.82,
+            "frame": 35449,
+            "line": "a5-09",
+            "word": "隔壁",
+            "local": 7283
+          },
+          "kv": {
+            "time": 598.28,
+            "frame": 35897,
+            "line": "a5-10",
+            "word": "K V Cache",
+            "local": 7731
+          },
+          "store": {
+            "time": 603.28,
+            "frame": 36197,
+            "line": "a5-10",
+            "word": "存起來",
+            "local": 8031
+          },
+          "context": {
+            "time": 608.76,
+            "frame": 36526,
+            "line": "a5-11",
+            "word": "Context",
+            "local": 8360
+          },
+          "grow": {
+            "time": 615.68,
+            "frame": 36941,
+            "line": "a5-11",
+            "word": "越大",
+            "local": 8775
+          },
+          "compete": {
+            "time": 618.54,
+            "frame": 37112,
+            "line": "a5-11",
+            "word": "搶",
+            "local": 8946
+          },
+          "tradeoff": {
+            "time": 632.2,
+            "frame": 37932,
+            "line": "a5-12",
+            "word": "取捨",
+            "local": 9766
+          }
+        },
+        "voiceEnd": 632.86,
+        "start": 469.43,
+        "end": 633.51,
+        "startFrame": 28166,
+        "endFrame": 38011,
+        "durationFrames": 9845
+      },
+      {
+        "id": "act06",
+        "title": "AI 如何一個字一個字地回答你",
+        "voiceStart": 634.16,
+        "anchors": {
+          "hook": {
+            "time": 641.295,
+            "frame": 38478,
+            "line": "a6-00",
+            "word": "猜下一個字",
+            "local": 467
+          },
+          "ready": {
+            "time": 651.18,
+            "frame": 39071,
+            "line": "a6-01",
+            "word": "輪到",
+            "local": 1060
+          },
+          "tokenize": {
+            "time": 654.56,
+            "frame": 39274,
+            "line": "a6-02",
+            "word": "Tokenization",
+            "local": 1263
+          },
+          "ids": {
+            "time": 662.3,
+            "frame": 39738,
+            "line": "a6-02",
+            "word": "編號",
+            "local": 1727
+          },
+          "notchar": {
+            "time": 664.46,
+            "frame": 39868,
+            "line": "a6-03",
+            "word": "不一定",
+            "local": 1857
+          },
+          "english": {
+            "time": 668.84,
+            "frame": 40130,
+            "line": "a6-03",
+            "word": "英文單字",
+            "local": 2119
+          },
+          "chinese": {
+            "time": 672.14,
+            "frame": 40328,
+            "line": "a6-03",
+            "word": "中文字",
+            "local": 2317
+          },
+          "embed": {
+            "time": 678.96,
+            "frame": 40738,
+            "line": "a6-04",
+            "word": "Embedding",
+            "local": 2727
+          },
+          "vector": {
+            "time": 684.06,
+            "frame": 41044,
+            "line": "a6-04",
+            "word": "向量",
+            "local": 3033
+          },
+          "similar": {
+            "time": 689.16,
+            "frame": 41350,
+            "line": "a6-04",
+            "word": "比較接近",
+            "local": 3339
+          },
+          "layers": {
+            "time": 694.76,
+            "frame": 41686,
+            "line": "a6-05",
+            "word": "Transformer",
+            "local": 3675
+          },
+          "attention": {
+            "time": 698.86,
+            "frame": 41932,
+            "line": "a6-05",
+            "word": "Attention",
+            "local": 3921
+          },
+          "example": {
+            "time": 704.16,
+            "frame": 42250,
+            "line": "a6-06",
+            "word": "舉個例子",
+            "local": 4239
+          },
+          "it": {
+            "time": 710.38,
+            "frame": 42623,
+            "line": "a6-06",
+            "word": "指的是什麼",
+            "local": 4612
+          },
+          "apple": {
+            "time": 717.52,
+            "frame": 43051,
+            "line": "a6-06",
+            "word": "最相關",
+            "local": 5040
+          },
+          "logits": {
+            "time": 725.8,
+            "frame": 43548,
+            "line": "a6-07",
+            "word": "logits",
+            "local": 5537
+          },
+          "score": {
+            "time": 726.84,
+            "frame": 43610,
+            "line": "a6-07",
+            "word": "分數越高",
+            "local": 5599
+          },
+          "sample": {
+            "time": 731.14,
+            "frame": 43868,
+            "line": "a6-08",
+            "word": "取樣",
+            "local": 5857
+          },
+          "lowT": {
+            "time": 732.92,
+            "frame": 43975,
+            "line": "a6-08",
+            "word": "越低",
+            "local": 5964
+          },
+          "highT": {
+            "time": 737.4,
+            "frame": 44244,
+            "line": "a6-08",
+            "word": "越高",
+            "local": 6233
+          },
+          "append": {
+            "time": 745.52,
+            "frame": 44731,
+            "line": "a6-09",
+            "word": "接到",
+            "local": 6720
+          },
+          "loop": {
+            "time": 748.7,
+            "frame": 44922,
+            "line": "a6-09",
+            "word": "再跑一次",
+            "local": 6911
+          },
+          "autoreg": {
+            "time": 752.0,
+            "frame": 45120,
+            "line": "a6-09",
+            "word": "自回歸",
+            "local": 7109
+          },
+          "prefill": {
+            "time": 762.82,
+            "frame": 45769,
+            "line": "a6-10",
+            "word": "Prefill",
+            "local": 7758
+          },
+          "decode": {
+            "time": 767.32,
+            "frame": 46039,
+            "line": "a6-10",
+            "word": "Decode",
+            "local": 8028
+          },
+          "tps": {
+            "time": 770.44,
+            "frame": 46226,
+            "line": "a6-11",
+            "word": "每秒",
+            "local": 8215
+          },
+          "speed": {
+            "time": 779.02,
+            "frame": 46741,
+            "line": "a6-11",
+            "word": "速度",
+            "local": 8730
+          }
+        },
+        "voiceEnd": 779.82,
+        "start": 633.51,
+        "end": 780.47,
+        "startFrame": 38011,
+        "endFrame": 46828,
+        "durationFrames": 8817
+      },
+      {
+        "id": "act07",
+        "title": "總結",
+        "voiceStart": 781.12,
+        "anchors": {
+          "back": {
+            "time": 781.12,
+            "frame": 46867,
+            "line": "a7-01",
+            "word": "回到",
+            "local": 39
+          },
+          "weights": {
+            "time": 788.06,
+            "frame": 47284,
+            "line": "a7-02",
+            "word": "訓練好",
+            "local": 456
+          },
+          "gguf": {
+            "time": 790.72,
+            "frame": 47443,
+            "line": "a7-02",
+            "word": "裝進",
+            "local": 615
+          },
+          "load": {
+            "time": 796.8,
+            "frame": 47808,
+            "line": "a7-02",
+            "word": "載入",
+            "local": 980
+          },
+          "tokens": {
+            "time": 802.34,
+            "frame": 48140,
+            "line": "a7-03",
+            "word": "切成",
+            "local": 1312
+          },
+          "gpu": {
+            "time": 805.12,
+            "frame": 48307,
+            "line": "a7-03",
+            "word": "GPU",
+            "local": 1479
+          },
+          "prob": {
+            "time": 811.04,
+            "frame": 48662,
+            "line": "a7-03",
+            "word": "機率",
+            "local": 1834
+          },
+          "text": {
+            "time": 817.68,
+            "frame": 49061,
+            "line": "a7-04",
+            "word": "變回了文字",
+            "local": 2233
+          },
+          "math": {
+            "time": 828.2,
+            "frame": 49692,
+            "line": "a7-05",
+            "word": "做數學",
+            "local": 2864
+          },
+          "brand": {
+            "time": 830.36,
+            "frame": 49822,
+            "line": "a7-06",
+            "word": "這裡是",
+            "local": 2994
+          }
+        },
+        "voiceEnd": 834.04,
+        "start": 780.47,
+        "end": 837.44,
+        "startFrame": 46828,
+        "endFrame": 50246,
+        "durationFrames": 3418
+      }
+    ],
+    "warnings": [],
+    "mix": "assets/audio/mix/ep01.wav"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+build/
+build-*/
+out/
+*.mp4
+*.part
+tools/
+src_cn/
+public/assets/audio/
+__pycache__/

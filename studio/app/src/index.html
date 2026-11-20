@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Pikara Science Studio</title>
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="側欄">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="" />
+        <div>
+          <div class="name">Pikara Studio</div>
+          <div class="sub" data-i18n="科普影片工作室">科普影片工作室</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav" aria-label="主要導覽"></nav>
+      <div class="sidebar-footer">
+        <div class="project-chip" id="project-chip"></div>
+        <div class="row" style="justify-content: space-between">
+          <span class="caption muted" data-i18n="介面語言">介面語言</span>
+          <div class="seg" role="group" aria-label="介面語言" id="lang-seg">
+            <button type="button" data-lang="zh-TW" aria-pressed="true">繁</button>
+            <button type="button" data-lang="zh-CN" aria-pressed="false">简</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="toolbar" id="toolbar">
+        <div class="title" id="tb-title"></div>
+        <div class="subtitle" id="tb-sub"></div>
+        <div class="spacer"></div>
+        <div class="actions" id="tb-actions"></div>
+      </header>
+      <div class="content" id="content" tabindex="-1"></div>
+    </main>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>
