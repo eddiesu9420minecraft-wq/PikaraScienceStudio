@@ -16,6 +16,8 @@ executable/installer, and how users obtain the ones that are not. Engineering su
 | serde, serde_json | MIT OR Apache-2.0 | |
 | regex, once_cell, uuid, sha2, chrono | MIT OR Apache-2.0 | |
 | windows-sys | MIT OR Apache-2.0 | `SetThreadExecutionState`, `AttachConsole` |
+| tauri-plugin-notification | Apache-2.0 OR MIT | Windows notification when an autonomous production finishes / needs attention |
+| pinyin | MIT | toneless pinyin for the pronunciation check (compares intended text with Whisper output) |
 | tokio and other transitive Rust crates | MIT and/or Apache-2.0 (per crate) | full list: `cargo tree` in `app/src-tauri` |
 
 Studio does **not** link libgit2 (git is invoked through the user's `git` CLI) and does not link NVML
@@ -26,6 +28,7 @@ Studio does **not** link libgit2 (git is invoked through the user's `git` CLI) a
 | Component | Licence | How it is obtained |
 |---|---|---|
 | **Remotion 4.x** (`remotion`, `@remotion/cli`, `@remotion/three`) | **Remotion License** (source-available, not open source; free for individuals, for-profit orgs with ≤ 3 people and non-profits; others need a Company License — automated rendering counts as "Automator" use). https://remotion.dev/license | Installed into the user's project by `npm install` (the Doctor's `npm_install` fix runs it only when the user clicks it). Never shipped with Studio. |
+| Claude Code CLI / 豆包 CLI (`@bytedance/doubao-cli`) | Their vendors' terms (Anthropic / ByteDance) | Optional AI providers installed and signed in by the user; Studio only runs the user's own CLI and never stores credentials. |
 | Chrome Headless Shell | BSD-3-Clause (Chromium) + third-party licences | Downloaded by `remotion browser ensure` into the project's `node_modules`. |
 | React, Three.js, @react-three/fiber, TypeScript | MIT / Apache-2.0 | Project dependencies installed by npm. |
 | Node.js | MIT (+ bundled third-party) | User installs it; Studio only detects it. |

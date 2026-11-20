@@ -5,6 +5,8 @@ import { icon } from './icons.js';
 import { hasTauri, call } from './api.js';
 import { store, on, refreshProjects, currentProject, wireEvents } from './store.js';
 
+import auto from './screens/auto.js';
+import guide, { showWelcome } from './screens/guide.js';
 import projects from './screens/projects.js';
 import script from './screens/script.js';
 import prompt from './screens/prompt.js';
@@ -15,14 +17,23 @@ import doctor from './screens/doctor.js';
 import publish from './screens/publish.js';
 import rollback from './screens/rollback.js';
 
-const SCREENS = [projects, script, prompt, production, queue, monitor, doctor, publish, rollback];
-const GROUPS = [
+const SCREENS = [auto, guide, projects, script, prompt, production, queue, monitor, doctor, publish, rollback];
+// 一般模式只顯示自動製作需要的頁面；單一步驟的工具在「進階模式」。
+const GROUPS_SIMPLE = [
+  { title: '製作', ids: ['auto', 'publish'] },
+  { title: '狀態', ids: ['monitor', 'doctor'] },
+  { title: '工作區', ids: ['projects', 'guide'] },
+];
+const GROUPS_ADVANCED = [
+  { title: '製作', ids: ['auto', 'publish'] },
   { title: '工作區', ids: ['projects'] },
   { title: '內容', ids: ['script', 'prompt'] },
   { title: '執行', ids: ['production', 'queue', 'monitor'] },
-  { title: '交付', ids: ['publish', 'rollback'] },
-  { title: '系統', ids: ['doctor'] },
+  { title: '交付', ids: ['rollback'] },
+  { title: '系統', ids: ['doctor', 'guide'] },
 ];
+const isAdvanced = () => localStorage.getItem('ui.advanced') === '1';
+let GROUPS = isAdvanced() ? GROUPS_ADVANCED : GROUPS_SIMPLE;
 
 const $ = (id) => document.getElementById(id);
 let active = null;      // { screen, cleanups: [] }
@@ -61,8 +72,8 @@ function updateBadges() {
 export function go(id) { location.hash = `#/${id}`; }
 
 async function route() {
-  const id = (location.hash.replace(/^#\/?/, '').split('?')[0]) || 'projects';
-  const screen = SCREENS.find((s) => s.id === id) || projects;
+  const id = (location.hash.replace(/^#\/?/, '').split('?')[0]) || (store.projects && store.projects.length ? 'auto' : 'projects');
+  const screen = SCREENS.find((s) => s.id === id) || auto;
   if (active) { active.cleanups.forEach((f) => { try { f(); } catch {} }); }
   const cleanups = [];
   active = { screen, cleanups };
@@ -100,6 +111,18 @@ function wireLang() {
   sync();
 }
 
+function wireMode() {
+  const host = $('mode-toggle');
+  if (!host) return;
+  const input = host.querySelector('input');
+  input.checked = isAdvanced();
+  input.addEventListener('change', () => {
+    localStorage.setItem('ui.advanced', input.checked ? '1' : '0');
+    GROUPS = input.checked ? GROUPS_ADVANCED : GROUPS_SIMPLE;
+    buildNav();
+  });
+}
+
 function wireKeys() {
   document.addEventListener('keydown', (e) => {
     // Ctrl+1..9 jumps to sidebar entries in order
@@ -124,6 +147,7 @@ async function boot() {
   applyStatic(document);
   buildNav();
   wireLang();
+  wireMode();
   wireKeys();
   updateProjectChip();
   on('project', () => updateProjectChip());
@@ -141,8 +165,13 @@ async function boot() {
     wireEvents();
     try { await refreshProjects(); } catch (e) { console.warn('project_list', e); }
     try { store.queue = await call('queue_status'); updateBadges(); } catch {}
+    try {
+      const info = await call('app_info');
+      if (info && info.schedulerActive === false) toast(t('另一個 Studio 程式正在執行佇列，這個視窗不會開始任何工作（只能檢視）。請關閉另一個後重新開啟。'), 'warn');
+    } catch {}
   }
   route();
+  showWelcome(go);
 }
 const seenFinal = new Set();
 

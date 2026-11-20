@@ -7,6 +7,7 @@ import {getTimeline} from './data/timeline';
 import {ActPreview, Episode} from './episode/Episode';
 import {getAct} from './acts/actData';
 import {actsFor, compPrefix, episodeIds, hasCustomActs} from './episode/registry';
+import {GenericThumbnail} from './episode/GenericThumbnail';
 
 const tl = getTimeline('arttest');
 const total = tl?.totalFrames ?? SHOT.total;
@@ -32,6 +33,8 @@ export const RemotionRoot: React.FC = () => (
           {/* YouTube 1.5 倍速版：30fps，每幀取 60fps 時間軸的第 3n 幀（動畫與字幕同步加速，音訊另以 atempo=1.5 保持音調） */}
           <Composition id={`${EP}-YT15`} component={Episode} durationInFrames={Math.ceil(total / 3)} fps={30} width={1920} height={1080} defaultProps={{epId, withAudio: false, showSubtitles: true, frameScale: 3}} />
           <Composition id={`${EP}-30fps`} component={Episode} durationInFrames={Math.ceil(total / 2)} fps={30} width={1920} height={1080} defaultProps={{epId, withAudio: false, showSubtitles: true, frameScale: 2}} />
+          {/* 封面（單張靜態圖；內容來自 narration.json 的 sequences.<ep>.thumbnail）：node scripts/stills.mjs 0 <EP>-Thumbnail */}
+          <Composition id={`${EP}-Thumbnail`} component={GenericThumbnail} durationInFrames={1} fps={30} width={1920} height={1080} defaultProps={{epId}} />
           {hasCustomActs(epId)
             ? actsFor(epId).map((act, i) => (
                 <Composition

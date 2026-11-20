@@ -1,6 +1,6 @@
 [package]
 name = "pikara-science-studio"
-version = "0.1.1"
+version = "0.2.0"
 description = "Pikara Science Studio"
 authors = ["Pikara Science contributors"]
 license = "MIT"
@@ -22,6 +22,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
+pinyin = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 rusqlite = { version = "0.32", features = ["bundled"] }

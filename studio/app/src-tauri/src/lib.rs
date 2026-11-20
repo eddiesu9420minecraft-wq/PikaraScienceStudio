@@ -1,5 +1,7 @@
 //! Pikara Science Studio — Rust core. Tauri commands are listed in studio/app/API.md.
 
+pub mod agents;
+pub mod autopilot;
 pub mod claude;
 pub mod cli;
 pub mod db;
@@ -29,9 +31,13 @@ pub struct AppState {
     pub db: Db,
     pub queue: Arc<Queue>,
     pub monitor: Arc<monitor::Monitor>,
+    pub autopilot: Arc<autopilot::Autopilot>,
 }
 
 type R<T> = Result<T, String>;
+
+/// false when another process holds the scheduler lock for this data dir (queue / autopilot not running here).
+static SCHEDULER_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> R<T> + Send + 'static) -> R<T> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
@@ -52,6 +58,7 @@ async fn app_info() -> R<Value> {
         "dbPath": util::data_dir().join("studio.db"),
         "logsDir": util::logs_dir(),
         "exePath": std::env::current_exe().ok(),
+        "schedulerActive": SCHEDULER_ON.load(std::sync::atomic::Ordering::Relaxed),
     }))
 }
 
@@ -451,6 +458,72 @@ async fn asset_url_allowed(app: tauri::AppHandle, st: State<'_, AppState>, proje
     Ok(json!({"allowed": ok}))
 }
 
+// ------------------------------------------------------------------ autonomous production
+
+#[tauri::command]
+async fn auto_defaults() -> R<Value> {
+    Ok(json!({
+        "config": autopilot::AutoConfig::default(),
+        "stages": autopilot::STAGES.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+    }))
+}
+
+#[tauri::command]
+async fn auto_start(st: State<'_, AppState>, project_id: String, config: Value) -> R<autopilot::Production> {
+    let ap = st.autopilot.clone();
+    blocking(move || {
+        let cfg: autopilot::AutoConfig = serde_json::from_value(config).map_err(|e| format!("設定格式錯誤：{e}"))?;
+        ap.start(&project_id, cfg)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn auto_list(st: State<'_, AppState>, limit: Option<i64>) -> R<Vec<autopilot::Production>> {
+    autopilot::list(&st.db.lock().unwrap(), limit.unwrap_or(50))
+}
+
+#[tauri::command]
+async fn auto_get(st: State<'_, AppState>, id: String) -> R<autopilot::Production> {
+    autopilot::get(&st.db.lock().unwrap(), &id)
+}
+
+#[tauri::command]
+async fn auto_events(st: State<'_, AppState>, id: String, after_id: Option<i64>, limit: Option<i64>) -> R<Vec<autopilot::PEvent>> {
+    autopilot::events(&st.db.lock().unwrap(), &id, after_id.unwrap_or(0), limit.unwrap_or(500))
+}
+
+#[tauri::command]
+async fn auto_control(st: State<'_, AppState>, id: String, action: String) -> R<Value> {
+    let ap = st.autopilot.clone();
+    blocking(move || {
+        let p = match action.as_str() {
+            "pause" => ap.pause(&id)?,
+            "resume" => ap.resume(&id)?,
+            "stop" => ap.stop(&id)?,
+            "discard" => ap.discard(&id)?,
+            "remove" => {
+                ap.remove(&id)?;
+                return Ok(json!({"removed": true}));
+            }
+            a => return Err(format!("未知的操作 {a}")),
+        };
+        Ok(serde_json::to_value(p).unwrap())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn agent_check(provider: String, deep: Option<bool>) -> R<Value> {
+    blocking(move || Ok(agents::check(&provider, deep.unwrap_or(false)))).await
+}
+
+#[tauri::command]
+async fn agent_done(st: State<'_, AppState>, id: String, failed: Option<bool>, note: Option<String>) -> R<autopilot::Production> {
+    let ap = st.autopilot.clone();
+    blocking(move || ap.agent_done(&id, failed.unwrap_or(false), note.as_deref())).await
+}
+
 // ------------------------------------------------------------------ startup
 
 pub fn open_db() -> R<Db> {
@@ -468,17 +541,27 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             let handle = app.handle().clone();
             let emit: queue::Emit = Arc::new(move |name: &str, payload: Value| {
                 let _ = handle.emit(name, payload);
             });
             let q = Queue::new(db.clone(), emit.clone());
-            let recovered = q.recover();
-            if !recovered.is_empty() {
-                eprintln!("recovered {} interrupted job(s)", recovered.len());
+            // only one process may run the queue / autopilot for a data dir (else every job would run twice)
+            let lock = util::scheduler_lock();
+            let scheduler_on = lock.is_ok();
+            SCHEDULER_ON.store(scheduler_on, std::sync::atomic::Ordering::Relaxed);
+            if let Ok(f) = lock {
+                std::mem::forget(f); // held for the life of the app
+                let recovered = q.recover();
+                if !recovered.is_empty() {
+                    eprintln!("recovered {} interrupted job(s)", recovered.len());
+                }
+                queue::spawn_scheduler(q.clone());
+            } else if let Err(e) = &lock {
+                eprintln!("{e}");
             }
-            queue::spawn_scheduler(q.clone());
             let mon = Arc::new(monitor::Monitor::new());
             // monitor thread: every 2 s → monitor://sample, metrics table every 10 s
             {
@@ -504,7 +587,16 @@ pub fn run() {
             for p in db::project_list(&db.lock().unwrap()).unwrap_or_default() {
                 let _ = app.asset_protocol_scope().allow_directory(&p.root_path, true);
             }
-            app.manage(AppState { db: db.clone(), queue: q, monitor: mon });
+            let notify_handle = app.handle().clone();
+            let notify: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(move |title: &str, body: &str| {
+                use tauri_plugin_notification::NotificationExt;
+                let _ = notify_handle.notification().builder().title(title).body(body).show();
+            });
+            let ap = autopilot::Autopilot::new(db.clone(), q.clone(), notify, emit.clone());
+            if scheduler_on {
+                autopilot::spawn(ap.clone());
+            }
+            app.manage(AppState { db: db.clone(), queue: q, monitor: mon, autopilot: ap });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -517,7 +609,8 @@ pub fn run() {
             job_kinds, job_enqueue, job_list, job_get, job_events, job_cancel, job_retry, job_remove, queue_status, gpu_external_status,
             monitor_sample, job_analyse_with_claude,
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
-            outputs_list, publish_metadata, open_path, asset_url_allowed
+            outputs_list, publish_metadata, open_path, asset_url_allowed,
+            auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, agent_check, agent_done
         ])
         .run(tauri::generate_context!())
         .expect("error while running Pikara Science Studio");

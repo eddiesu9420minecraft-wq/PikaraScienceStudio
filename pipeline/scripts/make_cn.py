@@ -31,7 +31,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 # 大陸常用科技用語（繁體原文 → 繁體中間詞；之後由 OpenCC 轉為簡體）。順序重要：長詞在前。
 PRE = [
-    ("顯示記憶體", "顯存"), ("系統記憶體", "系統內存"), ("記憶體頻寬", "內存帶寬"), ("頻寬", "帶寬"),
+    ("輝達", "英偉達"), ("顯示記憶體", "顯存"), ("系統記憶體", "系統內存"), ("記憶體頻寬", "內存帶寬"), ("頻寬", "帶寬"),
     ("載入記憶體", "加載到內存"), ("記憶體", "內存"), ("顯示卡", "顯卡"), ("筆電", "筆記本電腦"), ("中繼資料", "元數據"), ("資料中心", "數據中心"),
     ("網路封包", "網絡數據包"), ("封包", "數據包"), ("資料", "數據"), ("位元組", "字節"), ("位元數", "位數"),
     ("個位元", "位"), ("的位元", "的位數"), ("位元", "位"), ("檔頭", "文件頭"), ("檔案格式", "文件格式"), ("檔案", "文件"),
@@ -86,6 +86,13 @@ def convert_seq(ep: dict) -> dict:
     ep = json.loads(json.dumps(ep, ensure_ascii=False))
     ep["title"] = conv(ep.get("title", ""))
     ep["voiceEngine"] = "cosyvoice"
+    if isinstance(ep.get("thumbnail"), dict):  # 封面文字（GenericThumbnail）
+        th = ep["thumbnail"]
+        for k in ("lines", "tags"):
+            if isinstance(th.get(k), list):
+                th[k] = [conv(x) for x in th[k]]
+        if isinstance(th.get("highlight"), str):
+            th["highlight"] = conv(th["highlight"])
     for sc in ep["scenes"]:
         sc["title"] = conv(sc.get("title", ""))
         for line in sc["lines"]:

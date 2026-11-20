@@ -8,7 +8,7 @@ use crate::util::{kill_tree, logs_dir, now_ms};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -278,7 +278,15 @@ impl Queue {
         let project_root = {
             let c = self.conn();
             match job.project_id.as_deref().map(|p| db::project_get(&c, p)) {
-                Some(Ok(p)) => PathBuf::from(p.root_path),
+                Some(Ok(p)) => match jobs::job_root(Path::new(&p.root_path), &job.params) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        db::job_finish(&c, &job.id, "failed", None, Some(&e))?;
+                        drop(c);
+                        self.emit_job(&job.id);
+                        return Err(e);
+                    }
+                },
                 _ => {
                     db::job_finish(&c, &job.id, "failed", None, Some("找不到專案"))?;
                     return Err("no project".into());
@@ -382,6 +390,9 @@ impl Queue {
         c.stdin(if step.stdin_text.is_some() { Stdio::piped() } else { Stdio::null() });
         for (k, v) in &step.env {
             c.env(k, v);
+        }
+        for k in &step.env_remove {
+            c.env_remove(k);
         }
         #[cfg(windows)]
         c.creation_flags(crate::util::CREATE_NO_WINDOW);
@@ -526,6 +537,7 @@ pub fn spawn_scheduler(q: Arc<Queue>) {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use super::*;
     use chrono::NaiveTime;
 

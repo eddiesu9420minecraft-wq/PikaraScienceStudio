@@ -161,7 +161,15 @@ def main() -> int:
     blacks = re.findall(r"black_start:([\d.]+) black_end:([\d.]+) black_duration:([\d.]+)", bd)
     out += ["## 2. 黑幀（> 0.25 秒）", ""]
     out += [f"- {float(s):.2f}s → {float(e):.2f}s（{float(d):.2f}s）" for s, e, d in blacks] or ["- 無"]
-    real_blacks = [b for b in blacks if float(b[0]) > 0.5 and float(b[1]) < dur - 1.0]
+    # 場景交界的短暫收合（iris「資料點」轉場）是設計，不算問題：≤ 1 秒、且距離場景交界 1 秒內
+    bounds = [float(sc.get("start", 0)) / speed for sc in tl.get("scenes", [])[1:]]
+    def at_boundary(b):
+        s0, e0 = float(b[0]), float(b[1])
+        return e0 - s0 <= 1.0 and any(s0 - 1.0 <= t <= e0 + 1.0 for t in bounds)
+    real_blacks = [b for b in blacks if float(b[0]) > 0.5 and float(b[1]) < dur - 1.0 and not at_boundary(b)]
+    n_trans = sum(1 for b in blacks if float(b[0]) > 0.5 and float(b[1]) < dur - 1.0 and at_boundary(b))
+    if n_trans:
+        out.append(f"- 其中 {n_trans} 段位於場景交界（轉場），不計入問題")
     problems += len(real_blacks)
     out.append("")
 

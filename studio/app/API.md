@@ -1,8 +1,14 @@
-# Pikara Science Studio — Frontend ⇄ Rust API (v1.2)
+# Pikara Science Studio — Frontend ⇄ Rust API (v1.3)
 
-Status: **stable v1.2** (additive over v1; v1 callers keep working). Changes will be listed here in the changelog below.
+Status: **stable v1.3** (additive over v1; v1 callers keep working). Changes will be listed here in the changelog below.
 
 ## Changelog
+- v1.3 (2026-11-20, Autonomous Production Mode; additive):
+  - New commands `auto_defaults`, `auto_start`, `auto_list`, `auto_get`, `auto_events`, `auto_control` (§11) and events `production://update`, `production://event`.
+  - Job params may carry **`workdir`** = a Studio worktree id (`.studio/worktrees/<id>`): the job runs there instead of the project root (used by the autopilot; anything that is not an existing worktree is refused).
+  - Internal job kinds (not listed by `job_kinds`): `claude_in` `{ prompt, tools, maxTurns, billing: "subscription"|"api", budgetUsd?, title }` (claude -p in the job directory; subscription removes `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the child and passes no USD cap; api passes `--max-budget-usd`), `stills` `{ comp, frames: "0,120", src? }` (GPU), `typecheck` (CPU, `tsc --noEmit`).
+  - `final_tw`, `youtube_15x`, `bilibili` accept `fresh: true` (render.mjs `--fresh`, drop cached frame chunks).
+  - Every episode also gets the composition `<EP>-Thumbnail` (generic cover from `sequences.<ep>.thumbnail`).
 - v1.2 (2026-11-20, multi-episode; additive — nothing removed or renamed):
   - **Episodes**: an episode is `sequences.<epId>` in narration.json (`epId` = `ep` + 2–3 digits, e.g. `ep02`). zh-TW (`src/`) and zh-CN (`src_cn/`) are managed independently.
   - New commands `episode_list`, `episode_create`, `project_create` (§2a).
@@ -246,6 +252,43 @@ Probe = { durationS: number|null, width, height, fps: number|null, vcodec, acode
 
 ---
 
+## 11. Autonomous production (v1.3)
+
+A production turns a topic into a finished episode: allocate episode → isolated worktree → research & script (Claude) →
+animation code (Claude, optional) → voice (CosyVoice) + Whisper pronunciation check → timeline → stills + AI review →
+zh-TW 30 fps render + QA → YouTube 1.5× + QA → Bilibili zh-CN + QA → thumbnails → publish metadata (text only) →
+deliver (move outputs to the project root, merge the branch, remove the worktree). Heavy steps are ordinary queue jobs.
+Nothing is uploaded or published.
+
+| command | args | returns |
+|---|---|---|
+| `auto_defaults` | — | `{ config: AutoConfig, stages: {id,label}[] }` |
+| `auto_start` | `{ projectId, config: AutoConfig }` | `Production` (status `queued`; episode reserved) |
+| `auto_list` | `{ limit? }` | `Production[]` newest first |
+| `auto_get` | `{ id }` | `Production` |
+| `auto_events` | `{ id, afterId?, limit? }` | `{ id, ts, level, stage, line }[]` |
+| `auto_control` | `{ id, action: "pause"\|"resume"\|"stop"\|"discard"\|"remove" }` | `Production` (or `{removed:true}`) |
+
+```ts
+AutoConfig = { topic: string, minutes: number /*0.5–20*/, style: "ai"|"generic", tone, audience, notes: string,
+  youtube, bilibili, thumbnail, publishInfo, visualReview, pronunciationCheck: boolean,
+  maxAttempts /*per stage, 1–10, default 3*/, maxMinutes /*active time, default 480*/, maxTurns /*per Claude run, default 80*/,
+  billing: "subscription" /*default*/ | "api", budgetUsd: number|null /*required for api, ignored for subscription*/ }
+Production = { id, projectId, episode, config: AutoConfig,
+  status: "queued"|"running"|"paused"|"paused_limit"|"needs_merge"|"succeeded"|"failed"|"canceled",
+  stage, action, attempt, mode: "main"|"fix", jobId: string|null, worktree: string|null, branch, message: string|null,
+  warnings: string[], activeMs, claudeCostUsd /*sum of Claude Code total_cost_usd: model-equivalent estimate, not a charge in subscription mode*/,
+  claudeRuns, outputs: string[], stages: { id, label, status: "pending"|"running"|"done"|"warned"|"failed"|"skipped",
+  attempts, startedAt, finishedAt, checkpoint /*short sha in the worktree*/, note }[], createdAt, startedAt, finishedAt }
+```
+
+Rules: one production runs at a time (GPU). Failed check → Claude fix job → stage re-runs, up to `maxAttempts`;
+pronunciation / visual review / QA / thumbnail / metadata end with a **warning** when attempts run out, a crashed
+render or TTS stops the production (`failed`; project untouched; `resume` retries the stage with fresh attempts,
+`discard` deletes worktree + branch). Claude usage/credit limit or missing login → `paused_limit` (progress kept, no
+retry, no billing switch); `resume` continues at the same step. Transient API errors (overloaded) back off 5 min (≤ 6×,
+not counted). Merge conflict on delivery → `needs_merge` (outputs are delivered anyway).
+
 ## Events (`listen(name, cb)`)
 
 | event | payload | when |
@@ -254,6 +297,8 @@ Probe = { durationS: number|null, width, height, fps: number|null, vcodec, acode
 | `job://log` | `JobEvent` | each stdout/stderr line of a running job |
 | `queue://status` | `QueueStatus` | every scheduler change, and every 5 s |
 | `monitor://sample` | `MonitorSample` | every 2 s |
+| `production://update` | `Production` | any production state change (and every ~5 s while a job runs) |
+| `production://event` | `{ id, level, stage, line }` | each production log line |
 
 ```ts
 MonitorSample = { ts: number,

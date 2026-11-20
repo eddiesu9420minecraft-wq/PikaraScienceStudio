@@ -243,6 +243,26 @@ pub fn run(args: &[String]) -> i32 {
         Ok(json!({"path": r["scaffold"]["path"], "files": r["scaffold"]["files"], "commit": r["scaffold"]["git"]["commit"], "cpuJob": res.status}))
     });
 
+    step(&mut results, "autopilot.plan_and_checks", || {
+        use crate::autopilot as ap;
+        // config rules (subscription = no USD cap), episode allocation against the real project, pronunciation metric
+        let mut cfg = ap::AutoConfig { topic: "自我檢查".into(), budget_usd: Some(9.0), ..Default::default() };
+        cfg.validate()?;
+        if cfg.budget_usd.is_some() || cfg.billing != "subscription" {
+            return Err("subscription mode must not carry a USD cap".into());
+        }
+        let next = ap::allocate_episode(&dbh.lock().unwrap(), &project_root)?;
+        let per_ok = ap::pron_error("一個七十億參數的模型", "一個70億參數的模型");
+        let per_bad = ap::pron_error("放上工作桌", "放上公主");
+        if per_ok > ap::MAX_PER || per_bad <= ap::MAX_PER {
+            return Err(format!("pronunciation metric wrong: {per_ok} / {per_bad}"));
+        }
+        let tables: i64 = dbh.lock().unwrap().query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('productions','production_events')", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+        if tables != 2 {
+            return Err("productions tables missing".into());
+        }
+        Ok(json!({"nextEpisode": next, "stages": ap::STAGES.len(), "perDigits": per_ok, "perMisread": per_bad}))
+    });
     step(&mut results, "claude.detect", || Ok(claude::detect()));
     step(&mut results, "git.log", || Ok(json!(gitops::log(&project_root, 3)?)));
     step(&mut results, "doctor.instructions_only_for_system", || {

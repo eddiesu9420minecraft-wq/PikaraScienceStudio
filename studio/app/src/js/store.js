@@ -50,6 +50,8 @@ export function wireEvents() {
   listen('job://log', (ev) => emit('joblog', ev));
   listen('queue://status', (q) => { store.queue = q; emit('queue', q); });
   listen('monitor://sample', (s) => pushSample(s));
+  listen('production://update', (p) => emit('production', p));
+  listen('production://event', (e) => emit('pevent', e));
 }
 
 // Monitor ring buffer (last 5 min), filled from boot so the chart has history when opened.

@@ -34,6 +34,25 @@ pub fn data_dir() -> PathBuf {
     base.join("PikaraScienceStudio")
 }
 
+/// Exclusive per-data-dir lock for the process that runs the scheduler and the autopilot. Two processes driving the
+/// same database would each start every queued job (duplicate renders, duplicate Claude runs). The returned file
+/// handle must be kept alive; Windows releases the lock when the process exits (also on crash).
+pub fn scheduler_lock() -> Result<std::fs::File, String> {
+    let dir = data_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let p = dir.join("scheduler.lock");
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).write(true).truncate(false);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        o.share_mode(0); // no sharing: a second open fails while we hold it
+    }
+    o.open(&p).map_err(|_| {
+        format!("另一個 Pikara Science Studio（視窗或 --cli run-queue／auto-run）正在使用同一個資料夾執行佇列：{}。同一時間只能有一個程式執行佇列，請先關閉另一個。", clean_path(&dir))
+    })
+}
+
 pub fn logs_dir() -> PathBuf {
     data_dir().join("logs")
 }
@@ -89,11 +108,26 @@ pub fn run_env(
     env: &[(&str, &str)],
     timeout: Duration,
 ) -> Result<RunOut, String> {
+    run_env_rm(program, args, cwd, env, &[], timeout)
+}
+
+/// Like run_env, and removes `env_remove` variables from the child only (never touches this process's environment).
+pub fn run_env_rm(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(&str, &str)],
+    env_remove: &[&str],
+    timeout: Duration,
+) -> Result<RunOut, String> {
     let mut c = cmd(program);
     c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
     c.env("PYTHONIOENCODING", "utf-8");
     for (k, v) in env {
         c.env(k, v);
+    }
+    for k in env_remove {
+        c.env_remove(k);
     }
     if let Some(d) = cwd {
         c.current_dir(d);

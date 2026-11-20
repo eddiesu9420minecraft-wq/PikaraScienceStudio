@@ -4,7 +4,7 @@ Windows 桌面工具（Tauri 2），把 Pikara Science 的科普影片製作流�
 
 ## 下載與執行
 
-- 安裝程式：`dist/Pikara Science Studio_0.1.1_x64-setup.exe`
+- 安裝程式：`dist/Pikara Science Studio_0.2.0_x64-setup.exe`
 - 免安裝：`dist/PikaraScienceStudio.exe`
 - 自我檢查（不開視窗，輸出 JSON）：`PikaraScienceStudio.exe --selftest`
 
@@ -32,6 +32,13 @@ Windows 桌面工具（Tauri 2），把 Pikara Science 的科普影片製作流�
 - 工作開始前的預檢：缺 ffmpeg／ffprobe、找不到影片、沒有這一集、沒有 src_cn 時，工作直接標記失敗並顯示繁體中文說明。
 - 無視窗命令列：`PikaraScienceStudio.exe --cli <episode-new|episode-list|project-new|doctor|enqueue|run-queue|jobs|job-retry|job-cancel|recover>`。
 - 測試紀錄：`app/TEST_REPORT_v0.1.1.md`。
+
+## v0.2.0：自動製作
+
+- **自動製作**（預設首頁）：輸入主題、長度、風格、輸出平台 → 開始製作；研究、劇本、動畫程式、配音、字幕、渲染、QA、封面、上架資訊全部自動完成，失敗自動修正重試，全部通過才合併。設計與規則見 `app/API.md` §11、`docs/DEVELOPMENT_PLAN.md`。
+- **AI 提供者**：Claude Code（訂閱，預設）、豆包 CLI、外部 Agent（豆包工作＋`integrations/doubao-work/pikara-studio` 技能，說明 `docs/DOUBAO_WORK.md`）。
+- 一般／進階模式、使用教學頁與第一次啟動導覽。
+- 測試紀錄：`app/TEST_REPORT_v0.2.0.md`。
 
 ## 從原始碼建置
 

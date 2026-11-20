@@ -335,3 +335,22 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; line-heig
 .table tr[aria-selected="true"] td { background: rgba(255, 181, 71, 0.07); }
 .table tr[aria-selected="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .inline-errors div.warn-text { color: var(--warning); }
+
+/* ---------- Autonomous production ---------- */
+.auto-stages { display: flex; flex-wrap: wrap; gap: 6px; }
+.auto-stage { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--separator); color: var(--text-secondary); background: rgba(9, 13, 24, 0.35); }
+.auto-stage .auto-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(138,151,180,0.45); flex: none; }
+.auto-stage.done { color: var(--text-primary); }
+.auto-stage.done .auto-dot { background: var(--success); }
+.auto-stage.warned .auto-dot { background: var(--warning); }
+.auto-stage.failed { border-color: rgba(255,107,107,0.55); color: var(--danger); }
+.auto-stage.failed .auto-dot { background: var(--danger); }
+.auto-stage.running .auto-dot, .auto-stage.current .auto-dot { background: var(--info); box-shadow: 0 0 0 3px rgba(92,200,255,0.25); }
+.auto-stage.current { border-color: rgba(92,200,255,0.6); color: var(--text-primary); }
+.auto-log { max-height: 260px; overflow: auto; background: rgba(9, 13, 24, 0.55); border: 1px solid var(--separator); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.auto-log-line.warn { color: var(--warning); }
+.auto-log-line.error { color: var(--danger); }
+details.panel > summary { list-style: none; }
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::before { content: "›"; display: inline-block; margin-right: 8px; transition: transform var(--t-fast) var(--ease); color: var(--text-secondary); }
+details.panel[open] > summary::before { transform: rotate(90deg); }

@@ -71,6 +71,8 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_metrics_ts ON metrics(ts);
     "#,
+    // 2: Autonomous Production Mode
+    crate::autopilot::MIGRATION,
 ];
 
 pub fn open(path: &Path) -> Result<Connection, String> {

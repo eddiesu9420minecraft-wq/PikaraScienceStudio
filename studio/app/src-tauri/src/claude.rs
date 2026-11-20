@@ -127,6 +127,8 @@ pub fn list(root: &Path, job_for: impl Fn(&str) -> Option<String>) -> Vec<Value>
             }
         }
     }
+    // Autonomous-production worktrees (auto-*) are managed on the 自動製作 screen, not here
+    ids.retain(|id| !id.starts_with("auto-"));
     for id in ids {
         let br_name = branch_of(&id);
         let resolved = resolve_ref(root, &id);
@@ -182,6 +184,11 @@ pub fn merge(root: &Path, wid: &str) -> Result<Value, String> {
 
 pub fn discard(root: &Path, wid: &str) -> Result<Value, String> {
     valid_wid(wid)?;
+    if wid.starts_with("auto-") {
+        // contains directory junctions (node_modules, tools\CosyVoice): unlink them first, never delete through them
+        crate::autopilot::remove_worktree(root, wid, true)?;
+        return Ok(json!({"removed": true, "output": "auto worktree removed (junctions unlinked first)"}));
+    }
     let p = worktree_dir(root, wid);
     let mut out = String::new();
     if p.exists() {

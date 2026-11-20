@@ -15,9 +15,10 @@ This Skill was installed by Pikara Science Studio. Studio runs the commands belo
   - `id` (unique per sequence, e.g. `a3-05`), `subtitle` (on-screen text), optional `speak` (what TTS reads, e.g. subtitle `llama.cpp`, speak `llama C P P`),
   - optional `anchors` `{ name: word }` — the word **must appear in `speak` (or `subtitle` if no `speak`)** after removing punctuation/spaces, case-insensitive; `scripts/build_timeline.py` aborts with `找不到錨點詞` otherwise. Anchor names must be unique within a scene.
   - optional `pauseAfter` (seconds), optional `cosySpeed`.
-  - `sequences.ep01.voiceEngine` = `"cosyvoice"` selects `public/assets/audio/voiceover_cosy/`.
-- `src_cn/` is **generated** from `src/` by `scripts/make_cn.py` (OpenCC tw2sp + mainland tech-term table). Don't hand-edit `src_cn/` code; it is overwritten. `src_cn/data/narration.json` only contains `ep01`.
-- Animation code: `src/acts/Act01..07`, `src/Root.tsx` (compositions `EP01` 60 fps, `EP01-30fps`, `EP01-YT15` 1.5× at 30 fps, `ArtTest`), timing via `src/lib/timewarp.ts` (template anchors → narration anchors).
+  - `sequences.<ep>.voiceEngine` = `"cosyvoice"` selects `public/assets/audio/voiceover_cosy/<ep>/`.
+  - optional `sequences.<ep>.thumbnail` = `{lines: [..], highlight, tags: [..]}` → the generic cover `<EP>-Thumbnail`.
+- **Episodes**: every `sequences.epNN` with a timeline gets compositions `EPNN` (60 fps), `EPNN-30fps`, `EPNN-YT15` (1.5× at 30 fps) and `EPNN-Thumbnail` (`src/Root.tsx`, `src/episode/registry.ts`). Episodes listed in `CUSTOM_ACTS` (registry.ts, between the `<studio:custom-acts>` markers) use hand-written act components (EP01: `src/acts/Act01..07`; new episodes: `src/acts/<ep>/`); all others use the generic narration template `src/episode/GenericAct.tsx` (chapter title + keyword cards driven by anchors). Act components get `ActProps` (`src/acts/types.ts`): local `frame`, `anchors` name → local frame, `lines`, `fps`.
+- `src_cn/` code is **generated** from `src/` by `scripts/make_cn.py` (OpenCC tw2sp + mainland tech-term table) — never hand-edit `src_cn/` code. `src_cn/data/narration.json` is managed per episode: `make_cn.py --seq epNN` adds a converted episode only if it is missing (existing zh-CN episodes and their timelines are kept; `--reconvert` overwrites).
 - Generated (don't edit by hand): `src/data/timeline.generated.json`, `out/subtitles/*.srt`, `public/assets/audio/mix/*.wav`.
 
 ## Commands (run from the project root; Windows, Node in `C:\Program Files\nodejs`, Python via `py -3.11`)
@@ -45,7 +46,16 @@ Bilibili chain: make_cn → TTS zh-CN → timeline (src_cn) → copy `out/subtit
 - Subtitles are cut at punctuation, ≤ 18 chars per cue — long subtitles are fine but get split.
 - Chrome headless shell lives in `node_modules/.remotion/chrome-headless-shell/`; `scripts/lib.mjs` copies it to a short path if the path is ≥ 240 chars.
 - Never change GPU clocks/power/thermal settings; render.mjs adapts concurrency to VRAM and temperature itself.
-- Publishing is manual: `PUBLISH_METADATA.md` holds titles/descriptions/tags. Never add upload code.
+- Publishing is manual: `PUBLISH_METADATA.md` / `<EP>_PUBLISH_METADATA.md` hold titles/descriptions/tags. Never add upload code.
+- Thumbnail: `node scripts/stills.mjs 0 <EP>-Thumbnail` (zh-CN: add `src_cn/index.ts`) → `out/stills/<EP>-Thumbnail-00000.png`.
+
+## Autonomous Production Mode (Studio)
+
+Studio may run you inside `.studio/worktrees/auto-<ep>-<id>` (branch `studio/auto/…`) for one stage of an automatic production:
+research + script, animation code, visual review, pronunciation / QA fixes, publish metadata. The prompt names the stage and the episode.
+`node_modules` and `tools/CosyVoice` are directory links to the main project — never delete or modify them. Only touch the episode you were
+given; Studio checks your result (narration validation, `tsc`, Whisper CER, QA, stills review), commits a checkpoint per stage, and merges
+the branch into the project only when every stage passed.
 
 ## When fixing a failed job
 

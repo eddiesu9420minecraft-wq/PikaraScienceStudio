@@ -24,6 +24,8 @@ pub struct Step {
     pub env: Vec<(String, String)>,
     pub parser: Parser,
     pub stdin_text: Option<String>,
+    /// Environment variables removed from the child (subscription mode strips API keys from `claude`).
+    pub env_remove: Vec<String>,
 }
 
 pub struct KindSpec {
@@ -107,7 +109,9 @@ pub fn ep_upper(ep: &str) -> String {
 pub fn resource_for(kind: &str, params: &Value) -> Result<&'static str, String> {
     match kind {
         "custom" => Ok(if params["gpu"].as_bool().unwrap_or(false) { "gpu" } else { "cpu" }),
-        "claude" => Ok("net"),
+        "claude" | "claude_in" | "agent_cli" => Ok("net"),
+        "stills" => Ok("gpu"),
+        "typecheck" => Ok("cpu"),
         "doctor_fix" => Ok(if params["gpu"].as_bool().unwrap_or(false) { "gpu" } else { "net" }),
         k => kinds().into_iter().find(|s| s.kind == k).map(|s| s.resource).ok_or_else(|| format!("unknown job kind {k}")),
     }
@@ -128,6 +132,10 @@ pub fn label_for(kind: &str, params: &Value) -> String {
             let e = ep_upper(&episode_of(params).unwrap_or_else(|_| "ep01".into()));
             format!("{e} · YouTube 1.5× 版（SRT 縮放＋{e}-YT15）")
         }
+        "claude_in" => format!("Claude：{}", sp(params, "title", "自動製作")),
+        "agent_cli" => format!("豆包：{}", sp(params, "title", "自動製作")),
+        "stills" => format!("關鍵幀 {}（{}）", sp(params, "comp", "?"), sp(params, "frames", "0")),
+        "typecheck" => "TypeScript 型別檢查".into(),
         "custom" | "claude" | "doctor_fix" | "make_cn" => match kind {
             "custom" => format!("自訂：{}", sp(params, "command", "").chars().take(60).collect::<String>()),
             "claude" => format!("Claude：{}", sp(params, "title", "headless run")),
@@ -200,6 +208,7 @@ impl Ctx<'_> {
             env: self.env(),
             parser,
             stdin_text: None,
+            env_remove: vec![],
         }
     }
     fn py(&self, label: &str, args: &[&str]) -> Step {
@@ -273,6 +282,91 @@ fn mix_args(seq: &str, src: &str) -> Vec<String> {
         a.extend(["--src".into(), "src_cn".into(), "--mix-name".into(), format!("{seq}_cn")]);
     }
     a
+}
+
+/// `fresh: true` → render.mjs --fresh (drop cached frame chunks; used after code was changed by a fix).
+fn fresh(p: &Value, mut a: Vec<String>) -> Vec<String> {
+    if p["fresh"].as_bool().unwrap_or(false) {
+        a.push("--fresh".into());
+    }
+    a
+}
+
+/// Directory a job runs in: the project root, or — with `workdir` — one of the project's Studio worktrees
+/// (`.studio/worktrees/<id>`, used by Autonomous Production Mode). Anything else is refused.
+pub fn job_root(project_root: &Path, params: &Value) -> Result<PathBuf, String> {
+    match params.get("workdir").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        None => Ok(project_root.to_path_buf()),
+        Some(w) => {
+            if w.len() > 64 || !w.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                return Err(format!("workdir 不正確：{w}"));
+            }
+            let d = worktree_dir(project_root, w);
+            if !d.join(".git").exists() {
+                return Err(format!("找不到工作樹 {w}（可能已被捨棄）"));
+            }
+            Ok(d)
+        }
+    }
+}
+
+/// Environment variables that would switch Claude Code from the signed-in subscription to pay-as-you-go API billing.
+pub const API_KEY_VARS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+
+/// `claude -p` in the job's directory (no worktree of its own). Subscription mode (default): API-key variables are
+/// removed from the child so the signed-in Claude Code login is used, and no USD cap is passed. API mode: the key must
+/// already be in the user's environment (Studio never stores it) and `budgetUsd` is passed as --max-budget-usd.
+fn claude_in_steps(p: &Value, ctx: &Ctx) -> Result<Vec<Step>, String> {
+    let claude = crate::claude::claude_path().ok_or("找不到 claude CLI（請先安裝 Claude Code 並登入）")?;
+    let tools = sp(p, "tools", "Read,Glob,Grep,Edit,Write");
+    if !tools.chars().all(|c| c.is_ascii_alphanumeric() || " ,()*:-_./".contains(c)) {
+        return Err(format!("tools 不正確：{tools}"));
+    }
+    let turns = p["maxTurns"].as_u64().unwrap_or(ctx.settings.claude_max_turns as u64).clamp(1, 400);
+    let mut args = vec![
+        "-p".to_string(),
+        "--output-format".into(), "stream-json".into(), "--verbose".into(),
+        "--permission-mode".into(), "dontAsk".into(),
+        "--allowedTools".into(), tools.to_string(),
+        "--max-turns".into(), turns.to_string(),
+    ];
+    let api = sp(p, "billing", "subscription") == "api";
+    if api {
+        if let Some(b) = p["budgetUsd"].as_f64().filter(|b| *b > 0.0) {
+            args.extend(["--max-budget-usd".into(), format!("{b}")]);
+        }
+    }
+    let mut run = ctx.step(&format!("claude -p（{}）", sp(p, "title", "自動製作")), &claude, &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Parser::Claude);
+    run.stdin_text = Some(sp(p, "prompt", "").to_string());
+    if !api {
+        run.env_remove = API_KEY_VARS.iter().map(|s| s.to_string()).collect();
+    }
+    Ok(vec![run])
+}
+
+/// Official 豆包 CLI (`npm install -g @bytedance/doubao-cli`, `doubao login`) in the job directory, non-interactive.
+/// The prompt is written to `out/auto/AGENT_TASK.md` (multi-line Chinese text is not safe as a .cmd argument);
+/// `-p` only points at it. Its own login is used — Studio passes no credentials and removes Claude / Anthropic
+/// variables from the child so the two providers stay isolated.
+fn agent_cli_steps(p: &Value, ctx: &Ctx) -> Result<Vec<Step>, String> {
+    if sp(p, "provider", "doubao") != "doubao" {
+        return Err("目前只支援 provider=doubao".into());
+    }
+    let exe = crate::agents::doubao_path().ok_or("找不到豆包 CLI（doubao）。安裝：npm install -g @bytedance/doubao-cli，再執行 doubao login")?;
+    let task = ctx.root.join("out").join("auto").join("AGENT_TASK.md");
+    if ctx.job_id != "validate" {
+        std::fs::create_dir_all(task.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(&task, format!("# {}\n\n{}\n", sp(p, "title", "自動製作"), sp(p, "prompt", ""))).map_err(|e| e.to_string())?;
+    }
+    let root = ctx.root.to_string_lossy().to_string();
+    let mut args = vec!["-C".to_string(), root, "--permission-mode".into(), "always_allow".into()];
+    if let Some(m) = p.get("model").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        args.extend(["--model".into(), safe_token(m, "model")?]);
+    }
+    args.extend(["-p".into(), "請完整讀取目前目錄下的 out/auto/AGENT_TASK.md，那是這次的完整任務說明，依照說明直接修改檔案完成任務；完成後用一段繁體中文簡短回報做了什麼。".into()]);
+    let mut run = ctx.step(&format!("doubao -p（{}）", sp(p, "title", "自動製作")), &exe, &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Parser::Plain);
+    run.env_remove = API_KEY_VARS.iter().map(|s| s.to_string()).collect();
+    Ok(vec![run])
 }
 
 fn src_of(p: &Value) -> Result<String, String> {
@@ -422,7 +516,7 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
                 ctx.py(&format!("時間軸 {ep}"), &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}.srt"), &format!("{ep}.srt")], Parser::Plain),
                 ctx.py(&format!("混音 {ep}"), &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
-                ctx.render(&format!("渲染 {ep}-30fps"), &["gpu", "--comp", &format!("{ep}-30fps"), "--out", &out].map(String::from)),
+                ctx.render(&format!("渲染 {ep}-30fps"), &fresh(p, ["gpu", "--comp", &format!("{ep}-30fps"), "--out", &out].map(String::from).to_vec())),
                 ctx.py(&format!("品質檢查 {ep}"), &["scripts/qa_video.py", &out, "--seq", &seq]),
             ]
         }
@@ -433,7 +527,7 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
             let srt = out.trim_end_matches(".mp4").to_string() + ".srt";
             vec![
                 ctx.py("SRT 1.5× 縮放", &["scripts/scale_srt.py", &format!("{ep}.srt"), &srt, "1.5"]),
-                ctx.render(&format!("渲染 {ep}-YT15"), &["gpu".into(), "--comp".into(), format!("{ep}-YT15"), "--out".into(), out]),
+                ctx.render(&format!("渲染 {ep}-YT15"), &fresh(p, vec!["gpu".into(), "--comp".into(), format!("{ep}-YT15"), "--out".into(), out])),
             ]
         }
         "bilibili" => {
@@ -452,11 +546,27 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
                 ctx.py("混音 zh-CN", &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.render(
                     &format!("渲染 {ep}-30fps（src_cn）"),
-                    &["gpu", "--comp", &format!("{ep}-30fps"), "--src", "src_cn", "--mix", &mix_name, "--out", &out].map(String::from),
+                    &fresh(p, ["gpu", "--comp", &format!("{ep}-30fps"), "--src", "src_cn", "--mix", &mix_name, "--out", &out].map(String::from).to_vec()),
                 ),
                 ctx.py("品質檢查 zh-CN", &["scripts/qa_video.py", &out, "--seq", &seq, "--src", "src_cn"]),
             ]
         }
+        "claude_in" => claude_in_steps(p, ctx)?,
+        "agent_cli" => agent_cli_steps(p, ctx)?,
+        "stills" => {
+            let frames = sp(p, "frames", "0");
+            if !Regex::new(r"^\d+(,\d+){0,23}$").unwrap().is_match(frames) {
+                return Err(format!("frames 必須是以逗號分隔的幀號：{frames}"));
+            }
+            let comp = safe_token(sp(p, "comp", ""), "comp")?;
+            let entry = match sp(p, "src", "src") {
+                "src" => "src/index.ts",
+                "src_cn" => "src_cn/index.ts",
+                s => return Err(format!("src must be src or src_cn, got {s}")),
+            };
+            vec![ctx.step(&format!("關鍵幀 {comp}"), &ctx.node(), &["scripts/stills.mjs", frames, &comp, entry], Parser::Plain)]
+        }
+        "typecheck" => vec![ctx.step("tsc --noEmit", &ctx.node(), &["node_modules/typescript/bin/tsc", "--noEmit", "--pretty", "false"], Parser::Plain)],
         "custom" => {
             let c = sp(p, "command", "");
             if c.trim().is_empty() {
