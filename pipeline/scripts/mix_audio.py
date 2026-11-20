@@ -1,5 +1,9 @@
 """
-音訊後製：python scripts/mix_audio.py [--seq arttest]
+音訊後製：python scripts/mix_audio.py [--seq arttest|ep01|ep02…] [--src src|src_cn] [--mix-name ep02_cn]
+
+  ep01 使用手工音效表（ep01_events）與逐幕配樂；其他集數使用通用規則（generic_events / generic_moods）：
+  幕間轉場音、錨點提示音（克制、間隔至少 1.5 秒）、片尾鐘聲；配樂依 narration.json 的 scenes[].mood
+  （mystery / light / pulse / rise / outro），未指定時依幕的位置自動選擇。
 
   旁白（各句依時間軸 adelay 排入）→ 兩段式 loudnorm（-16 LUFS / -1.5 dBTP）
   背景音樂（本腳本以 ffmpeg 合成的原創氛圍音，無授權疑慮）→ 依旁白「說話區段」自動壓低（ducking）
@@ -42,7 +46,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 
 def ff(args: list[str], capture: bool = False) -> str:
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-y", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-y", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+    except FileNotFoundError:
+        raise SystemExit("[錯誤] 找不到 ffmpeg。請安裝 ffmpeg 並加入 PATH，例如：winget install Gyan.FFmpeg")
     if r.returncode != 0:
         raise SystemExit(f"[ffmpeg 失敗]\n{' '.join(args)[:600]}\n{r.stderr[-3000:]}")
     return r.stderr if capture else ""
@@ -205,13 +212,63 @@ def ep01_events(tl: dict) -> list[tuple[str, float, float]]:
     return ev
 
 
+MOODS = ("mystery", "light", "pulse", "rise", "outro")
+EP01_MOODS = {"act01": "mystery", "act02": "light", "act03": "light", "act04": "pulse", "act05": "pulse", "act06": "rise", "act07": "outro"}
+
+
+def generic_moods(seq: str, tl: dict) -> list[str]:
+    """沒有手工配樂表的集數：narration.json 的 scenes[].mood 優先，否則開場 mystery／中段輪替／結尾 outro。"""
+    try:
+        nar = json.loads((ROOT / _SRC / "data" / "narration.json").read_text(encoding="utf-8"))
+        given = {sc["id"]: sc.get("mood") for sc in nar["sequences"][seq]["scenes"]}
+    except (OSError, KeyError, json.JSONDecodeError):
+        given = {}
+    scenes = tl["scenes"]
+    out = []
+    for i, sc in enumerate(scenes):
+        m = given.get(sc["id"])
+        if m not in MOODS:
+            if len(scenes) == 1:
+                m = "light"
+            elif i == 0:
+                m = "mystery"
+            elif i == len(scenes) - 1:
+                m = "outro"
+            else:
+                m = ("light", "pulse", "rise")[(i - 1) % 3]
+        out.append(m)
+    return out
+
+
+def generic_events(tl: dict) -> list[tuple[str, float, float]]:
+    """通用音效：幕間資料點轉場、錨點提示（間隔 ≥ 1.5 秒，避免干擾旁白）、片尾鐘聲。"""
+    fps = tl["fps"]
+    ev: list[tuple[str, float, float]] = []
+    for s in tl["scenes"][1:]:
+        ev.append(("whoosh", s["startFrame"] / fps - 0.55, -21.0))
+    last = -9.0
+    for t in sorted(a["time"] for s in tl["scenes"] for a in s["anchors"].values()):
+        if t - last >= 1.5:
+            ev.append(("send", t, -24.0))
+            last = t
+    dur = tl["totalFrames"] / fps
+    ev.append(("brand", max(0.0, dur - 2.6), -16.0))
+    return [e for e in ev if e[1] >= 0]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seq", default="arttest")
     ap.add_argument("--src", default="src")
     ap.add_argument("--mix-name", default=None)
     a = ap.parse_args()
+    if not TIMELINE.exists():
+        print(f"[錯誤] 找不到時間軸 {TIMELINE.relative_to(ROOT)}，請先執行 build_timeline.py --seq {a.seq}")
+        return 1
     all_tl = json.loads(TIMELINE.read_text(encoding="utf-8"))
+    if a.seq not in all_tl:
+        print(f"[錯誤] {TIMELINE.relative_to(ROOT)} 裡沒有 {a.seq}（現有：{'、'.join(all_tl) or '無'}）。請先執行 build_timeline.py --seq {a.seq}")
+        return 1
     tl = all_tl[a.seq]
     dur = tl["totalFrames"] / tl["fps"]
     MIX.mkdir(parents=True, exist_ok=True)
@@ -236,11 +293,15 @@ def main() -> int:
 
     # 2) 背景音樂 + ducking（EP01：每一幕不同氛圍，見 scripts/music.py）
     bgm_raw = work / "bgm_raw.wav"
-    if tl.get("scenes") and a.seq == "ep01":
+    if tl.get("scenes") and a.seq != "arttest":
         sys.path.insert(0, str(Path(__file__).parent))
         import music  # noqa: E402
-        moods = {"act01": "mystery", "act02": "light", "act03": "light", "act04": "pulse", "act05": "pulse", "act06": "rise", "act07": "outro"}
-        segs = [(moods.get(sc["id"], "light"), (sc["endFrame"] - sc["startFrame"]) / tl["fps"]) for sc in tl["scenes"]]
+        if a.seq == "ep01":
+            moods = [EP01_MOODS.get(sc["id"], "light") for sc in tl["scenes"]]
+        else:
+            moods = generic_moods(a.seq, tl)
+            print(f"   配樂（通用）：{'、'.join(moods)}")
+        segs = [(m, (sc["endFrame"] - sc["startFrame"]) / tl["fps"]) for m, sc in zip(moods, tl["scenes"])]
         music.build_score(segs, work, bgm_raw, ff)
     else:
         synth_bgm(dur, bgm_raw)
@@ -258,6 +319,8 @@ def main() -> int:
     events: list[tuple[str, float, float]] = []  # (素材, 秒, 增益 dB)
     if a.seq == "ep01":
         events = ep01_events(tl)
+    elif a.seq != "arttest":
+        events = generic_events(tl)
     else:
         conv = template_to_seconds(tl)
         # 按鍵聲：對齊 DeskScene 的打字區段（樣板 18–118）；固定節奏 + 確定性微抖動

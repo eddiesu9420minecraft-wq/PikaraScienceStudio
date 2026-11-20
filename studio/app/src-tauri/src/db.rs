@@ -266,6 +266,11 @@ fn row_job(r: &Row) -> rusqlite::Result<Job> {
     let base = crate::jobs::kinds().into_iter().find(|k| k.kind == kind).map(|k| k.label);
     let label_cn = if base == Some(label.as_str()) || kind == "claude" || kind == "doctor_fix" {
         crate::i18n::cn_label(&kind).map(String::from)
+    } else if kind == "youtube_15x" {
+        label.split_once(" · ").map(|(ep, _)| format!("{ep} · YouTube 1.5× 版（SRT 缩放＋{ep}-YT15）"))
+    } else if let (Some(b), Some((ep, rest))) = (base, label.split_once(" · ")) {
+        // "EP02 · <kind label>" (v1.2 episode prefix)
+        (rest == b).then(|| crate::i18n::cn_label(&kind).map(|c| format!("{ep} · {c}"))).flatten()
     } else {
         None
     };

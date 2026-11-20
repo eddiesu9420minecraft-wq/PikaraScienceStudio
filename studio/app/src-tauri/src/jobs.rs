@@ -37,45 +37,71 @@ fn p(name: &str, ty: &str, required: bool, default: Value, help: &str) -> Value 
     json!({"name": name, "type": ty, "required": required, "default": default, "help": help})
 }
 
+fn ep_param() -> Value {
+    p("episode", "string", false, json!("ep01"), "集數 id（narration.json 的 sequences.<id>，例：ep02）")
+}
+
 pub fn kinds() -> Vec<KindSpec> {
     vec![
         KindSpec { kind: "voiceover_tw", label: "配音 zh-TW（CosyVoice）", resource: "gpu", params: json!([
-            p("seq", "string", false, json!("ep01"), "narration sequence"),
+            ep_param(),
             p("only", "string", false, Value::Null, "只重生這些句子 ID（空白分隔）"),
             p("force", "bool", false, json!(false), "忽略快取重新產生"),
             p("speed", "number", false, Value::Null, "固定語速"),
             p("targetCps", "number", false, Value::Null, "目標字/秒（自動校準 speed）")]) },
         KindSpec { kind: "voiceover_cn", label: "配音 zh-CN（CosyVoice）", resource: "gpu", params: json!([
-            p("seq", "string", false, json!("ep01"), "narration sequence"),
+            ep_param(),
             p("only", "string", false, Value::Null, "只重生這些句子 ID（空白分隔）"),
             p("force", "bool", false, json!(false), "忽略快取重新產生"),
             p("targetCps", "number", false, json!(5.4), "目標字/秒")]) },
         KindSpec { kind: "timeline", label: "時間軸＋字幕", resource: "cpu", params: json!([
-            p("seq", "string", false, json!("ep01"), ""), p("src", "string", false, json!("src"), "src 或 src_cn"),
+            ep_param(), p("src", "string", false, json!("src"), "src 或 src_cn"),
             p("estimate", "bool", false, json!(false), "缺音檔時以字數估算")]) },
         KindSpec { kind: "mix", label: "混音", resource: "cpu", params: json!([
-            p("seq", "string", false, json!("ep01"), ""), p("src", "string", false, json!("src"), "src 或 src_cn")]) },
+            ep_param(), p("src", "string", false, json!("src"), "src 或 src_cn")]) },
         KindSpec { kind: "render", label: "渲染（render.mjs）", resource: "gpu", params: json!([
-            p("comp", "string", false, json!("EP01-30fps"), "EP01 / EP01-30fps / EP01-YT15 / ArtTest"),
+            ep_param(),
+            p("comp", "string", false, Value::Null, "預設 <EP>-30fps；可填 <EP> / <EP>-30fps / <EP>-YT15 / ArtTest"),
             p("mode", "string", false, json!("gpu"), "gpu / cpu / preview"),
             p("src", "string", false, json!("src"), "src 或 src_cn"),
-            p("out", "string", false, json!("EP01_Final.mp4"), "輸出檔名（專案根目錄）"),
-            p("mix", "string", false, Value::Null, "混音名稱（例：ep01_cn）"),
+            p("out", "string", false, Value::Null, "輸出檔名（專案根目錄，預設 <EP>_Final.mp4）"),
+            p("mix", "string", false, Value::Null, "混音名稱（例：ep02_cn）"),
             p("fps", "number", false, Value::Null, "僅供顯示；fps 由 comp 決定"),
             p("frames", "string", false, Value::Null, "a-b 只渲染部分幀"),
+            p("chunk", "number", false, Value::Null, "每段幀數（預設 1800；越小越常存檔，可續傳）"),
             p("concurrency", "number", false, Value::Null, "固定並行數")]) },
         KindSpec { kind: "qa", label: "品質檢查（qa_video.py）", resource: "cpu", params: json!([
-            p("video", "string", false, json!("EP01_Final.mp4"), ""), p("seq", "string", false, json!("ep01"), ""),
+            ep_param(),
+            p("video", "string", false, Value::Null, "影片檔名（預設 <EP>_Final.mp4）"),
             p("src", "string", false, json!("src"), ""), p("speed", "number", false, Value::Null, "1.5 倍速版填 1.5")]) },
-        KindSpec { kind: "make_cn", label: "產生 zh-CN 原始碼（make_cn.py，會覆寫 src_cn）", resource: "cpu", params: json!([]) },
-        KindSpec { kind: "youtube_15x", label: "YouTube 1.5× 版（SRT 縮放＋EP01-YT15）", resource: "gpu", params: json!([
-            p("out", "string", false, json!("EP01_YouTube_zh-TW.mp4"), "")]) },
+        KindSpec { kind: "make_cn", label: "產生 zh-CN 原始碼（make_cn.py；保留簡體既有旁白與時間軸）", resource: "cpu", params: json!([
+            p("episode", "string", false, Value::Null, "只轉換這一集的旁白（空白 = 所有尚未有簡體稿的集數）"),
+            p("reconvert", "bool", false, json!(false), "用繁體稿重新轉換並覆寫這一集的簡體旁白")]) },
+        KindSpec { kind: "final_tw", label: "繁中正式版（時間軸→字幕→混音→渲染 30fps→QA）", resource: "gpu", params: json!([
+            ep_param(), p("out", "string", false, Value::Null, "預設 <EP>_Final.mp4")]) },
+        KindSpec { kind: "youtube_15x", label: "YouTube 1.5× 版（SRT 縮放＋<EP>-YT15）", resource: "gpu", params: json!([
+            ep_param(), p("out", "string", false, Value::Null, "預設 <EP>_YouTube_zh-TW.mp4")]) },
         KindSpec { kind: "bilibili", label: "Bilibili zh-CN 全流程", resource: "gpu", params: json!([
-            p("out", "string", false, json!("EP01_Bilibili_zh-CN.mp4"), "")]) },
+            ep_param(), p("out", "string", false, Value::Null, "預設 <EP>_Bilibili_zh-CN.mp4")]) },
         KindSpec { kind: "custom", label: "自訂指令（cmd /c）", resource: "cpu", params: json!([
             p("command", "string", true, Value::Null, "在專案根目錄以 cmd /c 執行"),
             p("gpu", "bool", false, json!(false), "會用到 GPU（取得 GPU 鎖）")]) },
     ]
+}
+
+/// Episode id of a job: `seq` (v1 name, still accepted) → `episode` → "ep01". Only `epNN`/`epNNN` (or `arttest`).
+pub fn episode_of(p: &Value) -> Result<String, String> {
+    let e = sp(p, "seq", sp(p, "episode", "ep01"));
+    if crate::episodes::valid_id(e) || e == "arttest" {
+        Ok(e.to_string())
+    } else {
+        Err(format!("集數 id 不正確：「{e}」（格式為 ep 加 2–3 位數字，例如 ep02）"))
+    }
+}
+
+/// Composition prefix / output file prefix: ep02 → EP02.
+pub fn ep_upper(ep: &str) -> String {
+    ep.to_ascii_uppercase()
 }
 
 pub fn resource_for(kind: &str, params: &Value) -> Result<&'static str, String> {
@@ -90,12 +116,32 @@ pub fn resource_for(kind: &str, params: &Value) -> Result<&'static str, String> 
 pub fn label_for(kind: &str, params: &Value) -> String {
     let base = kinds().into_iter().find(|s| s.kind == kind).map(|s| s.label.to_string());
     match kind {
-        "render" => format!("渲染 {} → {}", sp(params, "comp", "EP01-30fps"), sp(params, "out", "EP01_Final.mp4")),
-        "qa" => format!("品質檢查 {}", sp(params, "video", "EP01_Final.mp4")),
-        "custom" => format!("自訂：{}", sp(params, "command", "").chars().take(60).collect::<String>()),
-        "claude" => format!("Claude：{}", sp(params, "title", "headless run")),
-        "doctor_fix" => format!("修復：{}", sp(params, "fixId", "")),
-        _ => base.unwrap_or_else(|| kind.to_string()),
+        "render" => {
+            let e = ep_upper(&episode_of(params).unwrap_or_else(|_| "ep01".into()));
+            format!("渲染 {} → {}", sp(params, "comp", &format!("{e}-30fps")), sp(params, "out", &format!("{e}_Final.mp4")))
+        }
+        "qa" => {
+            let e = ep_upper(&episode_of(params).unwrap_or_else(|_| "ep01".into()));
+            format!("品質檢查 {}", sp(params, "video", &format!("{e}_Final.mp4")))
+        }
+        "youtube_15x" => {
+            let e = ep_upper(&episode_of(params).unwrap_or_else(|_| "ep01".into()));
+            format!("{e} · YouTube 1.5× 版（SRT 縮放＋{e}-YT15）")
+        }
+        "custom" | "claude" | "doctor_fix" | "make_cn" => match kind {
+            "custom" => format!("自訂：{}", sp(params, "command", "").chars().take(60).collect::<String>()),
+            "claude" => format!("Claude：{}", sp(params, "title", "headless run")),
+            "make_cn" => match params.get("episode").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+                Some(e) => format!("產生 zh-CN 原始碼（{}{}）", ep_upper(e), if params["reconvert"].as_bool().unwrap_or(false) { "，重新轉換旁白" } else { "" }),
+                None => base.unwrap_or_else(|| kind.to_string()),
+            },
+            _ => format!("修復：{}", sp(params, "fixId", "")),
+        },
+        _ => match (base, episode_of(params)) {
+            (Some(b), Ok(e)) if params.get("episode").is_some() || params.get("seq").is_some() => format!("{} · {}", ep_upper(&e), b),
+            (Some(b), _) => b,
+            (None, _) => kind.to_string(),
+        },
     }
 }
 
@@ -179,7 +225,7 @@ impl Ctx<'_> {
 }
 
 fn voice_args(p: &Value, cn: bool) -> Result<Vec<String>, String> {
-    let mut a = vec!["--seq".to_string(), safe_token(sp(p, "seq", "ep01"), "seq")?];
+    let mut a = vec!["--seq".to_string(), episode_of(p)?];
     if cn {
         a.extend(
             [
@@ -221,6 +267,14 @@ fn timeline_args(seq: &str, src: &str, estimate: bool) -> Vec<String> {
     a
 }
 
+fn mix_args(seq: &str, src: &str) -> Vec<String> {
+    let mut a = vec!["scripts/mix_audio.py".to_string(), "--seq".into(), seq.into()];
+    if src == "src_cn" {
+        a.extend(["--src".into(), "src_cn".into(), "--mix-name".into(), format!("{seq}_cn")]);
+    }
+    a
+}
+
 fn src_of(p: &Value) -> Result<String, String> {
     match sp(p, "src", "src") {
         s @ ("src" | "src_cn") => Ok(s.into()),
@@ -234,6 +288,49 @@ fn out_name(p: &Value, d: &str) -> Result<String, String> {
         return Err(format!("out must be a plain .mp4 file name in the project root: {o}"));
     }
     safe_token(o, "out")
+}
+
+/// Checks done right before a job starts (not at enqueue: earlier jobs in the queue may create the files).
+/// Errors are complete Traditional-Chinese sentences shown as the job's failure message; nothing is spawned.
+pub fn preflight(kind: &str, p: &Value, root: &Path, settings: &Settings) -> Result<(), String> {
+    preflight_with(kind, p, root, settings, &|t| crate::util::tool(t).is_some())
+}
+
+pub fn preflight_with(kind: &str, p: &Value, root: &Path, settings: &Settings, has_tool: &dyn Fn(&str) -> bool) -> Result<(), String> {
+    let media = ["qa", "render", "final_tw", "youtube_15x", "bilibili", "mix", "timeline", "voiceover_tw", "voiceover_cn"];
+    if media.contains(&kind) {
+        for t in ["ffmpeg", "ffprobe"] {
+            if !has_tool(t) {
+                return Err(format!(
+                    "找不到 {t}，工作沒有開始。請安裝 ffmpeg（含 ffprobe）並加入 PATH（例如：winget install Gyan.FFmpeg），安裝後在「環境醫生」重新檢查，再按「重試」。"
+                ));
+            }
+        }
+    }
+    if ["voiceover_tw", "voiceover_cn", "bilibili"].contains(&kind) {
+        let py = Ctx { root, settings, job_id: "preflight" }.cosy_python();
+        if !Path::new(&py).exists() {
+            return Err(format!("找不到 CosyVoice 的 Python：{py}。請在「環境醫生」查看 CosyVoice 安裝說明，或在設定中指定 cosyPython。"));
+        }
+    }
+    let uses_cn = (["timeline", "mix", "render", "qa"].contains(&kind) && sp(p, "src", "src") == "src_cn") || kind == "voiceover_cn";
+    if uses_cn && !root.join("src_cn").join("data").join("narration.json").exists() {
+        return Err("還沒有簡體版原始碼（src_cn）。請先執行「產生 zh-CN 原始碼」（make_cn），再執行這個工作。".into());
+    }
+    if kind == "qa" {
+        let seq = episode_of(p)?;
+        let video = sp(p, "video", &format!("{}_Final.mp4", ep_upper(&seq))).to_string();
+        if !root.join(&video).is_file() {
+            return Err(format!("找不到影片檔：{video}（專案資料夾 {}）。請先完成渲染，或確認檔名是否正確。", crate::util::clean_path(root)));
+        }
+    }
+    if ["timeline", "mix", "render", "final_tw", "youtube_15x", "voiceover_tw"].contains(&kind) && sp(p, "src", "src") == "src" {
+        let seq = episode_of(p)?;
+        if seq != "arttest" && !crate::episodes::exists(root, "zh-TW", &seq) {
+            return Err(format!("src/data/narration.json 裡沒有 {seq} 這一集。請先在「劇本編輯」建立新集數。"));
+        }
+    }
+    Ok(())
 }
 
 pub fn claude_tools(allow_edits: bool) -> String {
@@ -254,25 +351,23 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
         "voiceover_tw" => vec![ctx.cosy("配音 zh-TW", &voice_args(p, false)?, &[])],
         "voiceover_cn" => vec![ctx.cosy("配音 zh-CN", &voice_args(p, true)?, &[("PIKARA_ASR_CC", "t2s")])],
         "timeline" => {
-            let seq = safe_token(sp(p, "seq", "ep01"), "seq")?;
+            let seq = episode_of(p)?;
             let a = timeline_args(&seq, &src_of(p)?, p["estimate"].as_bool().unwrap_or(false));
             vec![ctx.py("時間軸", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>())]
         }
         "mix" => {
-            let seq = safe_token(sp(p, "seq", "ep01"), "seq")?;
-            let mut a = vec!["scripts/mix_audio.py".to_string(), "--seq".into(), seq.clone()];
-            if src_of(p)? == "src_cn" {
-                a.extend(["--src".into(), "src_cn".into(), "--mix-name".into(), format!("{seq}_cn")]);
-            }
+            let seq = episode_of(p)?;
+            let a = mix_args(&seq, &src_of(p)?);
             vec![ctx.py("混音", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>())]
         }
         "render" => {
+            let ep = ep_upper(&episode_of(p)?);
             let mode = sp(p, "mode", "gpu");
             if !["gpu", "cpu", "preview"].contains(&mode) {
                 return Err(format!("mode must be gpu/cpu/preview, got {mode}"));
             }
-            let mut a = vec![mode.to_string(), "--comp".into(), safe_token(sp(p, "comp", "EP01-30fps"), "comp")?];
-            a.extend(["--out".into(), out_name(p, "EP01_Final.mp4")?]);
+            let mut a = vec![mode.to_string(), "--comp".into(), safe_token(sp(p, "comp", &format!("{ep}-30fps")), "comp")?];
+            a.extend(["--out".into(), out_name(p, &format!("{ep}_Final.mp4"))?]);
             let src = src_of(p)?;
             if src != "src" {
                 a.extend(["--src".into(), src]);
@@ -286,14 +381,18 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
                 }
                 a.extend(["--frames".into(), f.into()]);
             }
+            if let Some(c) = p.get("chunk").and_then(|v| v.as_u64()) {
+                a.extend(["--chunk".into(), c.clamp(30, 100_000).to_string()]);
+            }
             if let Some(c) = p.get("concurrency").and_then(|v| v.as_u64()) {
                 a.extend(["--concurrency".into(), c.clamp(1, 16).to_string()]);
             }
             vec![ctx.render("渲染", &a)]
         }
         "qa" => {
-            let video = safe_token(sp(p, "video", "EP01_Final.mp4"), "video")?;
-            let mut a = vec!["scripts/qa_video.py".to_string(), video, "--seq".into(), safe_token(sp(p, "seq", "ep01"), "seq")?];
+            let seq = episode_of(p)?;
+            let video = safe_token(sp(p, "video", &format!("{}_Final.mp4", ep_upper(&seq))), "video")?;
+            let mut a = vec!["scripts/qa_video.py".to_string(), video, "--seq".into(), seq];
             let src = src_of(p)?;
             if src != "src" {
                 a.extend(["--src".into(), src]);
@@ -303,30 +402,59 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
             }
             vec![ctx.py("品質檢查", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>())]
         }
-        "make_cn" => vec![ctx.py("make_cn", &["scripts/make_cn.py"])],
+        "make_cn" => {
+            let mut a = vec!["scripts/make_cn.py".to_string()];
+            if p.get("episode").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).is_some() {
+                a.extend(["--seq".into(), episode_of(&json!({"episode": p["episode"]}))?]);
+            }
+            if p["reconvert"].as_bool().unwrap_or(false) {
+                a.push("--reconvert".into());
+            }
+            vec![ctx.py("make_cn", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>())]
+        }
+        "final_tw" => {
+            let seq = episode_of(p)?;
+            let ep = ep_upper(&seq);
+            let out = out_name(p, &format!("{ep}_Final.mp4"))?;
+            let tl = timeline_args(&seq, "src", false);
+            let mx = mix_args(&seq, "src");
+            vec![
+                ctx.py(&format!("時間軸 {ep}"), &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+                ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}.srt"), &format!("{ep}.srt")], Parser::Plain),
+                ctx.py(&format!("混音 {ep}"), &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+                ctx.render(&format!("渲染 {ep}-30fps"), &["gpu", "--comp", &format!("{ep}-30fps"), "--out", &out].map(String::from)),
+                ctx.py(&format!("品質檢查 {ep}"), &["scripts/qa_video.py", &out, "--seq", &seq]),
+            ]
+        }
         "youtube_15x" => {
-            let out = out_name(p, "EP01_YouTube_zh-TW.mp4")?;
+            let seq = episode_of(p)?;
+            let ep = ep_upper(&seq);
+            let out = out_name(p, &format!("{ep}_YouTube_zh-TW.mp4"))?;
             let srt = out.trim_end_matches(".mp4").to_string() + ".srt";
             vec![
-                ctx.py("SRT 1.5× 縮放", &["scripts/scale_srt.py", "EP01.srt", &srt, "1.5"]),
-                ctx.render("渲染 EP01-YT15", &["gpu".into(), "--comp".into(), "EP01-YT15".into(), "--out".into(), out]),
+                ctx.py("SRT 1.5× 縮放", &["scripts/scale_srt.py", &format!("{ep}.srt"), &srt, "1.5"]),
+                ctx.render(&format!("渲染 {ep}-YT15"), &["gpu".into(), "--comp".into(), format!("{ep}-YT15"), "--out".into(), out]),
             ]
         }
         "bilibili" => {
-            let out = out_name(p, "EP01_Bilibili_zh-CN.mp4")?;
+            let seq = episode_of(p)?;
+            let ep = ep_upper(&seq);
+            let out = out_name(p, &format!("{ep}_Bilibili_zh-CN.mp4"))?;
             let srt = out.trim_end_matches(".mp4").to_string() + ".srt";
-            let tl = timeline_args("ep01", "src_cn", false);
+            let tl = timeline_args(&seq, "src_cn", false);
+            let mx = mix_args(&seq, "src_cn");
+            let mix_name = format!("{seq}_cn");
             vec![
-                ctx.py("make_cn（src → src_cn）", &["scripts/make_cn.py"]),
-                ctx.cosy("配音 zh-CN", &voice_args(&json!({}), true)?, &[("PIKARA_ASR_CC", "t2s")]),
+                ctx.py("make_cn（src → src_cn）", &["scripts/make_cn.py", "--seq", &seq]),
+                ctx.cosy("配音 zh-CN", &voice_args(&json!({"episode": seq}), true)?, &[("PIKARA_ASR_CC", "t2s")]),
                 ctx.py("時間軸 zh-CN", &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
-                ctx.step("複製字幕", "cmd", &["/c", "copy", "/Y", r"out\subtitles\ep01_cn.srt", &srt], Parser::Plain),
-                ctx.py("混音 zh-CN", &["scripts/mix_audio.py", "--seq", "ep01", "--src", "src_cn", "--mix-name", "ep01_cn"]),
+                ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}_cn.srt"), &srt], Parser::Plain),
+                ctx.py("混音 zh-CN", &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.render(
-                    "渲染 EP01-30fps（src_cn）",
-                    &["gpu", "--comp", "EP01-30fps", "--src", "src_cn", "--mix", "ep01_cn", "--out", &out].map(String::from),
+                    &format!("渲染 {ep}-30fps（src_cn）"),
+                    &["gpu", "--comp", &format!("{ep}-30fps"), "--src", "src_cn", "--mix", &mix_name, "--out", &out].map(String::from),
                 ),
-                ctx.py("品質檢查 zh-CN", &["scripts/qa_video.py", &out, "--seq", "ep01", "--src", "src_cn"]),
+                ctx.py("品質檢查 zh-CN", &["scripts/qa_video.py", &out, "--seq", &seq, "--src", "src_cn"]),
             ]
         }
         "custom" => {
@@ -662,5 +790,72 @@ mod tests {
         assert_eq!(resource_for("render", &json!({})).unwrap(), "gpu");
         assert_eq!(resource_for("qa", &json!({})).unwrap(), "cpu");
         assert_eq!(resource_for("custom", &json!({"gpu": true})).unwrap(), "gpu");
+    }
+
+    #[test]
+    fn episode_parameter_drives_commands_and_output_names() {
+        let s = Settings::default();
+        let tmp = std::env::temp_dir();
+        let ctx = Ctx { root: tmp.as_path(), settings: &s, job_id: "j2" };
+        // defaults stay EP01 (v1 behaviour unchanged)
+        let r = build_steps("render", &json!({}), &ctx).unwrap();
+        assert_eq!(r[0].args, vec!["scripts/render.mjs", "gpu", "--comp", "EP01-30fps", "--out", "EP01_Final.mp4"]);
+        // ep02 → EP02-* everywhere
+        let r = build_steps("render", &json!({"episode": "ep02", "chunk": 120}), &ctx).unwrap();
+        assert_eq!(r[0].args, vec!["scripts/render.mjs", "gpu", "--comp", "EP02-30fps", "--out", "EP02_Final.mp4", "--chunk", "120"]);
+        let q = build_steps("qa", &json!({"episode": "ep03"}), &ctx).unwrap();
+        assert_eq!(q[0].args, vec!["-3.11", "-u", "scripts/qa_video.py", "EP03_Final.mp4", "--seq", "ep03"]);
+        let v = build_steps("voiceover_cn", &json!({"episode": "ep02"}), &ctx).unwrap();
+        assert!(v[0].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
+        let b = build_steps("bilibili", &json!({"episode": "ep02"}), &ctx).unwrap();
+        assert_eq!(b[0].args, vec!["-3.11", "-u", "scripts/make_cn.py", "--seq", "ep02"]);
+        assert!(b[2].args.windows(2).any(|w| w[0] == "--srt-name" && w[1] == "ep02_cn"));
+        assert!(b[3].args.contains(&r"out\subtitles\ep02_cn.srt".to_string()) && b[3].args.contains(&"EP02_Bilibili_zh-CN.srt".to_string()));
+        assert!(b[4].args.windows(2).any(|w| w[0] == "--mix-name" && w[1] == "ep02_cn"));
+        assert!(b[5].args.windows(2).any(|w| w[0] == "--comp" && w[1] == "EP02-30fps") && b[5].args.contains(&"EP02_Bilibili_zh-CN.mp4".to_string()));
+        assert!(b[6].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
+        let y = build_steps("youtube_15x", &json!({"episode": "ep02"}), &ctx).unwrap();
+        assert_eq!(y[0].args, vec!["-3.11", "-u", "scripts/scale_srt.py", "EP02.srt", "EP02_YouTube_zh-TW.srt", "1.5"]);
+        assert!(y[1].args.contains(&"EP02-YT15".to_string()) && y[1].args.contains(&"EP02_YouTube_zh-TW.mp4".to_string()));
+        let f = build_steps("final_tw", &json!({"episode": "ep02"}), &ctx).unwrap();
+        let fl: Vec<&str> = f.iter().map(|x| x.label.as_str()).collect();
+        assert_eq!(fl, vec!["時間軸 EP02", "複製字幕", "混音 EP02", "渲染 EP02-30fps", "品質檢查 EP02"]);
+        assert!(f[1].args.contains(&r"out\subtitles\ep02.srt".to_string()) && f[1].args.contains(&"EP02.srt".to_string()));
+        let m = build_steps("make_cn", &json!({"episode": "ep02", "reconvert": true}), &ctx).unwrap();
+        assert_eq!(m[0].args, vec!["-3.11", "-u", "scripts/make_cn.py", "--seq", "ep02", "--reconvert"]);
+        assert_eq!(build_steps("make_cn", &json!({}), &ctx).unwrap()[0].args, vec!["-3.11", "-u", "scripts/make_cn.py"]);
+        // v1 `seq` still accepted; bad ids refused with a zh-TW message
+        let t = build_steps("timeline", &json!({"seq": "ep02"}), &ctx).unwrap();
+        assert!(t[0].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
+        assert!(build_steps("timeline", &json!({"seq": "arttest"}), &ctx).is_ok());
+        for bad in ["ep2", "EP02x", "ep02 --force", "../ep02", "ep02;del"] {
+            let e = build_steps("render", &json!({"episode": bad}), &ctx).unwrap_err();
+            assert!(e.contains("集數 id 不正確"), "{bad}: {e}");
+        }
+        assert_eq!(label_for("bilibili", &json!({"episode": "ep02"})), "EP02 · Bilibili zh-CN 全流程");
+        assert_eq!(label_for("render", &json!({"episode": "ep03"})), "渲染 EP03-30fps → EP03_Final.mp4");
+    }
+
+    #[test]
+    fn preflight_gives_friendly_messages() {
+        let s = Settings::default();
+        let d = std::env::temp_dir().join(format!("pss 預檢 {}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(d.join("src").join("data")).unwrap();
+        std::fs::write(d.join("src").join("data").join("narration.json"), r#"{"sequences":{"ep01":{"scenes":[]},"ep02":{"scenes":[]}}}"#).unwrap();
+        let all = |_: &str| true;
+        let no_probe = |t: &str| t != "ffprobe";
+        // ffprobe missing → job never starts, message says what to install
+        let e = preflight_with("qa", &json!({"episode": "ep02"}), &d, &s, &no_probe).unwrap_err();
+        assert!(e.contains("找不到 ffprobe") && e.contains("winget install Gyan.FFmpeg"), "{e}");
+        // missing video (path with Chinese + spaces)
+        let e = preflight_with("qa", &json!({"episode": "ep02"}), &d, &s, &all).unwrap_err();
+        assert!(e.contains("找不到影片檔：EP02_Final.mp4") && e.contains("預檢"), "{e}");
+        std::fs::write(d.join("EP02_Final.mp4"), b"x").unwrap();
+        assert!(preflight_with("qa", &json!({"episode": "ep02"}), &d, &s, &all).is_ok());
+        // unknown episode / missing src_cn
+        assert!(preflight_with("render", &json!({"episode": "ep09"}), &d, &s, &all).unwrap_err().contains("沒有 ep09"));
+        assert!(preflight_with("render", &json!({"episode": "ep02", "src": "src_cn"}), &d, &s, &all).unwrap_err().contains("src_cn"));
+        assert!(preflight_with("custom", &json!({"command": "echo"}), &d, &s, &no_probe).is_ok());
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

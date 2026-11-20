@@ -6,6 +6,7 @@ import { call, hasTauri, fileSrc } from '../api.js';
 import { h, mount, btn, seg, empty, loading, errorBox, notReady, needProject, toast, toastError, confirmSheet, tag, field } from '../ui.js';
 import { icon } from '../icons.js';
 import { store, currentProject, ensureAssets, on } from '../store.js';
+import { currentEpisode, setEpisode, newEpisodeSheet } from '../episodes.js';
 
 const drafts = new Map(); // `${projectId}|${locale}` -> { file, doc, seqKey, dirtyIds:Set, selected }
 let audio = null;
@@ -30,7 +31,7 @@ export default {
         mount(ctx.content, h('div.page', errorBox(e, () => ctx.rerender())));
         return;
       }
-      st = { file, doc: file.doc, seqKey: pickSeq(file), dirtyIds: new Set(), selected: null, validation: null, filter: '' };
+      st = { file, doc: file.doc, seqKey: pickSeq(file, p.id), dirtyIds: new Set(), selected: null, validation: null, filter: '' };
       drafts.set(key, st);
     }
     if (!ctx.alive()) return;
@@ -38,9 +39,9 @@ export default {
   },
 };
 
-function pickSeq(file) {
+function pickSeq(file, projectId) {
   const keys = Object.keys((file.doc && file.doc.sequences) || {});
-  const saved = sessionStorage.getItem('script.seq');
+  const saved = currentEpisode(projectId);
   if (saved && keys.includes(saved)) return saved;
   return keys.includes('ep01') ? 'ep01' : keys[keys.length - 1] || null;
 }
@@ -63,9 +64,10 @@ class Editor {
     this.validateBtn = btn(t('驗證'), { icon: 'check', onClick: () => this.validate(true) });
     const seqSel = h('select.select', { 'aria-label': t('序列'), style: { width: '200px' } },
       Object.entries(st.doc.sequences || {}).map(([k, s]) => h('option', { value: k, selected: k === st.seqKey ? true : null }, `${k} — ${s.title || ''}`)));
-    seqSel.addEventListener('change', () => { st.seqKey = seqSel.value; sessionStorage.setItem('script.seq', st.seqKey); st.selected = null; this.renderTable(); this.renderInspector(); this.updateHeader(); });
+    seqSel.addEventListener('change', () => { st.seqKey = seqSel.value; setEpisode(this.p.id, st.seqKey); st.selected = null; this.renderTable(); this.renderInspector(); this.updateHeader(); this.renderBanners(); });
     const reload = btn('', { icon: 'refresh', aria: t('從磁碟重新載入'), onClick: () => this.reload() });
-    ctx.toolbar(t('腳本'), '', [localeSeg(ctx, this.locale), seqSel, reload, this.validateBtn, this.saveBtn]);
+    const newEp = btn(t('新增集數'), { icon: 'plus', onClick: () => this.newEpisode() });
+    ctx.toolbar(t('腳本'), '', [localeSeg(ctx, this.locale), seqSel, newEp, reload, this.validateBtn, this.saveBtn]);
 
     this.search = h('input.input', { type: 'search', placeholder: t('搜尋句子、id 或錨點…'), 'aria-label': t('搜尋'), value: st.filter, style: { width: '260px' } });
     this.search.addEventListener('input', () => { st.filter = this.search.value; this.applyFilter(); });
@@ -99,6 +101,16 @@ class Editor {
     if (!st.validation) this.validate(false);
   }
 
+  async newEpisode() {
+    if (this.st.dirtyIds.size) { toast(t('請先儲存或重新載入目前的修改，再新增集數。'), 'warn'); return; }
+    const existing = Object.keys(this.st.doc.sequences || {}).filter((k) => /^ep\d{2,3}$/.test(k)).map((id) => ({ id }));
+    const r = await newEpisodeSheet(this.p.id, existing);
+    if (!r) return;
+    // the backend wrote and committed the file(s): drop cached drafts and reload with the new episode selected
+    for (const k of [...drafts.keys()]) if (k.startsWith(`${this.p.id}|`)) drafts.delete(k);
+    this.ctx.rerender();
+  }
+
   updateHeader() {
     const dirty = this.st.dirtyIds.size > 0;
     document.getElementById('tb-title').textContent = t('腳本') + (dirty ? ' •' : '');
@@ -120,7 +132,9 @@ class Editor {
     const renders = q && (q.running || []).filter((j) => ['render', 'youtube_15x', 'bilibili', 'voiceover_tw', 'voiceover_cn', 'timeline'].includes(j.kind)
       && (j.kind === 'bilibili' ? src === 'src_cn' : (j.params && (j.params.src || 'src')) === src || j.kind.startsWith('voiceover')));
     if (renders && renders.length) b.push(h('div.banner.warn', icon('alert'), h('div.grow', t('製作中：{x}。修改會在下次執行時生效。', { x: renders.map((j) => j.label || j.kind).join('、') }))));
-    if (this.locale === 'zh-CN') b.push(h('div.banner.info', icon('info'), h('div.grow', t('zh-CN 版本由 make_cn 從 zh-TW 產生；重新執行 make_cn 會覆寫這裡的手動修改。'))));
+    if (this.locale === 'zh-CN') b.push(h('div.banner.info', icon('info'), h('div.grow', t('zh-CN 與 zh-TW 各自管理：make_cn 只會為還沒有簡體稿的集數轉換一份初稿；已存在的簡體集數不會被覆寫（除非在「製作」勾選重新轉換）。'))));
+    if (this.seq && !(this.seq.scenes || []).some((sc) => (sc.lines || []).some((l) => l.anchors && Object.keys(l.anchors).length)))
+      b.push(h('div.banner.info', icon('info'), h('div.grow', t('這一集還沒有錨點：沒有手工動畫的集數使用通用樣板，每個錨點會在念到該詞時變成一張關鍵詞卡片。'))));
     const v = this.st.validation;
     const general = v ? v.errors.filter((e) => e.seqKey === this.st.seqKey && !e.lineId) : [];
     if (general.length) b.push(h('div.banner.fail', icon('alert'), h('div.grow', general.map((e) => h('div', `${e.sceneId || ''} ${e.field || ''}：${e.message}`)))));

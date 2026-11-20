@@ -34,6 +34,16 @@ npm run render:gpu       # 1080p60 正式渲染（ANGLE/D3D11 + h264_nvenc）
 
 `render.mjs` 其他參數：`--codec hevc`（hevc_nvenc）、`--concurrency N`、`--frames a-b`、`--keep-frames`、`--allow-cpu-fallback`。
 
+## 多集（EP01、EP02、EP03…）
+
+- 每一集是 `narration.json` 的 `sequences.<epId>`（`ep` 加 2–3 位數字）。時間軸裡有的集數都會自動註冊 composition：`<EP>`（60fps）、`<EP>-30fps`、`<EP>-YT15`（例：`EP02-30fps`）。
+- 有手工動畫的集數列在 `src/episode/registry.ts` 的 `CUSTOM_ACTS`（目前只有 EP01 的 7 幕）；其他集數自動使用通用旁白樣板 `src/episode/GenericAct.tsx`：章節標題、由錨點驅動的關鍵詞卡片（念到該詞時彈出）、句子進度點，底部保留字幕區。
+- 輸出檔名一律由集數推得：`<EP>_Final.mp4`、`<EP>.srt`、`<EP>_YouTube_zh-TW.mp4`、`<EP>_Bilibili_zh-CN.mp4`。
+- 指令：`bash scripts/finalize.sh ep02`（時間軸→字幕→混音→渲染→QA）、`node scripts/render.mjs gpu --comp EP02-30fps --out EP02_Final.mp4`、`py -3.11 scripts/make_cn.py --seq ep02`、`py -3.11 scripts/mix_audio.py --seq ep02`、`py -3.11 scripts/qa_video.py EP02_Final.mp4`。
+- 繁體（`src/`）與簡體（`src_cn/`）的旁白與時間軸各自管理：`make_cn.py` 只為 src_cn 還沒有的集數轉換初稿，已存在的簡體集數與簡體時間軸不會被覆寫（`--reconvert` 才會重新轉換指定集數）。它先在暫存資料夾產生，成功後才替換 src_cn。
+- 混音：EP01 用手工音效表與逐幕配樂；其他集數用通用規則（幕間轉場音、錨點提示音、片尾鐘聲；配樂依 `scenes[].mood` 或幕的位置）。
+- 渲染續傳：`out/frames/<tag>/fingerprint.txt` 記錄原始碼＋該集時間軸的雜湊；改稿或改動畫後重新渲染會自動清除舊幀，不會新舊畫面混在一起。
+
 ## 旁白 → 時間軸 → 動畫（旁白驅動）
 
 ```

@@ -1,5 +1,5 @@
 // 渲染管線（分段、可中斷續傳、動態並行）：
-//   node scripts/render.mjs <gpu|cpu|preview> [--comp EP01] [--codec h264|hevc] [--concurrency N] [--frames a-b]
+//   node scripts/render.mjs <gpu|cpu|preview> [--comp EP01|EP02-30fps|EP02-YT15…] [--seq ep02] [--codec h264|hevc] [--concurrency N] [--frames a-b]
 //                           [--chunk 1800] [--out file] [--allow-cpu-fallback] [--skip-check] [--fresh]
 //  gpu     1920×1080 60fps：Chromium WebGL 走 ANGLE/D3D11（RTX 4050），h264_nvenc 高畫質編碼
 //  cpu     相容模式：SwiftShader 軟體 WebGL + libx264
@@ -15,6 +15,7 @@
 import {spawn, execFile} from 'node:child_process';
 import {existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import os from 'node:os';
 import {ensureBrowser, remotionBin, ROOT, run, findFfmpeg} from './lib.mjs';
 
@@ -28,7 +29,10 @@ const flag = (k) => argv.includes(`--${k}`);
 const comp = opt('comp', 'EP01');
 const SRC = opt('src', 'src'); // 例：--src src_cn（大陸簡體版）
 const MIXNAME = opt('mix', null); // 例：--mix ep01_cn
-const SPEED = comp === 'EP01-YT15' ? 1.5 : 1; // 1.5 倍速版：音訊 atempo=1.5（音調不變）
+// 集數由 composition 名稱推得：EP02 / EP02-30fps / EP02-YT15 / EP02-Act03 → ep02（--seq 可覆寫）
+const EP_COMP = /^(EP\d{2,3})(?:-(30fps|YT15|Act\d+))?$/i.exec(comp);
+const VARIANT = EP_COMP ? (EP_COMP[2] ?? '').toLowerCase() : null; // '' | '30fps' | 'yt15' | 'actNN'
+const SPEED = VARIANT === 'yt15' ? 1.5 : 1; // 1.5 倍速版：音訊 atempo=1.5（音調不變）
 const codec = opt('codec', 'h264');
 const isPreview = mode === 'preview';
 const CHUNK = Number(opt('chunk', 1800));
@@ -66,6 +70,22 @@ if (!findFfmpeg()) {
   process.exit(1);
 }
 
+// 取得總幀數
+const tlPath = join(ROOT, SRC, 'data', 'timeline.generated.json');
+if (!existsSync(tlPath)) {
+  console.error(`[錯誤] 找不到 ${SRC}/data/timeline.generated.json。${SRC === 'src_cn' ? '請先執行 make_cn.py 產生簡體版原始碼，再建立簡體時間軸。' : '請先執行 build_timeline.py。'}`);
+  process.exit(1);
+}
+const tlAll = JSON.parse(readFileSync(tlPath, 'utf8'));
+const seqId = opt('seq', EP_COMP ? EP_COMP[1].toLowerCase() : comp === 'ArtTest' ? 'arttest' : null);
+if (seqId && !tlAll[seqId] && (EP_COMP || comp === 'ArtTest')) {
+  console.error(`[錯誤] ${SRC}/data/timeline.generated.json 裡沒有 ${seqId} 的時間軸。請先產生配音並執行 build_timeline.py --seq ${seqId}${SRC === 'src' ? '' : ' --src ' + SRC}。`);
+  process.exit(1);
+}
+const FPS_OUT = VARIANT === '30fps' || VARIANT === 'yt15' ? 30 : 60;
+const seqFrames = seqId && tlAll[seqId] ? tlAll[seqId].totalFrames : null;
+const totalFrames =
+  seqFrames == null ? null : comp === 'ArtTest' || VARIANT === '' ? seqFrames : VARIANT === '30fps' ? Math.ceil(seqFrames / 2) : VARIANT === 'yt15' ? Math.ceil(seqFrames / 3) : null;
 // ---- 1) bundle（只做一次）----
 const t0 = Date.now();
 const BUILD = SRC === 'src' ? 'build' : `build-${SRC}`;
@@ -74,11 +94,6 @@ if (b.code !== 0) {
   console.error(b.out);
   process.exit(1);
 }
-// 取得總幀數
-const tlAll = JSON.parse(readFileSync(join(ROOT, SRC, 'data', 'timeline.generated.json'), 'utf8'));
-const seqId = comp.startsWith('EP01') ? 'ep01' : 'arttest';
-const FPS_OUT = comp === 'EP01-30fps' || comp === 'EP01-YT15' ? 30 : 60;
-const totalFrames = comp === 'EP01' || comp === 'ArtTest' ? tlAll[seqId].totalFrames : comp === 'EP01-30fps' ? Math.ceil(tlAll.ep01.totalFrames / 2) : comp === 'EP01-YT15' ? Math.ceil(tlAll.ep01.totalFrames / 3) : null;
 const [rangeA, rangeB] = opt('frames', null)?.split('-').map(Number) ?? [0, (totalFrames ?? Number(opt('total', 0))) - 1];
 if (!(rangeB >= rangeA)) {
   console.error('無法得知總幀數，請用 --frames a-b 指定。');
@@ -88,7 +103,33 @@ if (!(rangeB >= rangeA)) {
 const tag = `${SRC === 'src' ? '' : SRC + '-'}${comp}-${isPreview ? '720p' : '1080p'}-${useGpu ? 'gpu' : 'cpu'}`;
 const frameDir = join(ROOT, 'out', 'frames', tag);
 if (flag('fresh')) rmSync(frameDir, {recursive: true, force: true});
+// 續傳安全：幀檔只在「同一份原始碼＋同一條時間軸」時沿用；改稿或改動畫後自動清除舊幀，避免新舊畫面混在一起
+const fingerprint = (() => {
+  const h = createHash('sha256');
+  const walk = (d) => {
+    for (const e of readdirSync(d, {withFileTypes: true}).sort((x, y) => (x.name < y.name ? -1 : 1))) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(tsx?|json|css)$/.test(e.name) && !/^(timeline\.generated|narration)\.json$/.test(e.name)) h.update(p.slice(ROOT.length)).update(readFileSync(p));
+    }
+  };
+  walk(join(ROOT, SRC));
+  const seqTl = seqId && tlAll[seqId] ? {...tlAll[seqId], mix: undefined} : null; // 混音路徑不影響畫面
+  const narP = join(ROOT, SRC, 'data', 'narration.json');
+  const nar = existsSync(narP) ? JSON.parse(readFileSync(narP, 'utf8')).sequences?.[seqId] ?? null : null;
+  h.update(JSON.stringify(seqTl)).update(JSON.stringify(nar?.title ?? null)).update(comp).update(isPreview ? 'p' : 'f');
+  return h.digest('hex').slice(0, 16);
+})();
+const fpFile = join(frameDir, 'fingerprint.txt');
+if (existsSync(frameDir) && readdirSync(frameDir).some((f) => f.endsWith('.jpeg'))) {
+  const old = existsSync(fpFile) ? readFileSync(fpFile, 'utf8').trim() : null;
+  if (old !== null && old !== fingerprint) {
+    console.log(`  原始碼或時間軸已變更（${old} → ${fingerprint}），清除舊幀後重新渲染`);
+    rmSync(frameDir, {recursive: true, force: true});
+  }
+}
 mkdirSync(frameDir, {recursive: true});
+writeFileSync(fpFile, fingerprint);
 const outFile = opt('out', join(ROOT, 'out', isPreview ? `${comp}-preview-720p.mp4` : `${comp}-${useGpu ? 'gpu' : 'cpu'}-1080p60.mp4`));
 const fname = (f) => join(frameDir, `f${String(f).padStart(6, '0')}.jpeg`);
 
@@ -198,8 +239,8 @@ if (waitFile) {
   console.log(existsSync(join(ROOT, waitFile)) ? '混音已完成，開始編碼' : '⚠ 等待混音逾時，仍以現有混音檔編碼');
 }
 phase = 'encode';
-const mix = MIXNAME ? join(ROOT, 'public', 'assets', 'audio', 'mix', `${MIXNAME}.wav`) : tlAll[seqId]?.mix ? join(ROOT, 'public', tlAll[seqId].mix) : null;
-const audioArgs = mix && existsSync(mix) && (comp === 'ArtTest' || comp.startsWith('EP01')) ? ['-ss', ((rangeA / FPS_OUT) * SPEED).toFixed(4), '-i', mix] : [];
+const mix = MIXNAME ? join(ROOT, 'public', 'assets', 'audio', 'mix', `${MIXNAME}.wav`) : seqId && tlAll[seqId]?.mix ? join(ROOT, 'public', tlAll[seqId].mix) : null;
+const audioArgs = mix && existsSync(mix) && (comp === 'ArtTest' || EP_COMP) ? ['-ss', ((rangeA / FPS_OUT) * SPEED).toFixed(4), '-i', mix] : [];
 if (!audioArgs.length) console.log('（注意：沒有可用的混音檔，這次輸出不含音軌）');
 const q = isPreview;
 const video = useGpu

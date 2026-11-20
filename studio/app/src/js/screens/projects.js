@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { call, hasTauri, NotReady } from '../api.js';
 import { h, mount, btn, empty, loading, errorBox, notReady, sheet, field, toast, toastError, confirmSheet, fmtBytes, fmtTime, fmtAgo, tag, openPath } from '../ui.js';
 import { store, refreshProjects, setProject, currentProject } from '../store.js';
+import { newProjectSheet } from '../episodes.js';
 
 export default {
   id: 'projects', title: '專案', icon: 'folder',
@@ -11,7 +12,11 @@ export default {
     mount(ctx.content, root);
     const addBtn = btn(t('註冊專案資料夾'), { kind: 'primary', icon: 'plus', onClick: () => registerSheet(ctx) });
     const refresh = btn('', { icon: 'refresh', aria: t('重新整理'), onClick: () => ctx.rerender() });
-    ctx.toolbar(t('專案'), '', [refresh, addBtn]);
+    const newBtn = btn(t('建立新專案'), { icon: 'folder', onClick: async () => {
+      const r = await newProjectSheet(store.projectId);
+      if (r && r.project) { await refreshProjects(); setProject(r.project.id); ctx.rerender(); }
+    } });
+    ctx.toolbar(t('專案'), '', [refresh, newBtn, addBtn]);
 
     if (!hasTauri) { mount(root, notReady('project_list', t('目前不是在 Studio 應用程式內執行。'))); return; }
 
@@ -63,7 +68,7 @@ async function renderDetail(ctx, box, p) {
   const g = info.git || {};
   const totalLines = (info.episodes || []).reduce((a, e) => a + (e.lines || 0), 0);
   const stats = h('div.grid4',
-    stat(t('集數／版本'), (info.episodes || []).length),
+    stat(t('集數'), new Set((info.episodes || []).filter((e) => /^ep\d{2,3}$/.test(e.seqKey)).map((e) => e.seqKey)).size),
     stat(t('句數（全部）'), totalLines),
     stat(t('輸出檔案'), (info.outputs || []).length),
     stat(t('未提交的修改'), g.isRepo ? (g.dirty || []).length : '—'));

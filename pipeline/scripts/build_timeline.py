@@ -46,8 +46,11 @@ def norm(s: str) -> str:
 
 
 def ffprobe_duration(p: Path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)],
-                       capture_output=True, text=True)
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        raise SystemExit("[錯誤] 找不到 ffprobe。請安裝 ffmpeg（含 ffprobe）並加入 PATH，例如：winget install Gyan.FFmpeg")
     if r.returncode != 0 or not r.stdout.strip():
         raise SystemExit(f"[錯誤] 無法讀取音檔：{p}")
     return float(r.stdout.strip())
@@ -214,6 +217,8 @@ def main() -> int:
     a = ap.parse_args()
     data = json.loads(NARRATION.read_text(encoding="utf-8"))
     existing = json.loads(OUT_JSON.read_text(encoding="utf-8")) if OUT_JSON.exists() else {}
+    if a.seq != "all" and a.seq not in data["sequences"]:
+        raise SystemExit(f"[錯誤] {NARRATION.relative_to(ROOT)} 沒有 sequences.{a.seq}（現有：{'、'.join(data['sequences'])}）")
     seqs = data["sequences"] if a.seq == "all" else {a.seq: data["sequences"][a.seq]}
     SRT_DIR.mkdir(parents=True, exist_ok=True)
     for sid, seq in seqs.items():

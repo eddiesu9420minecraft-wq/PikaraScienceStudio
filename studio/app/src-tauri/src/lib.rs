@@ -1,8 +1,10 @@
 //! Pikara Science Studio — Rust core. Tauri commands are listed in studio/app/API.md.
 
 pub mod claude;
+pub mod cli;
 pub mod db;
 pub mod doctor;
+pub mod episodes;
 pub mod gitops;
 pub mod i18n;
 pub mod gpu;
@@ -12,6 +14,7 @@ pub mod narration;
 pub mod project;
 pub mod prompt;
 pub mod queue;
+pub mod scaffold;
 pub mod selftest;
 pub mod util;
 
@@ -95,6 +98,70 @@ async fn project_remove(st: State<'_, AppState>, project_id: String) -> R<()> {
 async fn project_info(st: State<'_, AppState>, project_id: String) -> R<Value> {
     let p = db::project_get(&st.db.lock().unwrap(), &project_id)?;
     blocking(move || Ok(project::info(&p))).await
+}
+
+// ------------------------------------------------------------------ episodes & new project (API v1.2)
+
+#[tauri::command]
+async fn episode_list(st: State<'_, AppState>, project_id: String) -> R<Value> {
+    let root = root_of(&st.db, &project_id)?;
+    blocking(move || Ok(episodes::list(&root))).await
+}
+
+pub fn create_episode(root: &Path, title: &str, episode_id: Option<&str>, scene_title: Option<&str>, first_line: Option<&str>, locales: Option<Vec<String>>) -> R<Value> {
+    let locales = locales.unwrap_or_else(|| vec!["zh-TW".into()]);
+    for l in &locales {
+        narration::rel_path(l)?;
+    }
+    episodes::create(root, &episodes::NewEpisode { id: episode_id, title, scene_title, first_line, locales })
+}
+
+#[tauri::command]
+async fn episode_create(
+    st: State<'_, AppState>,
+    project_id: String,
+    title: String,
+    episode_id: Option<String>,
+    scene_title: Option<String>,
+    first_line: Option<String>,
+    locales: Option<Vec<String>>,
+) -> R<Value> {
+    let root = root_of(&st.db, &project_id)?;
+    blocking(move || create_episode(&root, &title, episode_id.as_deref(), scene_title.as_deref(), first_line.as_deref(), locales)).await
+}
+
+pub fn create_project(db: &Db, dest: &str, title: &str, template: Option<&Path>, link_tools: bool) -> R<Value> {
+    let dest = PathBuf::from(dest.trim());
+    if dest.as_os_str().is_empty() || !dest.is_absolute() {
+        return Err("請提供新專案資料夾的完整路徑（例如 D:\\影片\\我的 科普）".into());
+    }
+    let tpl = scaffold::find_template(template, None)?;
+    let r = scaffold::create(&scaffold::NewProject { dest: &dest, title, template: &tpl, link_tools })?;
+    let p = register_project(db, &dest.to_string_lossy())?;
+    Ok(json!({"project": p, "scaffold": r}))
+}
+
+#[tauri::command]
+async fn project_create(
+    app: tauri::AppHandle,
+    st: State<'_, AppState>,
+    dest: String,
+    title: String,
+    template_project_id: Option<String>,
+    template_path: Option<String>,
+    link_tools: Option<bool>,
+) -> R<Value> {
+    let tpl: Option<PathBuf> = match (template_path, template_project_id) {
+        (Some(t), _) if !t.trim().is_empty() => Some(PathBuf::from(t)),
+        (_, Some(id)) => Some(root_of(&st.db, &id)?),
+        _ => None,
+    };
+    let db = st.db.clone();
+    let r = blocking(move || create_project(&db, &dest, &title, tpl.as_deref(), link_tools.unwrap_or(true))).await?;
+    if let Some(root) = r["project"]["rootPath"].as_str() {
+        let _ = app.asset_protocol_scope().allow_directory(root, true);
+    }
+    Ok(r)
 }
 
 // ------------------------------------------------------------------ narration
@@ -442,7 +509,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info, settings_get, settings_set,
-            project_list, project_register, project_remove, project_info,
+            project_list, project_register, project_remove, project_info, project_create, episode_list, episode_create,
             narration_read, narration_validate, narration_save,
             prompt_tasks, prompt_build,
             claude_detect, claude_install_skill, claude_run, claude_worktrees, claude_worktree_diff, claude_worktree_merge, claude_worktree_discard,

@@ -1,8 +1,19 @@
-# Pikara Science Studio — Frontend ⇄ Rust API (v1)
+# Pikara Science Studio — Frontend ⇄ Rust API (v1.2)
 
-Status: **stable v1**. Changes will be listed here in the changelog below.
+Status: **stable v1.2** (additive over v1; v1 callers keep working). Changes will be listed here in the changelog below.
 
 ## Changelog
+- v1.2 (2026-11-20, multi-episode; additive — nothing removed or renamed):
+  - **Episodes**: an episode is `sequences.<epId>` in narration.json (`epId` = `ep` + 2–3 digits, e.g. `ep02`). zh-TW (`src/`) and zh-CN (`src_cn/`) are managed independently.
+  - New commands `episode_list`, `episode_create`, `project_create` (§2a).
+  - Every job kind that works on an episode takes **`episode`** (default `"ep01"`); the v1 name `seq` is still accepted and wins when both are given. Output names / compositions are derived from it: `<EP>_Final.mp4`, `<EP>.srt`, `<EP>_YouTube_zh-TW.mp4`, `<EP>_Bilibili_zh-CN.mp4`, comps `<EP>`, `<EP>-30fps`, `<EP>-YT15` (`<EP>` = upper-case id). Invalid ids are rejected at enqueue with a zh-TW message.
+  - `render`: `comp` / `out` default to `<EP>-30fps` / `<EP>_Final.mp4`; new `chunk` param (frames per resumable chunk). `qa`: `video` defaults to `<EP>_Final.mp4`.
+  - New kind **`final_tw`** `{ episode, out? }` (GPU, 5 steps): timeline → copy `out\subtitles\<ep>.srt` to `<EP>.srt` → mix → render `<EP>-30fps` → qa.
+  - `make_cn` `{ episode?, reconvert? }` **no longer overwrites zh-CN narration**: existing src_cn episodes and the src_cn timeline are kept; only episodes missing from src_cn are converted (`reconvert=true` re-converts the given episode). `bilibili` runs `make_cn --seq <ep>`.
+  - Job labels get an `"<EP> · "` prefix when an episode is given (`labelCn` follows).
+  - **Preflight** before a job starts (not at enqueue): missing ffmpeg/ffprobe, missing video for `qa`, unknown episode, missing `src_cn`, missing CosyVoice Python → the job is marked `failed` with a complete zh-TW sentence in `error`; nothing is spawned. (`job_retry` after fixing.)
+  - Test-only env `PIKARA_STUDIO_TEST_HIDE_TOOLS=ffprobe,ffmpeg` makes Studio behave as if those tools were not installed (robustness tests); never set in normal use.
+  - Headless CLI for the same backend: `PikaraScienceStudio.exe --cli <command>` (see `src-tauri/src/cli.rs`): `episode-list`, `episode-new`, `validate`, `project-new`, `doctor`, `enqueue`, `run-queue`, `jobs`, `job-retry`, `job-cancel`, `recover`; `--data <dir>` isolates the queue DB.
 - v1.1 (2026-11-20, additive only — nothing removed or renamed):
   - `job_kinds[]` items gain `labelKey` (= kind) and `labelCn` (Simplified label or null); `Job` gains `labelCn` (null for free-form labels such as render/qa/custom with parameters).
   - Doctor `Check` gains `labelKey` (= id) and `labelCn`.
@@ -65,6 +76,26 @@ ProjectInfo = {
 }
 GitStatus = { isRepo: boolean, branch: string|null, head: string|null, headSubject: string|null,
               dirty: [{ code: string, path: string }] }   // code = porcelain XY, e.g. " M", "??"
+```
+
+## 2a. Episodes & new project (v1.2)
+
+| command | args | returns |
+|---|---|---|
+| `episode_list` | `{ projectId }` | `Episode[]` sorted by number (union of zh-TW and zh-CN narration) |
+| `episode_create` | `{ projectId, title, episodeId?, sceneTitle?, firstLine?, locales? = ["zh-TW"] }` | `{ episodeId, title, files: [{ locale, path, sha256, commit, commitError }], compositions: string[], outputs, next }` |
+| `project_create` | `{ dest, title, templateProjectId?, templatePath?, linkTools? = true }` | `{ project: Project, scaffold: { path, title, template, files, bytes, tools, git: { init, commit, error }, next } }` |
+
+- `episode_create` picks the next free `epNN` when `episodeId` is omitted, refuses an id that already exists in any requested locale (never overwrites), inserts a one-scene / one-line skeleton (`scenes[0].id = "s01"`, line id `<ep>-01`, `voiceEngine = "cosyvoice"`), validates the whole document with the `narration_validate` rules, writes atomically and commits only that file (`Studio: new episode <ep>（<locale>）`).
+- `project_create` copies the pipeline from the template (`templatePath`, else the project `templateProjectId`, else `<exe dir>\pipeline-template`): `scripts/` (minus `export_release.py`), `src/`, `public/fonts/`, `package.json`, `package-lock.json`, `tsconfig.json`, `remotion.config.ts`, `.gitignore`. Content is reset (narration = one `ep01` skeleton with `title`, empty timeline, no hand-made acts → every episode uses the generic template). `linkTools` creates a directory junction `tools\CosyVoice` → the template's install (no 9 GB copy). Then `git init` + first commit, and the folder is registered (`project_register`). `dest` must be absolute and not exist or be empty; Chinese characters and spaces are fine. `node_modules` is not copied (doctor → `npm_install`).
+
+```ts
+Episode = { id: "ep02", comp: "EP02", title: string|null,
+  locales: { "zh-TW"?: EpisodeLocale, "zh-CN"?: EpisodeLocale },
+  outputs: { final, srt, youtube, youtubeSrt, bilibili, bilibiliSrt },   // default file names
+  present: { final: string|null, ... } }                                  // absolute path when the file exists
+EpisodeLocale = { locale, title, scenes: number, lines: number, voiced: number /* lines with an mp3 */,
+  timeline: null | { totalFrames: number, duration: number, mix: string|null } }
 ```
 
 ## 3. Narration (content editor)
@@ -154,16 +185,17 @@ Fix ids: `npm_install` (job), `remotion_browser_ensure` (job), `create_folders` 
 | `queue_status` | – | `QueueStatus` |
 | `gpu_external_status` | – | `ExternalGpu` |
 
-Job kinds (`params`):
-- `voiceover_tw` `{ seq="ep01", only?: string (space separated ids), force?: bool, speed?: number, targetCps?: number }` — GPU
-- `voiceover_cn` `{ seq="ep01", only?, force?, targetCps=5.4 }` — GPU (src_cn narration, voiceover_cosy_cn, reference_cn)
-- `timeline` `{ seq="ep01", src="src", estimate?: bool }` — CPU (src_cn → voice dir voiceover_cosy_cn, srt name `ep01_cn`)
-- `mix` `{ seq="ep01", src="src" }` — CPU
-- `render` `{ comp="EP01-30fps", mode="gpu"|"cpu"|"preview", src="src", out="EP01_Final.mp4", mix?: string, fps?: number, frames?: "a-b", concurrency?: number }` — GPU (`fps` is informational; the comp defines fps)
-- `qa` `{ video="EP01_Final.mp4", seq="ep01", src="src", speed?: number }` — CPU
-- `make_cn` `{}` — CPU (regenerates src_cn from src — overwrites src_cn!)
-- `youtube_15x` `{ out="EP01_YouTube_zh-TW.mp4" }` — GPU, steps: scale SRT 1.5× → render EP01-YT15
-- `bilibili` `{ out="EP01_Bilibili_zh-CN.mp4" }` — GPU, steps: make_cn → voiceover_cn → timeline(src_cn) → mix(src_cn) → render EP01-30fps --src src_cn → qa
+Job kinds (`params`) — `episode` defaults to `"ep01"` (v1 `seq` still accepted); `<EP>` = upper-case episode id:
+- `voiceover_tw` `{ episode, only?: string (space separated ids), force?: bool, speed?: number, targetCps?: number }` — GPU
+- `voiceover_cn` `{ episode, only?, force?, targetCps=5.4 }` — GPU (src_cn narration, voiceover_cosy_cn, reference_cn)
+- `timeline` `{ episode, src="src", estimate?: bool }` — CPU (src_cn → voice dir voiceover_cosy_cn, srt name `<ep>_cn`)
+- `mix` `{ episode, src="src" }` — CPU (episodes other than ep01 use the generic mood/SFX rules of mix_audio.py)
+- `render` `{ episode, comp="<EP>-30fps", mode="gpu"|"cpu"|"preview", src="src", out="<EP>_Final.mp4", mix?: string, fps?: number, frames?: "a-b", chunk?: number, concurrency?: number }` — GPU (`fps` is informational; the comp defines fps)
+- `qa` `{ episode, video="<EP>_Final.mp4", src="src", speed?: number }` — CPU
+- `make_cn` `{ episode?, reconvert?: bool }` — CPU (regenerates src_cn code; keeps existing zh-CN narration and timeline per episode)
+- `final_tw` `{ episode, out="<EP>_Final.mp4" }` — GPU, steps: timeline → copy SRT to `<EP>.srt` → mix → render `<EP>-30fps` → qa
+- `youtube_15x` `{ episode, out="<EP>_YouTube_zh-TW.mp4" }` — GPU, steps: scale `<EP>.srt` 1.5× → render `<EP>-YT15`
+- `bilibili` `{ episode, out="<EP>_Bilibili_zh-CN.mp4" }` — GPU, steps: make_cn --seq → voiceover_cn → timeline(src_cn) → copy SRT → mix(src_cn) → render `<EP>-30fps --src src_cn` → qa
 - `custom` `{ command: string, gpu?: bool }` — runs `cmd /c <command>` in the project root
 - `claude` (created by `claude_run` / `job_analyse_with_claude`), `doctor_fix` (created by `doctor_fix`)
 

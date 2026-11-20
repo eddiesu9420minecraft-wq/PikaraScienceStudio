@@ -137,11 +137,25 @@ pub fn which(name: &str) -> Option<String> {
     o.stdout.lines().map(|l| l.trim()).find(|l| !l.is_empty()).map(|s| s.to_string())
 }
 
+/// TEST ONLY: `PIKARA_STUDIO_TEST_HIDE_TOOLS=ffprobe,ffmpeg` makes Studio behave as if these tools were not
+/// installed (tool() returns None and job PATHs drop every folder that contains them). Used by the robustness
+/// tests instead of uninstalling ffmpeg; never set in normal use.
+pub fn hidden_tools() -> Vec<String> {
+    std::env::var("PIKARA_STUDIO_TEST_HIDE_TOOLS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 /// PATH with the configured Node directory in front (pipeline scripts call `node`, `npx`).
 pub fn path_with(dirs: &[&str]) -> String {
     let cur = std::env::var("PATH").unwrap_or_default();
-    let mut parts: Vec<String> = dirs.iter().filter(|d| !d.is_empty()).map(|d| d.to_string()).collect();
-    parts.push(cur);
+    let hidden = hidden_tools();
+    let keep = |d: &str| !hidden.iter().any(|t| Path::new(d).join(format!("{t}.exe")).exists());
+    let mut parts: Vec<String> = dirs.iter().filter(|d| !d.is_empty() && keep(d)).map(|d| d.to_string()).collect();
+    parts.extend(cur.split(';').filter(|d| !d.is_empty() && keep(d)).map(String::from));
     parts.join(";")
 }
 
@@ -182,6 +196,9 @@ pub fn tail_lines(text: &str, n: usize) -> String {
 /// Absolute path of an external tool (ffmpeg, ffprobe…). `Command::new("ffmpeg")` alone fails for WinGet
 /// installs on some PATH layouts, so resolve via where.exe, then the WinGet Links / Packages folders. Cached.
 pub fn tool(name: &str) -> Option<String> {
+    if hidden_tools().iter().any(|t| t == &name.to_ascii_lowercase()) {
+        return None;
+    }
     static CACHE: once_cell::sync::Lazy<std::sync::Mutex<std::collections::HashMap<String, String>>> =
         once_cell::sync::Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
     if let Some(p) = CACHE.lock().unwrap().get(name) {

@@ -23,7 +23,11 @@
     "render:arttest": "node scripts/render.mjs gpu --comp ArtTest --out preview.mp4",
     "thumbnail": "node scripts/stills.mjs 0 EP01-Thumbnail src/entries/thumbnail.tsx && ffmpeg -y -loglevel error -i out/stills/EP01-Thumbnail-00000.png -vf scale=1280:720:flags=lanczos EP01_Thumbnail.png",
     "qa": "py -3.11 scripts/qa_video.py EP01_Final.mp4 --seq ep01",
-    "srt": "py -3.11 scripts/build_timeline.py --seq ep01 --estimate && node -e \"require('fs').copyFileSync('out/subtitles/ep01.srt','EP01.srt')\""
+    "srt": "py -3.11 scripts/build_timeline.py --seq ep01 --estimate && node -e \"require('fs').copyFileSync('out/subtitles/ep01.srt','EP01.srt')\"",
+    "final:ep": "bash scripts/finalize.sh",
+    "qa:ep": "py -3.11 scripts/qa_video.py",
+    "render:ep": "node scripts/render.mjs gpu --comp",
+    "make_cn": "py -3.11 scripts/make_cn.py"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",

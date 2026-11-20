@@ -14,3 +14,4 @@ export type Timeline = {
 
 const all = raw as unknown as Record<string, Timeline>;
 export const getTimeline = (id: string): Timeline | null => all[id] ?? null;
+export const timelineIds = (): string[] => Object.keys(all);

@@ -209,7 +209,8 @@ mod tests {
 
     #[test]
     fn skill_is_real_content() {
-        let s = skill_text();
+        // Git 在 Windows 可能以 CRLF 取出資源檔；內容比對前先正規化換行
+        let s = skill_text().replace("\r\n", "\n");
         assert!(s.starts_with("---\nname: pikara-video"));
         assert!(s.contains("scripts/render.mjs"));
         assert!(s.contains("narration.json"));

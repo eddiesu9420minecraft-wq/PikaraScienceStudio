@@ -4,8 +4,9 @@ import { call, hasTauri } from '../api.js';
 import { h, mount, btn, seg, loading, errorBox, notReady, needProject, toast, toastError, confirmSheet, field, tag, toggle } from '../ui.js';
 import { icon } from '../icons.js';
 import { currentProject, store, on } from '../store.js';
+import { currentEpisode, setEpisode, listEpisodes, newEpisodeSheet } from '../episodes.js';
 
-const PIPELINES = ['youtube_15x', 'bilibili'];
+const PIPELINES = ['final_tw', 'youtube_15x', 'bilibili'];
 const HIDDEN = new Set(['claude', 'doctor_fix']);
 const STEP_ORDER = ['make_cn', 'voiceover_tw', 'voiceover_cn', 'timeline', 'mix', 'render', 'qa', 'custom'];
 const formState = {}; // kind -> params (persist while app is open)
@@ -18,16 +19,21 @@ export default {
     if (!p) { mount(ctx.content, h('div.page', needProject())); return; }
     ctx.toolbar(t('製作'), p.name, [btn(t('前往佇列'), { icon: 'queue', onClick: () => ctx.go('queue') })]);
     mount(ctx.content, h('div.page', loading(6)));
-    let kinds, ext = null;
+    let kinds, ext = null, eps = null;
     try { kinds = await call('job_kinds'); } catch (e) { if (ctx.alive()) mount(ctx.content, h('div.page', errorBox(e, () => ctx.rerender()))); return; }
     try { ext = await call('gpu_external_status'); } catch {}
+    try { eps = await listEpisodes(p.id); } catch {}
     if (!ctx.alive()) return;
-    new Production(ctx, p, kinds, ext).mount();
+    new Production(ctx, p, kinds, ext, eps).mount();
   },
 };
 
 class Production {
-  constructor(ctx, p, kinds, ext) { Object.assign(this, { ctx, p, kinds, ext }); }
+  constructor(ctx, p, kinds, ext, eps) {
+    Object.assign(this, { ctx, p, kinds, ext, eps: eps || [] });
+    const ids = this.eps.map((e) => e.id);
+    this.ep = ids.includes(currentEpisode(p.id)) ? currentEpisode(p.id) : (ids[0] || 'ep01');
+  }
   kind(k) { return this.kinds.find((x) => x.kind === k); }
 
   mount() {
@@ -35,14 +41,39 @@ class Production {
     const pipes = PIPELINES.map((k) => this.kind(k)).filter(Boolean);
     const steps = this.kinds.filter((k) => !PIPELINES.includes(k.kind) && !HIDDEN.has(k.kind) && !k.kind.startsWith('voiceover'))
       .sort((a, b) => idx(a.kind) - idx(b.kind));
+    this.epBar = h('div');
     mount(this.ctx.content, h('div.page',
+      this.epBar,
       this.gpuBanner,
       h('section.section', h('div.section-head', h('h2.title2', t('一鍵製作')), h('span.caption.muted', t('整條管線依序執行；GPU 步驟會等待 GPU 租約。'))),
         pipes.length ? h('div.grid2', pipes.map((k) => this.card(k, true))) : h('div.banner.warn', icon('alert'), h('div.grow', t('後端沒有提供一鍵管線（youtube_15x／bilibili）。')))),
       h('section.section', h('div.section-head', h('h2.title2', t('配音'))), this.voiceCard()),
       h('section.section', h('div.section-head', h('h2.title2', t('單一步驟'))), h('div.grid2', { style: { alignItems: 'start' } }, steps.map((k) => this.card(k, false))))));
+    this.paintEpisode();
     this.paintGpu();
     this.ctx.cleanup(on('queue', (q) => { if (q && q.external) { this.ext = q.external; this.paintGpu(); } }));
+  }
+
+  // Episode selector: every job below is enqueued with params.episode = this.ep (API v1.2).
+  paintEpisode() {
+    const sel = h('select.select', { 'aria-label': t('集數'), style: { width: '320px' } },
+      (this.eps.length ? this.eps : [{ id: 'ep01', title: '' }]).map((e) => h('option', { value: e.id, selected: e.id === this.ep ? true : null }, `${e.comp || e.id.toUpperCase()} — ${e.title || ''}`)));
+    sel.addEventListener('change', () => { this.ep = sel.value; setEpisode(this.p.id, this.ep); this.paintEpisode(); });
+    const e = this.eps.find((x) => x.id === this.ep);
+    const loc = (l) => (e && e.locales && e.locales[l]) || null;
+    const stat = (l) => {
+      const x = loc(l); if (!x) return h('span.muted', `${l}：${t('沒有旁白')}`);
+      return h('span', `${l}：${t('{s} 段・{n} 句・已配音 {v}', { s: x.scenes, n: x.lines, v: x.voiced })}・`, x.timeline ? h('span.ok-text', t('時間軸 {f} 幀', { f: x.timeline.totalFrames })) : h('span.warn-text', t('尚無時間軸')));
+    };
+    const outs = e ? Object.entries(e.outputs || {}).filter(([k]) => !/Srt$/.test(k)).map(([k, f]) => h('span.mono', { class: e.present && e.present[k] ? 'ok-text' : 'muted', title: e.present && e.present[k] ? t('已存在') : t('尚未產生') }, f)) : [];
+    const newEp = btn(t('新增集數'), { small: true, icon: 'plus', onClick: async () => {
+      const r = await newEpisodeSheet(this.p.id, this.eps);
+      if (r) { this.ctx.go('script'); }
+    } });
+    mount(this.epBar, h('div.panel.panel-body.col', { style: { gap: '6px' } },
+      h('div.row.wrap', h('span.headline', t('集數')), sel, newEp, h('div.grow'), h('span.caption.muted', t('下方所有工作都會套用這一集（參數 episode）。'))),
+      e ? h('div.row.wrap.caption', { style: { gap: '16px' } }, stat('zh-TW'), stat('zh-CN')) : null,
+      outs.length ? h('div.row.wrap.caption', { style: { gap: '12px' } }, h('span.muted', t('輸出：')), outs) : null));
   }
 
   paintGpu() {
@@ -59,11 +90,11 @@ class Production {
 
   card(k, big) {
     const params = formState[k.kind] || (formState[k.kind] = defaults(k));
-    const form = h('div.col', k.params.map((pd) => paramField(pd, params)));
+    const form = h('div.col', k.params.filter((pd) => pd.name !== 'episode').map((pd) => paramField(pd, params)));
     const enq = btn(t('加入佇列'), { kind: big ? 'primary' : '', icon: 'plus', onClick: () => this.enqueue(k, params, enq) });
     return h('div.panel.panel-body.col',
       h('div.row', h('div.headline.grow', k.label || k.kind), resTag(k.resource), h('span.mono.caption.muted', k.kind)),
-      k.kind === 'make_cn' ? h('div.banner.warn', icon('alert'), h('div.grow', t('會從 src 重新產生整個 src_cn，覆寫 src_cn 的手動修改。'))) : null,
+      k.kind === 'make_cn' ? h('div.banner.info', icon('info'), h('div.grow', t('重新產生 src_cn 的程式碼；簡體旁白與時間軸逐集保留，只為還沒有簡體稿的集數轉換初稿（勾選 reconvert 才會覆寫這一集）。'))) : null,
       k.kind === 'custom' ? h('div.caption.muted', t('在專案根目錄以 cmd /c 執行任意指令（進階）。')) : null,
       k.params.length ? form : h('div.caption.muted', t('不需要參數')),
       h('div.row', h('div.grow'), enq));
@@ -82,7 +113,7 @@ class Production {
       const enq = btn(t('加入佇列'), { kind: 'primary', icon: 'plus', onClick: () => this.enqueue(k, params, enq) });
       mount(body,
         h('div.row', h('div.headline.grow', k.label || k.kind), resTag(k.resource), h('span.mono.caption.muted', k.kind)),
-        h('div.grid2', k.params.map((pd) => paramField(pd, params))),
+        h('div.grid2', k.params.filter((pd) => pd.name !== 'episode').map((pd) => paramField(pd, params))),
         h('div.row', h('div.caption.muted.grow', st.engine === 'cosy' ? t('本機 CosyVoice 3：需要 GPU（約 2–3 GB VRAM），已產生的句子會自動跳過（除非勾選強制）。') : ''), enq));
     };
     const engines = seg([
@@ -102,6 +133,7 @@ class Production {
   async enqueue(k, params, button) {
     const clean = {};
     for (const pd of k.params) {
+      if (pd.name === 'episode') { clean.episode = this.ep; continue; }
       const v = params[pd.name];
       if (v === '' || v == null) { if (pd.required) { toast(t('缺少必填參數：{x}', { x: pd.name }), 'warn'); return; } continue; }
       clean[pd.name] = v;
@@ -109,7 +141,7 @@ class Production {
     const gpu = k.resource === 'gpu';
     const ext = this.ext;
     const ok = await confirmSheet({
-      title: t('加入佇列：{x}', { x: k.label || k.kind }),
+      title: t('加入佇列：{x}', { x: `${this.ep.toUpperCase()} · ${k.label || k.kind}` }),
       text: gpu ? t('這是 GPU 工作，會等待 GPU 租約；GPU 被其他程式佔用時會停在「等待資源」。') : t('這是 {r} 工作，佇列有空位時就會開始。', { r: k.resource.toUpperCase() }),
       detail: JSON.stringify({ kind: k.kind, params: clean }, null, 2) + (gpu && ext && ext.busy ? `\n\n⚠ ${t('GPU 目前被外部程式使用')}：${(ext.reasons || []).join('；')}` : ''),
       confirmLabel: t('加入佇列'),

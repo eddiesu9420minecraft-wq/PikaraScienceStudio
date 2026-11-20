@@ -4,7 +4,7 @@ Windows 桌面工具（Tauri 2），把 Pikara Science 的科普影片製作流�
 
 ## 下載與執行
 
-- 安裝程式：`dist/Pikara Science Studio_0.1.0_x64-setup.exe`
+- 安裝程式：`dist/Pikara Science Studio_0.1.1_x64-setup.exe`
 - 免安裝：`dist/PikaraScienceStudio.exe`
 - 自我檢查（不開視窗，輸出 JSON）：`PikaraScienceStudio.exe --selftest`
 
@@ -22,6 +22,17 @@ Windows 桌面工具（Tauri 2），把 Pikara Science 的科普影片製作流�
 | 預覽與發布 | 影片播放、ffprobe 資訊、封面、`PUBLISH_METADATA.md` 一鍵複製。**沒有上傳程式碼，發布一律由人手動完成** |
 | 回滾 | 最近的 git checkpoint，revert 或（需輸入確認字樣、先建備份分支的）reset |
 
+## v0.1.1：多集與新專案
+
+- **集數**：每一集是 `narration.json` 的 `sequences.epNN`。「劇本編輯」與「製作」都有集數選擇器；「新增集數」會建立一段一句的骨架（驗證後存檔並 git commit），之後在劇本編輯寫完整旁白。
+- 所有工作都帶 `episode` 參數，指令與輸出檔名由集數推得（`EP02_Final.mp4`、`EP02_YouTube_zh-TW.mp4`、`EP02_Bilibili_zh-CN.mp4`、`EP02.srt`）。新的一鍵管線「繁中正式版」（`final_tw`）。
+- 沒有手工動畫的集數使用通用旁白樣板（章節標題＋由錨點驅動的關鍵詞卡片）。
+- 繁體與簡體旁白各自管理：make_cn 不再覆寫已存在的簡體集數。
+- **建立新專案**（「專案」頁）：從目前專案的管線範本複製 scripts／src／字型／package.json 到新資料夾（可含中文與空白），重設為只有 ep01 骨架並 git init；可用目錄連結共用 CosyVoice。
+- 工作開始前的預檢：缺 ffmpeg／ffprobe、找不到影片、沒有這一集、沒有 src_cn 時，工作直接標記失敗並顯示繁體中文說明。
+- 無視窗命令列：`PikaraScienceStudio.exe --cli <episode-new|episode-list|project-new|doctor|enqueue|run-queue|jobs|job-retry|job-cancel|recover>`。
+- 測試紀錄：`app/TEST_REPORT_v0.1.1.md`。
+
 ## 從原始碼建置
 
 需求（本機已驗證）：Rust 1.99（MSVC）、VS Build Tools 2022、WebView2、Node 26。
@@ -38,4 +49,4 @@ Remotion（自有授權：個人與 ≤3 人公司免費，其餘需購買；自
 
 ## 開發紀錄
 
-`app/PROGRESS_APP.md`（後端，含測試輸出）、`app/PROGRESS_UI.md`（介面）、`app/API.md`（命令與事件規格，v1.1）、`docs/`（架構、介面、環境、路線圖）。
+`app/PROGRESS_APP.md`（後端，含測試輸出）、`app/PROGRESS_UI.md`（介面）、`app/API.md`（命令與事件規格，v1.2）、`docs/`（架構、介面、環境、路線圖）。

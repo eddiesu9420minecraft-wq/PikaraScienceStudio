@@ -117,7 +117,8 @@ def build_score(segments: list[tuple[str, float]], workdir: Path, out: Path, ff,
         render_segment(preset, dur + extra, f, ff)
         files.append(f)
     if len(files) == 1:
-        files[0].replace(out)
+        total = segments[0][1]
+        ff(["-i", str(files[0]), "-af", f"afade=t=out:st={max(0, total - 3):.3f}:d=3,atrim=end={total:.3f}", "-c:a", "pcm_s24le", str(out)])
         return
     args: list[str] = []
     for f in files:

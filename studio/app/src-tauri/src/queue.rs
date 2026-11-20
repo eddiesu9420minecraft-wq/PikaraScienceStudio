@@ -193,7 +193,26 @@ impl Queue {
         }
         ids
     }
+}
 
+/// Failure text for a step that exited non-zero: only this step's output is used. Lines the scripts mark as
+/// errors (`[錯誤]`, `[QA 錯誤]`, level=error) are preferred; a step that died without any error output
+/// (killed from outside, crash) gets a plain zh-TW explanation instead of unrelated log lines.
+pub fn step_failure_message(label: &str, code: i32, evs: &[db::JobEvent]) -> String {
+    let out: Vec<&db::JobEvent> = evs.iter().filter(|e| e.stream != "system").collect();
+    let errs: Vec<String> = out.iter().filter(|e| e.level == "error" || e.line.contains("錯誤")).map(|e| e.line.trim().to_string()).collect();
+    if !errs.is_empty() {
+        let tail = errs[errs.len().saturating_sub(2)..].join(" | ");
+        return format!("步驟「{label}」失敗（結束碼 {code}）：{}", tail.chars().take(400).collect::<String>());
+    }
+    let last = out.last().map(|e| e.line.trim().chars().take(160).collect::<String>()).unwrap_or_default();
+    format!(
+        "步驟「{label}」意外結束（結束碼 {code}），沒有留下錯誤訊息：程式可能被外部結束或當機。已完成的部分會保留，按「重試」會從這一步繼續。{}",
+        if last.is_empty() { String::new() } else { format!("最後輸出：{last}") }
+    )
+}
+
+impl Queue {
     /// One scheduler pass. Returns ids of jobs started.
     pub fn tick(self: &Arc<Self>) -> Vec<String> {
         let (s, pending) = {
@@ -275,6 +294,12 @@ impl Queue {
                 return Err(e);
             }
         };
+        if let Err(e) = jobs::preflight(&job.kind, &job.params, &project_root, &settings) {
+            db::job_finish(&self.conn(), &job.id, "failed", None, Some(&e))?;
+            self.event(&job.id, "system", "error", &format!("工作未開始：{e}"));
+            self.emit_job(&job.id);
+            return Err(e);
+        }
         let _ = std::fs::create_dir_all(logs_dir());
         let log_path = logs_dir().join(format!("{}.log", job.id));
         db::job_mark_started(&self.conn(), &job.id, &log_path.to_string_lossy())?;
@@ -328,24 +353,14 @@ impl Queue {
             if let Some(f) = log.as_mut() {
                 let _ = writeln!(f, "{head}");
             }
+            let first_ev = db::events_list(&self.conn(), &job.id, 0, 1_000_000).ok().and_then(|v| v.last().map(|e| e.id)).unwrap_or(0);
             let code = self.run_step(job, step, i, n, &mut log, &pid_slot)?;
             *pid_slot.lock().unwrap() = None;
             if cancel.load(Ordering::SeqCst) {
                 return Err((Some(code), "canceled".into()));
             }
             if code != 0 {
-                let tail: Vec<String> = db::events_list(&self.conn(), &job.id, 0, 1_000_000)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|e| e.stream != "system")
-                    .rev()
-                    .take(3)
-                    .map(|e| e.line)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect();
-                return Err((Some(code), format!("步驟「{}」結束碼 {code}：{}", step.label, tail.join(" | ").chars().take(400).collect::<String>())));
+                return Err((Some(code), step_failure_message(&step.label, code, &db::events_list(&self.conn(), &job.id, first_ev, 1_000_000).unwrap_or_default())));
             }
             // persist step completion so an interrupted multi-step job resumes from the next step
             let _ = db::job_set_step(&self.conn(), &job.id, i as i64 + 1);
@@ -635,5 +650,24 @@ mod tests {
         // don't actually run the GPU render: cancel it
         q.cancel(&j.id).unwrap();
         assert_eq!(db::job_get(&q.conn(), &j.id).unwrap().status, "canceled");
+    }
+}
+
+#[cfg(test)]
+mod failure_message_tests {
+    use super::*;
+
+    fn ev(stream: &str, level: &str, line: &str) -> db::JobEvent {
+        db::JobEvent { id: 0, job_id: "j".into(), ts: 0, stream: stream.into(), level: level.into(), line: line.into() }
+    }
+
+    #[test]
+    fn step_failure_messages_are_friendly() {
+        // killed from outside: no error line → plain explanation, no unrelated log lines
+        let m = step_failure_message("渲染 EP03-30fps", 1, &[ev("stdout", "info", "渲染 EP03-30fps：698 幀，1 段")]);
+        assert!(m.contains("意外結束") && m.contains("重試") && m.contains("698 幀"), "{m}");
+        // script printed a zh-TW error → that line is the message
+        let m = step_failure_message("品質檢查", 2, &[ev("stdout", "info", "x"), ev("stderr", "info", "[QA 錯誤] 找不到影片檔：a.mp4")]);
+        assert_eq!(m, "步驟「品質檢查」失敗（結束碼 2）：[QA 錯誤] 找不到影片檔：a.mp4");
     }
 }

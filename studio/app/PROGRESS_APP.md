@@ -1,6 +1,10 @@
 # Pikara Science Studio — backend / app progress
 
-Owner of this log: Rust core (`src-tauri/`) + project skeleton. UI progress: `PROGRESS_UI.md`. API contract: `API.md` (v1, unchanged).
+Owner of this log: Rust core (`src-tauri/`) + project skeleton. UI progress: `PROGRESS_UI.md`. API contract: `API.md` (v1.2 — multi-episode, additive).
+
+## v0.1.1 — multi-episode (2026-11-20)
+- `episodes.rs` (list / create skeleton, validated + committed), `scaffold.rs` (new project from a pipeline template, Chinese/space paths, CosyVoice junction, git init), `cli.rs` (`--cli`), `jobs::preflight` (friendly zh-TW failures before spawning), `episode` param on every job kind + `final_tw` pipeline.
+- Real test run (EP02/EP03 voice → timeline → mix → render → QA through the queue, new project, corrupt/truncated/missing video, ffprobe hidden, kill/recover): `TEST_REPORT_v0.1.1.md`.
 
 ## What works (all against the real machine and <PROJECT_DIR> — no mock data)
 

@@ -164,6 +164,85 @@ pub fn run(args: &[String]) -> i32 {
         Ok(json!({"files": o.len(), "mp4": probed, "publishSections": md["sections"].as_array().map(|a| a.len())}))
     });
 
+    // ---- multi-episode (v1.2) ----
+    step(&mut results, "episodes.list", || {
+        let l = crate::episodes::list(&project_root);
+        let ids: Vec<String> = l.as_array().unwrap().iter().filter_map(|e| e["id"].as_str().map(String::from)).collect();
+        if !ids.iter().any(|i| i == "ep01") {
+            return Err(format!("ep01 not found: {ids:?}"));
+        }
+        // every episode maps to its own commands / output names
+        let s = db::settings_get(&dbh.lock().unwrap());
+        let ctx = crate::jobs::Ctx { root: &project_root, settings: &s, job_id: "selftest" };
+        let mut maps = vec![];
+        for id in &ids {
+            let ep = id.to_ascii_uppercase();
+            let r = crate::jobs::build_steps("render", &json!({"episode": id}), &ctx)?;
+            let b = crate::jobs::build_steps("bilibili", &json!({"episode": id}), &ctx)?;
+            let want_r = [format!("{ep}-30fps"), format!("{ep}_Final.mp4")];
+            if !want_r.iter().all(|w| r[0].args.contains(w)) || !b[5].args.contains(&format!("{ep}_Bilibili_zh-CN.mp4")) {
+                return Err(format!("{id}: {:?} / {:?}", r[0].args, b[5].args));
+            }
+            maps.push(json!({"id": id, "render": r[0].args, "bilibiliSteps": b.len()}));
+        }
+        Ok(json!({"episodes": l, "commandMaps": maps}))
+    });
+
+    step(&mut results, "episodes.create_in_temp_copy", || {
+        // copy the real narration files into a temp git repo (Chinese + space path), create the next episode there
+        let d = std::env::temp_dir().join(format!("pss 自我測試 {}", std::process::id()));
+        for loc in ["zh-TW", "zh-CN"] {
+            let src = narration::file_path(&project_root, loc)?;
+            if src.exists() {
+                let dst = narration::file_path(&d, loc)?;
+                std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
+                std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
+            }
+        }
+        gitops::git(&d, &["init", "-q"])?;
+        gitops::git(&d, &["add", "."])?;
+        gitops::git_commit(&d, &["commit", "-qm", "selftest base"])?;
+        let before = narration::read(&d, "zh-TW")?;
+        let r = crate::create_episode(&d, "自我測試集數", None, None, None, Some(vec!["zh-TW".into()]))?;
+        let after = narration::read(&d, "zh-TW")?;
+        let v = narration::validate(&after["doc"]);
+        let id = r["episodeId"].as_str().unwrap_or("").to_string();
+        let dup = crate::create_episode(&d, "x", Some(&id), None, None, None).is_err();
+        let old_same = before["doc"]["sequences"].as_object().unwrap().iter().all(|(k, val)| &after["doc"]["sequences"][k] == val);
+        let _ = std::fs::remove_dir_all(&d);
+        if !v.ok || !dup || !old_same || r["files"][0]["commit"].is_null() {
+            return Err(format!("valid={} dupRefused={dup} oldUnchanged={old_same} {r}", v.ok));
+        }
+        Ok(json!({"created": id, "commit": r["files"][0]["commit"], "duplicateRefused": dup, "existingEpisodesUnchanged": old_same}))
+    });
+
+    step(&mut results, "project.scaffold_cpu_job", || {
+        // new project from this project's pipeline in a Chinese + space path, then a real CPU job through the queue
+        let dest = std::env::temp_dir().join(format!("pss 新專案 {}", std::process::id())).join("測試 專案");
+        let r = crate::create_project(&dbh, &dest.to_string_lossy(), "自我測試 專案", Some(&project_root), false)?;
+        let pid = r["project"]["id"].as_str().unwrap_or("").to_string();
+        let j = q.enqueue(Some(&pid), "timeline", &json!({"episode": "ep01", "estimate": true}), &dest)?;
+        let t = Instant::now();
+        let res = loop {
+            q.tick();
+            let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+            if ["succeeded", "failed"].contains(&cur.status.as_str()) {
+                break cur;
+            }
+            if t.elapsed() > Duration::from_secs(60) {
+                return Err("timeout".into());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        let tl = std::fs::read_to_string(dest.join(r"src\data\timeline.generated.json")).unwrap_or_default();
+        let ok = res.status == "succeeded" && tl.contains("\"ep01\"");
+        let _ = std::fs::remove_dir_all(dest.parent().unwrap());
+        if !ok {
+            return Err(format!("{} {:?}", res.status, res.error));
+        }
+        Ok(json!({"path": r["scaffold"]["path"], "files": r["scaffold"]["files"], "commit": r["scaffold"]["git"]["commit"], "cpuJob": res.status}))
+    });
+
     step(&mut results, "claude.detect", || Ok(claude::detect()));
     step(&mut results, "git.log", || Ok(json!(gitops::log(&project_root, 3)?)));
     step(&mut results, "doctor.instructions_only_for_system", || {

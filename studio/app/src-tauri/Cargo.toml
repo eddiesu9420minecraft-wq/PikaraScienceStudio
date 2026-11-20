@@ -1,6 +1,6 @@
 [package]
 name = "pikara-science-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pikara Science Studio"
 authors = ["Pikara Science contributors"]
 license = "MIT"
