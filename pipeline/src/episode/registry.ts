@@ -18,14 +18,16 @@ export const CUSTOM_ACTS: Record<string, ActEntry[]> = {
   // </studio:custom-acts>
 };
 
-/** 集數 id 規則：ep 加 2–3 位數字（ep01、ep02、ep120）。 */
-export const EPISODE_ID = /^ep\d{2,3}$/;
+/** 集數 id 規則：正式影片 ep 加 2–3 位數字（ep01、ep120）；Sandbox 測試影片 test 加 3 位數字（test001）。 */
+export const EPISODE_ID = /^(ep\d{2,3}|test\d{3})$/;
 
-/** 時間軸中已建立的集數（依編號排序）。尚未建立時間軸的集數不會註冊 composition。 */
+const epOrder = (k: string) => (k.startsWith('test') ? 100000 : 0) + Number(k.replace(/^\D+/, ''));
+
+/** 時間軸中已建立的集數（依編號排序，測試集數排在最後）。尚未建立時間軸的集數不會註冊 composition。 */
 export const episodeIds = (): string[] =>
   timelineIds()
     .filter((k) => EPISODE_ID.test(k))
-    .sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+    .sort((a, b) => epOrder(a) - epOrder(b));
 
 /** composition 前綴：ep02 → EP02 */
 export const compPrefix = (epId: string) => epId.toUpperCase();

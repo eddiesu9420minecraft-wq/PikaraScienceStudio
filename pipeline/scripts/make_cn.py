@@ -79,7 +79,7 @@ def write_retry(p: Path, data: bytes) -> None:
     retry(lambda: p.write_bytes(data))
 
 
-EPISODE = re.compile(r"^ep\d{2,3}$")
+EPISODE = re.compile(r"^(ep\d{2,3}|test\d{3})$")
 
 
 def convert_seq(ep: dict) -> dict:

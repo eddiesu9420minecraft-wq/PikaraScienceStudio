@@ -4,7 +4,7 @@ English ｜ [繁體中文](README.md)
 
 A Windows desktop workbench that turns a topic into a finished AI science-animation video: research, script, animation code, local voice-over (CosyVoice 3), Whisper pronunciation check, subtitles, GPU rendering, NVENC encoding, automatic quality checks with AI fixes, thumbnails and upload text — in a Traditional-Chinese YouTube version and a Simplified-Chinese Bilibili version.
 
-> **v0.2.0-alpha** — public test release; the main feature is **Autonomous Production Mode** (see [CHANGELOG](CHANGELOG.md)). Still alpha: read the known limitations below and review every video yourself before publishing.
+> **v0.2.1-alpha** — adds content control (autonomous / guided / custom-script modes), output language (zh-TW, zh-CN, both, English), material import, a live job monitor, per-video folders with a Sandbox, and automatic environment repair (see [CHANGELOG](CHANGELOG.md)). **This release was published without full testing** — read `studio/app/TEST_REPORT_v0.2.1.md` and the known limitations below, and review every video yourself before publishing.
 
 ## What's inside
 
@@ -15,7 +15,7 @@ A Windows desktop workbench that turns a topic into a finished AI science-animat
 
 ## Quick start
 
-1. **Install Studio** — download `Pikara Science Studio_0.2.0_x64-setup.exe` (or the portable `PikaraScienceStudio.exe`) from [Releases](../../releases); verify with `SHA256SUMS.txt`. Windows 10/11 x64; the installer fetches Microsoft WebView2 if needed.
+1. **Install Studio** — download `Pikara.Science.Studio_0.2.1_x64-setup.exe` (or the portable `PikaraScienceStudio.exe`) from [Releases](../../releases); verify with `SHA256SUMS.txt`. Windows 10/11 x64; the installer fetches Microsoft WebView2 if needed.
 2. **Get the template** — `git clone https://github.com/eddiesu9420minecraft-wq/PikaraScienceStudio.git`; the template project is `PikaraScienceStudio\pipeline` (must be a git repository — productions run in isolated git worktrees).
 3. **First launch** — a short walkthrough opens. **Environment** → **Re-check** and fix what's red; **Projects** → add the `pipeline` folder.
 4. **Sign in to an AI provider** (one of): Claude Code (`claude`, default), the official Doubao CLI (`npm install -g @bytedance/doubao-cli`, `doubao login`), or Doubao Work desktop with the Pikara Studio skill (`pikara-studio-skill.zip`, see `studio/docs/DOUBAO_WORK.md`).
@@ -43,8 +43,9 @@ Single-step tools (script editor, prompts, voice, render, queue, rollback) are u
 - **CLI** — `PikaraScienceStudio.exe --cli auto-start|auto-run|auto-status|agent-task|agent-done|agent-check|job-log|…`.
 - Existing: script editor (zh-TW / zh-CN), prompt studio with Claude worktrees, persistent SQLite queue (GPU lock, heartbeats, recovery), live monitor, Environment Doctor, Preview & Publish centre (**no upload code; publishing is always manual**), git rollback.
 
-## Known limitations (v0.2.0-alpha)
+## Known limitations (v0.2.1-alpha)
 
+- **Most v0.2.1 features have not been tested end to end** (the script stage and requirement checks of content control ran for real; English, Simplified-only rendering, material use on screen, incremental rendering and automatic environment repair are unverified).
 - **Alpha release.** Review the video and its sources before publishing.
 - **The Doubao CLI provider has not been tested with a real account** (implemented; the connection/capability test needs the account owner to scan the login QR code).
 - **The Doubao Work desktop client has not been verified on a real install**; the skill + CLI flow was run end to end in a simulated test (a tester acting as the agent, following the skill step by step).

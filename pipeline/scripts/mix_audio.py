@@ -261,6 +261,7 @@ def main() -> int:
     ap.add_argument("--seq", default="arttest")
     ap.add_argument("--src", default="src")
     ap.add_argument("--mix-name", default=None)
+    ap.add_argument("--bgm", default=None, help="使用者提供的背景音樂（WAV／MP3…），循環或裁切到影片長度；不指定則自動合成配樂")
     a = ap.parse_args()
     if not TIMELINE.exists():
         print(f"[錯誤] 找不到時間軸 {TIMELINE.relative_to(ROOT)}，請先執行 build_timeline.py --seq {a.seq}")
@@ -293,7 +294,18 @@ def main() -> int:
 
     # 2) 背景音樂 + ducking（EP01：每一幕不同氛圍，見 scripts/music.py）
     bgm_raw = work / "bgm_raw.wav"
-    if tl.get("scenes") and a.seq != "arttest":
+    user_bgm = Path(a.bgm) if a.bgm else None
+    if user_bgm is not None and not user_bgm.is_absolute():
+        user_bgm = ROOT / user_bgm
+    if user_bgm is not None:
+        if not user_bgm.is_file():
+            print(f"[錯誤] 找不到背景音樂檔：{a.bgm}")
+            return 1
+        print(f"   配樂（使用者提供）：{user_bgm.name}，循環／裁切到 {dur:.1f}s，結尾 2 秒淡出")
+        ff(["-stream_loop", "-1", "-i", str(user_bgm), "-t", f"{dur:.3f}", "-af",
+            f"aresample={SR},aformat=channel_layouts=stereo,afade=t=out:st={max(0.0, dur - 2.0):.3f}:d=2",
+            "-c:a", "pcm_s24le", str(bgm_raw)])
+    elif tl.get("scenes") and a.seq != "arttest":
         sys.path.insert(0, str(Path(__file__).parent))
         import music  # noqa: E402
         if a.seq == "ep01":

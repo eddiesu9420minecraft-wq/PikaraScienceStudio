@@ -354,3 +354,25 @@ details.panel > summary { list-style: none; }
 details.panel > summary::-webkit-details-marker { display: none; }
 details.panel > summary::before { content: "›"; display: inline-block; margin-right: 8px; transition: transform var(--t-fast) var(--ease); color: var(--text-secondary); }
 details.panel[open] > summary::before { transform: rotate(90deg); }
+
+/* v0.2.1 live monitor, Markdown preview, material list */
+.automon { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--separator); border-radius: 10px; padding: 10px 12px; background: rgba(9, 13, 24, 0.35); }
+.automon-tabs { flex-wrap: wrap; }
+.automon-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.automon-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; line-height: 18px; text-align: center; background: rgba(92,200,255,0.22); color: var(--text-primary); }
+.automon-body { max-height: 440px; overflow: auto; }
+.automon-body .auto-log { max-height: 380px; }
+.automon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.automon-grid img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; border: 1px solid var(--separator); background: #000; }
+.automon-grid figure { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.automon-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.automon-voice { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--separator); }
+.automon-voice audio { height: 30px; width: 100%; max-width: 520px; }
+.auto-log-line.tool { color: var(--info); }
+.auto-log-line.say { color: var(--text-primary); }
+.auto-log-line.muted { color: var(--text-secondary); }
+.warn-text { color: var(--warning); }
+.md-preview { border: 1px solid var(--separator); border-radius: 8px; padding: 8px 12px; background: rgba(9, 13, 24, 0.35); font-size: 13px; line-height: 20px; }
+.md-preview h3, .md-preview h4, .md-preview h5, .md-preview h6 { margin: 6px 0 2px; font-size: 14px; }
+.md-preview p { margin: 2px 0; }
+.md-preview ul, .md-preview ol { margin: 2px 0; padding-left: 20px; }

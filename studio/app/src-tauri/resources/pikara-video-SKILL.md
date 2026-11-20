@@ -57,6 +57,20 @@ research + script, animation code, visual review, pronunciation / QA fixes, publ
 given; Studio checks your result (narration validation, `tsc`, Whisper CER, QA, stills review), commits a checkpoint per stage, and merges
 the branch into the project only when every stage passed.
 
+Since Studio v0.2.1 a production carries the user's requirements — read them before anything else:
+- `out/auto/BRIEF.md`: mode (全自主 / 指導 / 自訂腳本), output language, the user's Markdown brief, chapters, must-include /
+  must-avoid lists, opening, ending, voice tone, animation style, pacing. The same text is at the top of every prompt. In 指導 mode
+  chapters, forbidden terms and short must-include keywords are checked mechanically; in 自訂腳本 mode the subtitles must stay the
+  user's script word for word (Studio compares them) — only `anchors`, `speak` and metadata may be added.
+- `out/auto/ASSETS.md` and `public/user/<ep>/`: material the user imported (screenshots, recordings, music, PDFs, notes). Use real
+  screenshots / recordings with `staticFile('user/<ep>/<file>')` (`<Img>`, `<OffthreadVideo>`) instead of drawing made-up UI; key frames
+  of videos are in `out/auto/asset_frames/`. Music is mixed by Studio automatically.
+- Output language: `zh-CN` only means the master narration in `src/data/narration.json` is written in Simplified Chinese (Mainland
+  terms) and Studio mirrors it into `src_cn` — never edit `src_cn`. `en` means English narration and on-screen text.
+- Name scene components after the scene id (`s01` → `S01.tsx`): render.mjs fingerprints each scene and re-renders only scenes whose
+  component or timeline changed.
+- Sandbox tests use ids like `test001` (composition `TEST001-30fps`) and are never merged into the project.
+
 ## When fixing a failed job
 
 1. Read the job log excerpt given in the prompt; find the first real error (Python traceback, `[錯誤]`, `區段 … 失敗`, tsc error).

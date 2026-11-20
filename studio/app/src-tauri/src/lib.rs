@@ -1,7 +1,12 @@
 //! Pikara Science Studio — Rust core. Tauri commands are listed in studio/app/API.md.
 
 pub mod agents;
+pub mod assets;
 pub mod autopilot;
+pub mod content;
+pub mod envfix;
+pub mod layout;
+pub mod picker;
 pub mod claude;
 pub mod cli;
 pub mod db;
@@ -322,6 +327,10 @@ async fn doctor_fix(st: State<'_, AppState>, project_id: String, fix_id: String)
     }
     match fix_id.as_str() {
         "create_folders" => Ok(json!({"kind": "done", "message": doctor::create_folders(&root)?})),
+        "venv_repair" => {
+            let venv = root.join("tools").join("CosyVoice").join(".venv");
+            Ok(json!({"kind": "done", "message": blocking(move || envfix::repair(&venv)).await?}))
+        }
         "npm_install" | "remotion_browser_ensure" => {
             let j = st.queue.enqueue(Some(&project_id), "doctor_fix", &json!({"fixId": fix_id}), &root)?;
             Ok(json!({"kind": "job", "job": j}))
@@ -513,6 +522,65 @@ async fn auto_control(st: State<'_, AppState>, id: String, action: String) -> R<
     .await
 }
 
+/// Live monitor for one production (real job logs, render FPS / ETA, AI output, sources, changes, previews).
+#[tauri::command]
+async fn auto_monitor(app: tauri::AppHandle, st: State<'_, AppState>, id: String) -> R<Value> {
+    let ap = st.autopilot.clone();
+    let v = blocking(move || ap.monitor(&id)).await?;
+    // stills / voice / previews live in the worktree or the project: let the webview load them (asset protocol)
+    if let Some(w) = v["worktree"].as_str() {
+        let _ = app.asset_protocol_scope().allow_directory(w, true);
+    }
+    Ok(v)
+}
+
+/// Low-resolution storyboard preview (640×360 JPEG key frames) of a production's current state.
+#[tauri::command]
+async fn auto_preview(st: State<'_, AppState>, id: String) -> R<db::Job> {
+    let ap = st.autopilot.clone();
+    blocking(move || ap.preview(&id)).await
+}
+
+#[tauri::command]
+async fn pick_files(title: Option<String>, multi: Option<bool>) -> R<Vec<String>> {
+    blocking(move || picker::pick_files(title.as_deref().unwrap_or("選擇素材"), multi.unwrap_or(true))).await
+}
+
+/// File facts for the import list (kind detection, size) before a production starts.
+#[tauri::command]
+async fn asset_probe(paths: Vec<String>) -> R<Vec<Value>> {
+    Ok(paths
+        .iter()
+        .map(|p| {
+            let m = std::fs::metadata(p);
+            json!({"source": p, "kind": assets::detect_kind(p), "bytes": m.as_ref().map(|m| m.len()).unwrap_or(0), "exists": m.map(|m| m.is_file()).unwrap_or(false)})
+        })
+        .collect())
+}
+
+/// Non-destructive folder migration (dry run unless `apply`).
+#[tauri::command]
+async fn layout_migrate(st: State<'_, AppState>, project_id: String, apply: Option<bool>) -> R<Value> {
+    let root = root_of(&st.db, &project_id)?;
+    blocking(move || layout::migrate(&root, apply.unwrap_or(false))).await
+}
+
+/// CosyVoice venv diagnosis (MSIX AppData redirection, missing interpreter) and safe repair.
+#[tauri::command]
+async fn env_venv(st: State<'_, AppState>, project_id: String, repair: Option<bool>) -> R<Value> {
+    let root = root_of(&st.db, &project_id)?;
+    blocking(move || {
+        let venv = root.join("tools").join("CosyVoice").join(".venv");
+        if repair.unwrap_or(false) {
+            let r = envfix::repair(&venv);
+            Ok(json!({"repair": r.as_ref().ok(), "error": r.err(), "diagnosis": envfix::diagnose(&venv)}))
+        } else {
+            Ok(json!({"diagnosis": envfix::diagnose(&venv), "studioPackage": envfix::current_package()}))
+        }
+    })
+    .await
+}
+
 #[tauri::command]
 async fn agent_check(provider: String, deep: Option<bool>) -> R<Value> {
     blocking(move || Ok(agents::check(&provider, deep.unwrap_or(false)))).await
@@ -610,7 +678,8 @@ pub fn run() {
             monitor_sample, job_analyse_with_claude,
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
             outputs_list, publish_metadata, open_path, asset_url_allowed,
-            auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, agent_check, agent_done
+            auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, agent_check, agent_done,
+            auto_monitor, auto_preview, pick_files, asset_probe, layout_migrate, env_venv
         ])
         .run(tauri::generate_context!())
         .expect("error while running Pikara Science Studio");

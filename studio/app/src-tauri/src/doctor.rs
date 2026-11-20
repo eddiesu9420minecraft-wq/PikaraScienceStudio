@@ -268,6 +268,22 @@ pub fn cosy_python(root: &Path, s: &Settings) -> PathBuf {
     s.cosy_python.clone().map(PathBuf::from).unwrap_or_else(|| root.join(r"tools\CosyVoice\.venv\Scripts\python.exe"))
 }
 
+/// The venv exists but its Python does not start: tell an MSIX-redirected interpreter (repairable by copying,
+/// see envfix.rs) apart from a really missing one.
+fn venv_broken(py: &Path, output: String) -> Check {
+    let venv = py.parent().and_then(|p| p.parent()).unwrap_or(py);
+    let d = crate::envfix::diagnose(venv);
+    let detail = match &d.problem {
+        Some(p) => format!("{p}\n（{}）", output.trim().chars().take(300).collect::<String>()),
+        None => output,
+    };
+    if d.fixable {
+        c("cosy.venv", "CosyVoice venv", "error", detail, None, auto("venv_repair", "修復 Python 環境（複製解譯器，不下載、不動套件與模型）"))
+    } else {
+        c("cosy.venv", "CosyVoice venv", "error", detail, None, instr("cosy_setup", "安裝說明"))
+    }
+}
+
 fn check_cosy(root: &Path, s: &Settings) -> Vec<Check> {
     let py = cosy_python(root, s);
     let mut out = vec![];
@@ -293,8 +309,8 @@ fn check_cosy(root: &Path, s: &Settings) -> Vec<Check> {
                     out.push(c("cosy.venv", "CosyVoice venv", "error", format!("Python {v}，缺少大型套件：{}", missing.join(", ")), Some(v), instr("cosy_setup", "安裝說明")));
                 }
             }
-            Ok(o) => out.push(c("cosy.venv", "CosyVoice venv", "error", o.combined(), None, instr("cosy_setup", "安裝說明"))),
-            Err(e) => out.push(c("cosy.venv", "CosyVoice venv", "error", e, None, instr("cosy_setup", "安裝說明"))),
+            Ok(o) => out.push(venv_broken(&py, o.combined())),
+            Err(e) => out.push(venv_broken(&py, e)),
         }
     }
     let md = root.join(r"tools\CosyVoice\pretrained_models\Fun-CosyVoice3-0.5B");

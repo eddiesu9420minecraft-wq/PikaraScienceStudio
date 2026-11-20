@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -89,7 +90,28 @@ def char_times(speak: str, boundaries: list[dict], duration: float) -> list[tupl
     return times  # type: ignore[return-value]
 
 
+LANG_EN = os.environ.get("PIKARA_LANG", "zh").lower().startswith("en")
+MAX_CUE_EN = 46  # 英文：不含空白的字母數（約 8–9 個單字、一行）
+
+
 def split_cues(text: str) -> list[str]:
+    if LANG_EN:
+        # 英文：在後面接空白（或結尾）的標點處斷開，避免拆開 3.5、e.g. 之類的寫法
+        parts = [p for p in re.findall(r".+?(?:[,.?!;:](?=\s|$)|$)", text.strip()) if p.strip()]
+        cues_en: list[str] = []
+        cur = ""
+        for p in parts:
+            for w in p.split():
+                if cur and len(norm(cur + w)) > MAX_CUE_EN:
+                    cues_en.append(cur.strip())
+                    cur = ""
+                cur += w + " "
+            if cur and (re.search(r"[.?!;:]\s*$", cur) or len(norm(cur)) >= MAX_CUE_EN // 2):
+                cues_en.append(cur.strip())
+                cur = ""
+        if cur.strip():
+            cues_en.append(cur.strip())
+        return [re.sub(r"[,;:]$", "", c).strip() for c in cues_en]
     parts = re.findall(r"[^，。？！；：、]+[，。？！；：、]?", text)
     cues: list[str] = []
     cur = ""

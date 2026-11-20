@@ -20,6 +20,7 @@
 
 #![allow(non_snake_case)]
 
+use crate::content;
 use crate::db::{self, Db};
 use crate::gitops::{self, git};
 use crate::jobs::worktree_dir;
@@ -95,6 +96,30 @@ pub struct AutoConfig {
     pub agent: String,
     /// Optional model name for the agent CLI (豆包 CLI `--model`; empty = the provider's default).
     pub agent_model: String,
+    // ---------------------------------------------------------- v0.2.1 content control (see content.rs)
+    /// "auto" 全自主 | "guided" 指導 | "script" 自訂腳本
+    pub mode: String,
+    /// 影片內容與製作要求 (Markdown).
+    pub brief: String,
+    /// Custom chapters, in order (guided / script modes: one scene each).
+    pub chapters: Vec<String>,
+    pub must_include: String,
+    pub must_avoid: String,
+    pub opening: String,
+    pub ending: String,
+    pub voice_tone: String,
+    pub animation_style: String,
+    pub pacing: String,
+    /// Script mode: the complete script (Markdown; `## ` headings = scenes). Filled from a `script` asset if empty.
+    pub script_text: String,
+    /// "zh-TW" | "zh-CN" | "both" | "en" (empty in productions made before v0.2.1 → derived from `bilibili`).
+    pub language: String,
+    /// Minimum number of source URLs in <EP>_SOURCES.md (None = 3, or 0 in script mode).
+    pub min_sources: Option<u32>,
+    /// Imported material (copied into the video's assets folder at start).
+    pub assets: Vec<crate::assets::Asset>,
+    /// Sandbox test: TEST number, delivered to sandbox/TESTnnn, never merged into the project.
+    pub sandbox: bool,
 }
 
 impl Default for AutoConfig {
@@ -120,6 +145,21 @@ impl Default for AutoConfig {
             budget_usd: None,
             agent: "claude".into(),
             agent_model: String::new(),
+            mode: "auto".into(),
+            brief: String::new(),
+            chapters: vec![],
+            must_include: String::new(),
+            must_avoid: String::new(),
+            opening: String::new(),
+            ending: String::new(),
+            voice_tone: String::new(),
+            animation_style: String::new(),
+            pacing: String::new(),
+            script_text: String::new(),
+            language: "zh-TW".into(),
+            min_sources: None,
+            assets: vec![],
+            sandbox: false,
         }
     }
 }
@@ -164,10 +204,58 @@ impl AutoConfig {
         self.max_attempts = self.max_attempts.clamp(1, 10);
         self.max_minutes = self.max_minutes.clamp(10, 24 * 60);
         self.max_turns = self.max_turns.clamp(10, 400);
-        for s in [&mut self.tone, &mut self.audience, &mut self.notes] {
-            *s = s.chars().take(2000).collect();
+        for s in [&mut self.tone, &mut self.audience, &mut self.notes, &mut self.must_include, &mut self.must_avoid, &mut self.opening, &mut self.ending, &mut self.voice_tone, &mut self.animation_style, &mut self.pacing] {
+            *s = s.trim().chars().take(4000).collect();
+        }
+        if self.mode.is_empty() {
+            self.mode = "auto".into();
+        }
+        if !crate::content::MODES.contains(&self.mode.as_str()) {
+            return Err(format!("mode 必須是 auto、guided 或 script：{}", self.mode));
+        }
+        if self.language.is_empty() {
+            self.language = if self.bilibili { "both".into() } else { "zh-TW".into() };
+        }
+        if !crate::content::LANGS.contains(&self.language.as_str()) {
+            return Err(format!("language 必須是 zh-TW、zh-CN、both 或 en：{}", self.language));
+        }
+        // platform switches follow the language (no zh-TW render for a Simplified-only video, etc.)
+        match self.language.as_str() {
+            "en" => {
+                self.youtube = false;
+                self.bilibili = false;
+            }
+            "zh-TW" => self.bilibili = false,
+            "zh-CN" => {
+                self.youtube = false;
+                self.bilibili = true;
+            }
+            "both" => self.bilibili = true,
+            _ => self.bilibili = false,
+        }
+        if self.brief.chars().count() > 20000 {
+            return Err("「影片內容與製作要求」最多 20000 字".into());
+        }
+        if self.script_text.chars().count() > 60000 {
+            return Err("自訂腳本最多 60000 字".into());
+        }
+        self.chapters = self.chapters.iter().map(|c| c.trim().chars().take(60).collect::<String>()).filter(|c| !c.is_empty()).take(20).collect();
+        if let Some(n) = self.min_sources {
+            self.min_sources = Some(n.min(20));
         }
         Ok(())
+    }
+
+    /// Script mode needs the script (pasted, or a `script` asset — checked again after import).
+    pub fn require_script(&self) -> Result<(), String> {
+        if self.mode == "script" && self.script_text.trim().chars().count() < 10 {
+            return Err("自訂腳本模式需要完整腳本：貼上腳本，或匯入一個「自訂腳本」素材（TXT／Markdown）".into());
+        }
+        Ok(())
+    }
+
+    pub fn min_sources(&self) -> u32 {
+        self.min_sources.unwrap_or(if self.mode == "script" { 0 } else { 3 })
     }
 }
 
@@ -231,7 +319,7 @@ pub const STAGES: [(&str, &str); 12] = [
     ("voice", "配音與發音檢查"),
     ("timeline", "時間軸與字幕"),
     ("visual", "畫面檢查（關鍵幀＋AI 審查）"),
-    ("final", "繁中正式版渲染＋QA"),
+    ("final", "正式版渲染＋QA"),
     ("youtube", "YouTube 1.5× 版"),
     ("bilibili", "Bilibili 簡中版"),
     ("thumbnail", "封面"),
@@ -243,11 +331,23 @@ fn stage_enabled(id: &str, c: &AutoConfig) -> bool {
     match id {
         "animate" => c.style == "ai",
         "visual" => c.visual_review,
-        "youtube" => c.youtube,
-        "bilibili" => c.bilibili,
+        // YouTube 1.5× is a zh-TW variant; "Bilibili" as a separate stage only converts a zh-TW master ("both").
+        // zh-CN only renders the Simplified video in the "final" stage — no Traditional render at all.
+        "youtube" => c.youtube && content::wants_tw(c),
+        "bilibili" => content::lang(c) == "both",
         "thumbnail" => c.thumbnail,
         "publish" => c.publish_info,
         _ => true,
+    }
+}
+
+/// Stage label for this production's language.
+pub fn stage_label_for(id: &str, c: &AutoConfig) -> String {
+    match (id, content::lang(c)) {
+        ("final", "zh-CN") => "簡中正式版渲染＋QA（Bilibili，直接使用簡中腳本）".into(),
+        ("final", "en") => "英文正式版渲染＋QA".into(),
+        ("bilibili", _) => "Bilibili 簡中版（由繁中稿轉換）".into(),
+        _ => stage_label(id).to_string(),
     }
 }
 
@@ -325,15 +425,36 @@ fn ep_upper(ep: &str) -> String {
 fn actions(p: &Production) -> Vec<Action> {
     let ep = p.episode.clone();
     let wid = p.worktree.clone().unwrap_or_default();
+    let c = &p.config;
+    let cn = content::cn_only(c);
+    let en = content::is_en(c);
+    let lang_v = if en { "en" } else { "" };
     let base = |mut v: Value| {
         v["workdir"] = json!(wid);
         v["episode"] = json!(ep);
+        if !lang_v.is_empty() {
+            v["lang"] = json!(lang_v);
+        }
         v
     };
-    let refresh = p.attempt > 1 || p.data["fresh"].as_bool().unwrap_or(false);
+    // scene-level incremental rendering (render.mjs fingerprints) replaces the old "fresh" full re-render
+    let refresh = false;
+    let bgm = crate::assets::music(&c.assets).map(|a| format!("public/user/{ep}/{}", a.name));
+    let with_bgm = |mut v: Value| {
+        if let Some(b) = &bgm {
+            v["bgm"] = json!(b);
+        }
+        v
+    };
+    let make_cn = || Action::Job { kind: "make_cn", params: base(json!({"reconvert": true})) };
     let E = ep_upper(&p.episode);
     match p.stage.as_str() {
         "prepare" => vec![Action::Inline("prepare")],
+        "script" if content::mode(c) == "script" => vec![
+            Action::Inline("import_script"),
+            with_base(ai(p, "劇本整理（自訂腳本）", &prompt_script(p), TOOLS_RESEARCH), p),
+            Action::Inline("check_script"),
+        ],
         "script" => vec![with_base(ai(p, "劇本", &prompt_script(p), TOOLS_RESEARCH), p), Action::Inline("check_script")],
         "animate" => vec![
             with_base(ai(p, "動畫程式", &prompt_animate(p), TOOLS_CODE), p),
@@ -345,33 +466,60 @@ fn actions(p: &Production) -> Vec<Action> {
             if let Some(only) = p.data["voiceOnly"].as_str().filter(|s| !s.is_empty()) {
                 v = json!({"only": only, "force": true});
             }
-            if let Some(c) = p.config.tw_cps {
-                v["targetCps"] = json!(c);
+            if let (Some(cps), false) = (c.tw_cps, cn || en) {
+                v["targetCps"] = json!(cps);
             }
-            vec![Action::Job { kind: "voiceover_tw", params: base(v) }, Action::Inline("check_voice")]
+            if cn {
+                // the Simplified master is mirrored into src_cn (identity conversion + Mainland terms), then voiced
+                vec![make_cn(), Action::Job { kind: "voiceover_cn", params: base(v) }, Action::Inline("check_voice")]
+            } else {
+                vec![Action::Job { kind: "voiceover_tw", params: base(v) }, Action::Inline("check_voice")]
+            }
         }
-        "timeline" => vec![Action::Job { kind: "timeline", params: base(json!({})) }],
-        "visual" => vec![
-            Action::Inline("plan_stills"),
-            Action::Job { kind: "stills", params: base(json!({"comp": format!("{E}-30fps"), "frames": p.data["stillFrames"].as_str().unwrap_or("0")})) },
-            with_base(ai(p, "畫面審查", &prompt_visual(p), TOOLS_CODE), p),
+        "timeline" => vec![Action::Job { kind: "timeline", params: base(if cn { json!({"src": "src_cn"}) } else { json!({}) }) }],
+        "visual" => {
+            let mut v = vec![];
+            if cn {
+                v.push(make_cn());
+            }
+            v.push(Action::Inline("plan_stills"));
+            let mut st = json!({"comp": format!("{E}-30fps"), "frames": p.data["stillFrames"].as_str().unwrap_or("0")});
+            if cn {
+                st["src"] = json!("src_cn");
+            }
+            v.push(Action::Job { kind: "stills", params: base(st) });
+            v.push(with_base(ai(p, "畫面審查", &prompt_visual(p), TOOLS_CODE), p));
+            v.push(Action::Job { kind: "typecheck", params: base(json!({})) });
+            v.push(Action::Inline("check_visual"));
+            v
+        }
+        "final" if cn => vec![
             Action::Job { kind: "typecheck", params: base(json!({})) },
-            Action::Inline("check_visual"),
+            Action::Job { kind: "bilibili", params: base(with_bgm(json!({"fresh": refresh, "skipVoice": true, "reconvert": true}))) },
+            Action::Inline("check_qa"),
         ],
-        "final" => vec![Action::Job { kind: "typecheck", params: base(json!({})) }, Action::Job { kind: "final_tw", params: base(json!({"fresh": refresh})) }, Action::Inline("check_qa")],
+        "final" => vec![
+            Action::Job { kind: "typecheck", params: base(json!({})) },
+            Action::Job { kind: "final_tw", params: base(with_bgm(if en { json!({"fresh": refresh, "out": format!("{E}_Final_en.mp4")}) } else { json!({"fresh": refresh}) })) },
+            Action::Inline("check_qa"),
+        ],
         "youtube" => vec![
             Action::Job { kind: "typecheck", params: base(json!({})) },
             Action::Job { kind: "youtube_15x", params: base(json!({"fresh": refresh})) },
             Action::Job { kind: "qa", params: base(json!({"video": format!("{E}_YouTube_zh-TW.mp4"), "speed": 1.5})) },
             Action::Inline("check_qa"),
         ],
-        "bilibili" => vec![Action::Job { kind: "typecheck", params: base(json!({})) }, Action::Job { kind: "bilibili", params: base(json!({"fresh": refresh})) }, Action::Inline("check_qa")],
+        "bilibili" => vec![Action::Job { kind: "typecheck", params: base(json!({})) }, Action::Job { kind: "bilibili", params: base(with_bgm(json!({"fresh": refresh}))) }, Action::Inline("check_qa")],
         "thumbnail" => {
-            let mut v = vec![
-                Action::Job { kind: "stills", params: base(json!({"comp": format!("{E}-Thumbnail"), "frames": "0"})) },
-                Action::Inline("copy_thumb_tw"),
-            ];
-            if p.config.bilibili {
+            let mut v = vec![];
+            if !cn {
+                v.push(Action::Job { kind: "stills", params: base(json!({"comp": format!("{E}-Thumbnail"), "frames": "0"})) });
+                v.push(Action::Inline("copy_thumb_tw"));
+            }
+            if content::wants_cn(c) {
+                if cn {
+                    v.push(make_cn());
+                }
                 v.push(Action::Job { kind: "stills", params: base(json!({"comp": format!("{E}-Thumbnail"), "frames": "0", "src": "src_cn"})) });
                 v.push(Action::Inline("copy_thumb_cn"));
             }
@@ -408,93 +556,173 @@ const COMMON_RULES: &str = "\
 - narration.json 保持 2 空格縮排、UTF-8、不轉義中文，其他鍵的順序不變。
 - 完成後用一段簡短的繁體中文說明你做了什麼。";
 
+/// Language rules for narration text (script writer and fixes).
+fn lang_rules(p: &Production) -> String {
+    let c = &p.config;
+    let ep = &p.episode;
+    match content::lang(c) {
+        "zh-CN" => format!("旁白语言：简体中文，使用中国大陆用语（显存、内存、英伟达、软件、网络、视频…）。这一集的主稿就是简体：直接写在 src/data/narration.json 的 sequences.{ep}（Studio 会原样同步到 src_cn 制作，不会先做繁体版，也不会做繁简转换）。每句字幕 ≤ 36 字。"),
+        "en" => format!("Narration language: natural spoken English, written in src/data/narration.json sequences.{ep}. Each subtitle ≤ 90 characters, short spoken sentences. Use `speak` only when TTS could misread something (\"4GB\" → \"four gigabytes\"). Anchor words must appear verbatim (case-insensitive) in speak (or subtitle) and be ≤ 3 words."),
+        _ => "旁白語言：繁體中文（台灣用語）。每句字幕 ≤ 36 字。".into(),
+    }
+}
+
+fn screen_lang(p: &Production) -> &'static str {
+    match content::lang(&p.config) {
+        "zh-CN" => "畫面上的所有文字使用简体中文（大陆用语）。",
+        "en" => "All on-screen text in English.",
+        _ => "畫面上的所有文字使用繁體中文。",
+    }
+}
+
+fn requirements(p: &Production, stage: &str) -> String {
+    format!("{}{}", content::brief_block(&p.config, stage), crate::assets::prompt_block(&p.episode, &p.config.assets))
+}
+
 fn prompt_script(p: &Production) -> String {
     let c = &p.config;
     let ep = &p.episode;
     let E = ep_upper(ep);
-    let chars = (c.minutes * 60.0 * c.tw_cps.unwrap_or(3.6)).round() as i64;
+    let en = content::is_en(c);
+    let target = (c.minutes * 60.0 * content::rate(c)).round() as i64;
+    let unit = if en { "words" } else { "字" };
+    let req = requirements(p, "script");
+    let min_src = c.min_sources();
+    let sources = if min_src == 0 {
+        format!("（本集不強制資料來源。若有核對事實，可建立 {E}_SOURCES.md 列出標題與網址；不得編造網址。）")
+    } else {
+        format!("建立 {E}_SOURCES.md：每個來源列出標題、網址、支持影片中的哪些說法。至少 {min_src} 個真實可開啟的來源，不得編造網址。")
+    };
+    if content::mode(c) == "script" {
+        return format!(
+            "任務：整理 {ep} 的旁白（自訂腳本模式）。\n\n主題：{topic}\nStudio 已依使用者的腳本建立 src/data/narration.json 的 sequences.{ep}：每個 scene 是腳本的一個章節，每句 subtitle 是腳本原文（逐句切開）。\n\n{req}\n\
+你的工作（只能做這些）：\n\
+1. 為每個場景加 2–6 個 anchors（名稱英文小寫，場景內不重複；詞必須逐字出現在該句的 speak 或 subtitle 中，≤ 8 字），動畫會在念到該詞時觸發。\n\
+2. 只有在 TTS 可能念錯時才加 speak（例：GPU → G P U、4GB → 四 GB）；speak 必須與 subtitle 意思完全相同。\n\
+3. title 若是空的，依腳本內容填一個 12 字內的集名；加上 thumbnail：{{\"lines\": [\"≤8 字\", \"≤8 字\"], \"highlight\": \"≤12 字\", \"tags\": [\"2–5 個短關鍵詞\"]}}。\n\
+4. {sources}\n\n\
+嚴格禁止：修改任何 subtitle 的文字、增刪或合併句子、增刪或重排場景、改寫腳本內容。腳本若有事實錯誤，不要改，在完成說明中指出。\n{lr}\n\n{COMMON_RULES}",
+            topic = c.topic,
+            lr = lang_rules(p),
+        );
+    }
+    let chapters_rule = if c.chapters.iter().any(|x| !x.trim().is_empty()) {
+        "   - 已指定章節：scenes 的數量、順序與 title 必須與指定章節一致。\n"
+    } else {
+        "   - 3–7 個場景（章節），每個場景 3–10 句。\n"
+    };
     format!(
         "任務：為新的一集 {ep} 完成「資料研究＋劇本」。\n\n\
-主題：{topic}\n目標長度：約 {min} 分鐘（繁中旁白約 {chars} 字，CosyVoice 約每秒 3.6 字；允許 ±15%）\n語氣：{tone}\n觀眾：{aud}\n補充說明：{notes}\n\n\
+主題：{topic}\n目標長度：約 {min} 分鐘（旁白約 {target} {unit}；允許 ±15%）\n語氣：{tone}\n觀眾：{aud}\n補充說明：{notes}\n{lr}\n\n{req}\n\
 步驟：\n\
-1. 用網路搜尋與讀取網頁的工具研究主題，優先官方文件、論文、教科書、權威機構。建立 {E}_SOURCES.md：每個來源列出標題、網址、支持影片中的哪些說法。至少 3 個真實可開啟的來源，不得編造網址。\n\
+1. 用網路搜尋與讀取網頁的工具研究主題，優先官方文件、論文、教科書、權威機構；若有使用者提供的文字／PDF／參考文件，先讀它們，內容以它們為準。{sources}\n\
 2. 在 src/data/narration.json 的 sequences 加入 \"{ep}\"（不要修改其他集數）：\n\
    {{\"voiceEngine\": \"cosyvoice\", \"title\": \"<集名，12 字內>\", \"thumbnail\": {{\"lines\": [\"<封面主標第一行，≤8 字>\", \"<第二行，≤8 字>\"], \"highlight\": \"<黃色強調條，≤12 字>\", \"tags\": [\"<2–5 個短關鍵詞>\"]}},\n\
     \"scenes\": [{{\"id\": \"s01\", \"title\": \"<章節標題>\", \"lines\": [{{\"id\": \"{ep}-s01-01\", \"subtitle\": \"<字幕>\", \"speak\": \"<朗讀文字，可省略>\", \"anchors\": {{\"<英文名稱>\": \"<旁白中的詞>\"}}}}]}}]}}\n\
-   - 3–7 個場景（章節），每個場景 3–10 句。第一句在 5 秒內提出引人好奇的問題（hook），最後一個場景收尾並回扣開頭。\n\
-   - 每句字幕 ≤ 36 字，口語、短句。英文縮寫、數字、單位若 TTS 可能念錯，用 speak 寫出中文念法（例：subtitle「GPU」→ speak「G P U」；「4GB」→「四 GB」）。\n\
+{chapters_rule}\
+   - 第一句在 5 秒內提出引人好奇的問題（hook）（有「開場要求」時依要求），最後一個場景收尾並回扣開頭（有「片尾要求」時依要求）。\n\
+   - 口語、短句。英文縮寫、數字、單位若 TTS 可能念錯，用 speak 寫出念法（例：subtitle「GPU」→ speak「G P U」；「4GB」→「四 GB」）。\n\
    - anchors：動畫在旁白念到該詞時觸發。詞必須逐字出現在 speak（沒有 speak 則 subtitle）中；每個場景 2–6 個錨點，名稱用英文小寫，場景內不重複；錨點詞簡短（≤ 8 字），會顯示成畫面上的關鍵詞卡片。\n\
+   - 「禁止出現的內容」不得出現在任何句子、標題或封面文字中。\n\
 3. 確認 JSON 正確且所有錨點詞都在朗讀文字中。\n\n{COMMON_RULES}",
         topic = c.topic,
         min = c.minutes,
-        tone = c.tone,
+        tone = if c.voice_tone.is_empty() { c.tone.clone() } else { format!("{}（配音語氣：{}）", c.tone, c.voice_tone) },
         aud = c.audience,
         notes = if c.notes.is_empty() { "（無）" } else { &c.notes },
+        lr = lang_rules(p),
     )
 }
 
 fn prompt_animate(p: &Production) -> String {
     let ep = &p.episode;
+    let req = requirements(p, "animate");
     format!(
-        "任務：為 {ep} 撰寫每個場景的動畫元件（React + TypeScript，Remotion）。\n\n\
-- 旁白在 src/data/narration.json 的 sequences.{ep}（先讀完）。每個 scene 對應一個元件，建立在 src/acts/{ep}/（例：S01.tsx），型別是 src/acts/types.ts 的 ActComponent（props：frame 本幕本地影格、anchors 錨點名稱→影格、lines、fps 等）。\n\
+        "任務：為 {ep} 撰寫每個場景的動畫元件（React + TypeScript，Remotion）。\n\n{req}\n\
+- 旁白在 src/data/narration.json 的 sequences.{ep}（先讀完）。每個 scene 對應一個元件，建立在 src/acts/{ep}/，檔名用場景 id 的大寫（s01 → S01.tsx；Studio 依檔名做場景級增量渲染），型別是 src/acts/types.ts 的 ActComponent（props：frame 本幕本地影格、anchors 錨點名稱→影格、lines、fps 等）。共用的小元件放 src/acts/{ep}/parts/。\n\
 - 在 src/episode/registry.ts 的 CUSTOM_ACTS 標記區塊內加入 {ep}: [{{id: '<scene id>', component: S01, transitionIn: 'self'}}, {{id: …, transitionIn: 'iris'}} …]（第一幕 'self'，其餘 'iris'），id 必須與 scene id 完全相同，順序一致。\n\
-- 參考：src/episode/GenericAct.tsx（最簡單、由錨點驅動的寫法）、src/acts/Act02.tsx 等 EP01 手工幕（較豐富的畫面）、src/theme/palette.ts、src/theme/fonts.ts、src/lib/anim.ts。沿用相同的配色、字型與質感。\n\
-- 畫面要「解釋」概念：圖解、示意動畫、比例、流程，而不只是文字卡片；動畫在對應錨點的影格開始（anchors.xxx），沒有寫死的秒數（錨點不存在時要有合理的預設）。\n\
+- 品質標準＝EP01：2D 圖解＋3D 場景（@remotion/three、three）的高品質科普動畫，不是文字簡報。參考 src/acts/Act02.tsx、src/acts/act02/Datacenter3D.tsx、src/acts/act05/BoardWorld.tsx、src/acts/act06/EmbedWorld.tsx（3D）、src/episode/GenericAct.tsx（錨點驅動的最簡寫法）、src/theme/palette.ts、src/theme/fonts.ts、src/lib/anim.ts。沿用相同的配色、字型與質感；每個場景至少一個能「解釋」概念的視覺（示意動畫、流程、比例、結構、3D 模型），文字卡片只能當輔助。\n\
+- {sl}動畫在對應錨點的影格開始（anchors.xxx），沒有寫死的秒數（錨點不存在時要有合理的預設）。動畫節奏配合旁白（有「節奏」要求時依要求）。\n\
 - 1920×1080；畫面下方 300px 保留給字幕，不放重要內容；所有文字不得超出畫面或互相重疊；中文字級 ≥ 36px。\n\
-- 必須是決定性的：不得使用 Math.random()（請用 src/lib/anim.ts 的 rng(seed)）、Date、網路資源或外部圖片。\n\
-- 完成後執行 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 直到沒有錯誤。\n\n{COMMON_RULES}"
+- 必須是決定性的：不得使用 Math.random()（請用 src/lib/anim.ts 的 rng(seed)）、Date、網路資源。外部圖片只能用使用者素材（public/user/{ep}/，staticFile 讀取），不得虛構軟體介面截圖。\n\
+- 完成後執行 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 直到沒有錯誤。\n\n{COMMON_RULES}",
+        sl = screen_lang(p),
     )
 }
 
 fn prompt_visual(p: &Production) -> String {
     let ep = &p.episode;
     let files = p.data["stillFiles"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n- ")).unwrap_or_default();
+    let nar = if content::cn_only(&p.config) { format!("src/data/narration.json 的 sequences.{ep}（簡體主稿；src_cn 是 Studio 同步的副本，不要改 src_cn）") } else { format!("src/data/narration.json 的 sequences.{ep}") };
+    let req = requirements(p, "visual");
     format!(
-        "任務：審查 {ep} 的畫面，必要時修正。\n\n用 Read 逐一查看這些關鍵幀（1920×1080 PNG，每個場景至少一張；檔名中的數字是 30fps 影格）：\n- {files}\n\n\
-檢查：文字是否超出畫面或被裁切、元素互相重疊、內容是否進入下方 300px 字幕區、文字可讀性與對比、空白或破圖、整體美感與風格一致、圖解是否與旁白內容相符（旁白在 src/data/narration.json 的 sequences.{ep}）。\n\n\
+        "任務：審查 {ep} 的畫面，必要時修正。\n\n{req}\n用 Read 逐一查看這些關鍵幀（1920×1080 PNG，每個場景至少一張；檔名中的數字是 30fps 影格）：\n- {files}\n\n\
+檢查：文字是否超出畫面或被裁切、元素互相重疊、內容是否進入下方 300px 字幕區、文字可讀性與對比、空白或破圖、整體美感與風格一致（EP01 等級的 2D＋3D 動畫，不是文字簡報）、圖解是否與旁白內容相符（旁白在 {nar}）、是否違反使用者的製作要求（禁止內容、指定動畫風格）、有使用者素材時是否使用了真實素材而沒有虛構介面。{sl}\n\n\
 把結果寫成 JSON 到 out/auto/review.json：{{\"pass\": <沒有 major 問題時 true>, \"issues\": [{{\"file\": \"…\", \"severity\": \"major|minor\", \"problem\": \"…\"}}], \"fixed\": <是否已修改程式或旁白>}}。\n\
-如果有 major 問題：修改 src/acts/{ep}/、src/episode/GenericAct.tsx 不可修改（會影響其他集），可以改 narration.json 中 {ep} 的錨點詞讓卡片變短；修改後執行 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 確認沒有錯誤，並把 fixed 設為 true。minor 問題可以順手修正，但不影響 pass。\n\n{COMMON_RULES}"
+如果有 major 問題：修改 src/acts/{ep}/、src/episode/GenericAct.tsx 不可修改（會影響其他集），可以改 narration.json 中 {ep} 的錨點詞讓卡片變短；修改後執行 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 確認沒有錯誤，並把 fixed 設為 true。minor 問題可以順手修正，但不影響 pass。\n\n{COMMON_RULES}",
+        sl = screen_lang(p),
     )
 }
 
 fn prompt_publish(p: &Production) -> String {
     let ep = &p.episode;
     let E = ep_upper(ep);
-    let mut thumbs = vec![format!("{E}_YouTube_zh-TW_Thumbnail.png")];
-    if p.config.bilibili {
+    let c = &p.config;
+    let lang = content::lang(c);
+    let mut thumbs = vec![];
+    if lang != "zh-CN" {
+        thumbs.push(format!("{E}_YouTube_zh-TW_Thumbnail.png"));
+    }
+    if content::wants_cn(c) {
         thumbs.push(format!("{E}_Bilibili_zh-CN_Thumbnail.png"));
     }
+    let yt = match lang {
+        "zh-CN" => String::new(),
+        "en" => format!("## YouTube (English): 3 title options (≤ 60 characters), description with chapter timestamps (from {E}.srt), references (from {E}_SOURCES.md if it exists), 10–15 tags.\n"),
+        _ => format!(
+            "## YouTube（繁體中文）：3 個標題候選（≤ 60 字）、說明欄（含章節時間軸，時間依 {}）、參考資料連結（取自 {E}_SOURCES.md，沒有則省略）、10–15 個標籤。\n",
+            if c.youtube { format!("{E}_YouTube_zh-TW.srt 的 1.5× 版本") } else { format!("{E}.srt") }
+        ),
+    };
+    let bili = if content::wants_cn(c) {
+        format!("## Bilibili（简体中文，使用大陆用语）：3 个标题候选、简介（含章节时间，依 {E}_Bilibili_zh-CN.srt）、参考资料、分区建议、10–15 个标签。\n")
+    } else {
+        String::new()
+    };
+    let req = requirements(p, "publish");
     format!(
-        "任務：為 {ep} 撰寫上架資訊（只寫文字檔，不上傳、不發布）。\n\n\
-讀 src/data/narration.json 的 sequences.{ep}、{E}_SOURCES.md、字幕 {E}.srt{cn}。用 Read 查看封面 {thumbs}，若主標在 320px 寬縮圖下難以辨識，在檔案最後的「封面檢查」段落說明。\n\n\
-建立 {E}_PUBLISH_METADATA.md，包含：\n\
-## YouTube（繁體中文）：3 個標題候選（≤ 60 字）、說明欄（含章節時間軸，時間依 {E}_YouTube_zh-TW.srt 的 1.5× 版本）、參考資料連結（取自 {E}_SOURCES.md）、10–15 個標籤。\n\
-{bili}## 封面檢查：一兩句。\n\n內容必須與影片實際旁白一致，不誇大、不使用聳動但不實的標題。\n\n{COMMON_RULES}",
-        cn = if p.config.bilibili { format!("、src_cn/data/narration.json 的 sequences.{ep}") } else { String::new() },
+        "任務：為 {ep} 撰寫上架資訊（只寫文字檔，不上傳、不發布）。\n\n{req}\n\
+讀 src/data/narration.json 的 sequences.{ep}、{E}_SOURCES.md（若有）、字幕檔。用 Read 查看封面 {thumbs}，若主標在 320px 寬縮圖下難以辨識，在檔案最後的「封面檢查」段落說明。\n\n\
+建立 {E}_PUBLISH_METADATA.md，包含：\n{yt}{bili}## 封面檢查：一兩句。\n\n內容必須與影片實際旁白一致，不誇大、不使用聳動但不實的標題；不得出現使用者禁止的內容。\n\n{COMMON_RULES}",
         thumbs = thumbs.join("、"),
-        bili = if p.config.bilibili {
-            format!("## Bilibili（简体中文，使用大陆用语）：3 个标题候选、简介（含章节时间，依 {E}_Bilibili_zh-CN.srt）、参考资料、分区建议、10–15 个标签。\n")
-        } else {
-            String::new()
-        },
     )
 }
 
 fn prompt_fix(p: &Production, fixer: Fixer, err: &str) -> String {
     let ep = &p.episode;
+    let script_mode = content::mode(&p.config) == "script";
+    let keep = if script_mode { "（自訂腳本模式：subtitle 是使用者腳本原文，絕對不能改；只能調整 speak、anchors。）" } else { "" };
     let what = match fixer {
-        Fixer::Script => format!("旁白（src/data/narration.json 的 sequences.{ep}）或 {}_SOURCES.md 沒有通過檢查。依錯誤修正，保持其他內容不變。", ep_upper(ep)),
+        Fixer::Script => format!("旁白（src/data/narration.json 的 sequences.{ep}）或 {}_SOURCES.md 沒有通過檢查。依錯誤修正，保持其他內容不變。{keep}", ep_upper(ep)),
         Fixer::Code => format!("{ep} 的動畫程式（src/acts/{ep}/、src/episode/registry.ts 的 CUSTOM_ACTS）沒有通過檢查。修正到 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 沒有錯誤。"),
         Fixer::Pronunciation => format!(
-            "CosyVoice 合成後，Whisper 聽到的讀音與朗讀文字不符（已排除數字寫法與同音字的差異），代表可能念錯或吞字。下面列出每句「應念」與「聽到」。只修正念法：在 src/data/narration.json 的 sequences.{ep} 對這些句子設定或調整 speak 欄位，例如把英文縮寫、數字、符號改寫成中文念法，或把容易念錯的多音字換成同音字。不要增減或改寫句子的內容，字幕 subtitle 必須仍與實際念出的內容一致；如果非改寫不可，subtitle 也要改成相同的意思與字數。錨點詞仍必須出現在 speak 中（必要時一併調整 anchors 的詞）。"
+            "CosyVoice 合成後，Whisper 聽到的讀音與朗讀文字不符（已排除數字寫法與同音字的差異），代表可能念錯或吞字。下面列出每句「應念」與「聽到」。只修正念法：在 src/data/narration.json 的 sequences.{ep} 對這些句子設定或調整 speak 欄位（{}），例如把英文縮寫、數字、符號改寫成念法，或把容易念錯的多音字換成同音字。不要增減或改寫句子的內容；{}錨點詞仍必須出現在 speak 中（必要時一併調整 anchors 的詞）。",
+            if content::cn_only(&p.config) { "簡體主稿；Studio 會同步到 src_cn，不要改 src_cn" } else { "主稿" },
+            if script_mode { "subtitle 是使用者腳本原文，不能改。" } else { "字幕 subtitle 必須仍與實際念出的內容一致；如果非改寫不可，subtitle 也要改成相同的意思與字數。" }
         ),
         Fixer::Qa => format!(
-            "{ep} 的成品沒有通過自動 QA（黑畫面、音量、靜音、字幕重疊等）。讀 out/qa/ 下的報告，找出原因並修正 src/acts/{ep}/ 或 narration.json 的 sequences.{ep}（例如調整 pauseAfter、拆句）。簡體版的旁白在 src_cn/data/narration.json（src_cn 的程式會由 make_cn 從 src 重新產生，不要改 src_cn 的程式碼）。若問題無法以修改內容解決，說明原因即可。"
+            "{ep} 的成品沒有通過自動 QA（黑畫面、音量、靜音、字幕重疊等）。讀 out/qa/ 下的報告，找出原因並修正 src/acts/{ep}/ 或 narration.json 的 sequences.{ep}（例如調整 pauseAfter、拆句）。{}若問題無法以修改內容解決，說明原因即可。{keep}",
+            if content::cn_only(&p.config) { "簡體主稿在 src/data/narration.json（src_cn 由 Studio 同步產生，不要改 src_cn）。" } else { "簡體版的旁白在 src_cn/data/narration.json（src_cn 的程式會由 make_cn 從 src 重新產生，不要改 src_cn 的程式碼）。" }
         ),
         Fixer::None => String::new(),
     };
-    format!("任務：修正自動製作中失敗的步驟「{}」（第 {} 次嘗試失敗）。\n\n{what}\n\n錯誤與日誌摘錄：\n```\n{}\n```\n\n{COMMON_RULES}", stage_label(&p.stage), p.attempt.saturating_sub(1).max(1), clip(err, 6000))
+    format!(
+        "任務：修正自動製作中失敗的步驟「{}」（第 {} 次嘗試失敗）。\n\n{what}\n\n{}\n錯誤與日誌摘錄：\n```\n{}\n```\n\n{COMMON_RULES}",
+        stage_label_for(&p.stage, &p.config),
+        p.attempt.saturating_sub(1).max(1),
+        requirements(p, "fix"),
+        clip(err, 6000)
+    )
 }
 
 fn clip(s: &str, n: usize) -> String {
@@ -605,11 +833,28 @@ pub fn allocate_episode(conn: &rusqlite::Connection, root: &Path) -> Result<Stri
             }
         }
     }
+    if let Ok(rd) = std::fs::read_dir(root.join("projects")) {
+        for e in rd.flatten() {
+            used.extend(crate::episodes::number(&e.file_name().to_string_lossy().to_ascii_lowercase()));
+        }
+    }
     let n = used.into_iter().max().unwrap_or(0) + 1;
     if n > 999 {
         return Err("集數已達上限 ep999".into());
     }
     Ok(format!("ep{n:02}"))
+}
+
+/// Sandbox productions use TEST numbers and never take a formal episode number.
+pub fn allocate_test(conn: &rusqlite::Connection, root: &Path) -> Result<String, String> {
+    let mut st = conn.prepare("SELECT episode FROM productions").map_err(|e| e.to_string())?;
+    let eps: Vec<String> = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+    let mut used = eps;
+    if let Ok(o) = git(root, &["branch", "--list", "studio/auto/*", "--format=%(refname:short)"]) {
+        static RE_TB: Lazy<Regex> = Lazy::new(|| Regex::new(r"studio/auto/(test\d{3})-").unwrap());
+        used.extend(o.stdout.lines().filter_map(|l| RE_TB.captures(l).map(|c| c[1].to_string())));
+    }
+    Ok(crate::layout::next_test(root, &used))
 }
 
 // ------------------------------------------------------------------ public API
@@ -663,13 +908,23 @@ impl Autopilot {
             _ => {}
         }
         let c = self.conn();
-        let episode = allocate_episode(&c, &root)?;
+        let episode = if cfg.sandbox { allocate_test(&c, &root)? } else { allocate_episode(&c, &root)? };
+        // the video's own folder: brief, imported material (copied, the user's originals stay where they are)
+        let vdir = crate::layout::ensure_video_dir(&root, &episode)?;
+        crate::assets::import(&vdir.join("assets"), &mut cfg.assets)?;
+        if cfg.mode == "script" && cfg.script_text.trim().is_empty() {
+            if let Some(t) = crate::assets::script_text(&vdir.join("assets"), &cfg.assets) {
+                cfg.script_text = t.chars().take(60000).collect();
+            }
+        }
+        cfg.require_script()?;
+        let _ = std::fs::write(vdir.join("BRIEF.md"), content::brief_markdown(&cfg, &episode));
         let id = uuid::Uuid::new_v4().to_string();
         let stages = STAGES
             .iter()
-            .map(|(sid, label)| StageInfo {
+            .map(|(sid, _)| StageInfo {
                 id: sid.to_string(),
-                label: label.to_string(),
+                label: stage_label_for(sid, &cfg),
                 status: if stage_enabled(sid, &cfg) { "pending".into() } else { "skipped".into() },
                 ..Default::default()
             })
@@ -690,7 +945,22 @@ impl Autopilot {
             ..Default::default()
         };
         save(&c, &p)?;
-        event(&c, &p, "info", &format!("建立自動製作：{}（{}，約 {} 分鐘）", p.episode.to_uppercase(), p.config.topic, p.config.minutes));
+        event(
+            &c,
+            &p,
+            "info",
+            &format!(
+                "建立{}：{}（{}，約 {} 分鐘，{}，{}{}）；製作要求與素材在 {}",
+                if p.config.sandbox { " Sandbox 測試" } else { "自動製作" },
+                p.episode.to_uppercase(),
+                p.config.topic,
+                p.config.minutes,
+                content::mode_label(content::mode(&p.config)),
+                content::lang_label(content::lang(&p.config)),
+                if p.config.assets.is_empty() { String::new() } else { format!("，{} 個素材", p.config.assets.len()) },
+                crate::layout::video_rel(&p.episode)
+            ),
+        );
         drop(c);
         (self.emit)("production://update", serde_json::to_value(&p).unwrap());
         Ok(p)
@@ -949,6 +1219,7 @@ impl Autopilot {
                         }
                         return self.store(&p);
                     }
+                    let Some(mut p) = self.try_env_repair(p, &job, &text) else { return };
                     if p.mode == "fix" {
                         p.mode = "main".into();
                         return self.stage_failed(p, &format!("修正工作失敗：{text}"), true, false);
@@ -1207,6 +1478,226 @@ impl Autopilot {
         Ok(p)
     }
 
+    // -------------------------------------------------------------- environment repair (v0.2.1)
+
+    /// A TTS job failed because of a broken Python environment: diagnose, repair safely (no download, no package
+    /// changes), verify, and re-run the same action without counting an attempt. Returns None when it handled `p`.
+    fn try_env_repair(&self, mut p: Production, job: &db::Job, text: &str) -> Option<Production> {
+        if !["voiceover_tw", "voiceover_cn", "bilibili"].contains(&job.kind.as_str()) {
+            return Some(p);
+        }
+        if let Some(m) = crate::envfix::missing_module(text) {
+            self.fail(p, &format!("CosyVoice 的 Python 環境缺少套件「{m}」。Studio 不會自動安裝或更改套件（避免破壞 PyTorch／CUDA 依賴）；請在「環境醫生」查看建議的安裝指令，安裝後按「繼續」從這一步重試。"));
+            return None;
+        }
+        if !crate::envfix::looks_like_env_failure(text) {
+            return Some(p);
+        }
+        let n = p.data["envRepairs"].as_u64().unwrap_or(0);
+        let Ok(root) = self.root(&p) else { return Some(p) };
+        let venv = root.join("tools").join("CosyVoice").join(".venv");
+        if n >= 2 {
+            self.fail(p, "Python 環境已自動修復 2 次仍然失敗，請在「環境醫生」檢查 CosyVoice。");
+            return None;
+        }
+        p.data["envRepairs"] = json!(n + 1);
+        let diag = crate::envfix::diagnose(&venv);
+        self.log(&p, "warn", &format!("環境診斷：{}", diag.problem.clone().unwrap_or_else(|| format!("虛擬環境 {} 看起來正常（{}）", diag.venv, diag.python_output))));
+        match crate::envfix::repair(&venv) {
+            Ok(r) => {
+                self.log(&p, "info", &format!("🛠 環境自動修復：{r}。從失敗的步驟重試（不計入嘗試次數）。"));
+                p.data["envLog"] = json!(format!("{}\n{r}", p.data["envLog"].as_str().unwrap_or("")));
+                self.store(&p);
+                None
+            }
+            Err(e) => {
+                self.fail(p, &format!("Python 環境錯誤，無法自動修復：{e}"));
+                None
+            }
+        }
+    }
+
+    // -------------------------------------------------------------- live monitor (v0.2.1)
+
+    /// Real-time view of a production for the UI: the running job with its log, render FPS / frames / ETA, the latest
+    /// AI run's output and tool calls, research sources, file changes, script, key frames, voice files and the
+    /// error / fix history. Everything is read from the database, the job logs and the worktree — nothing estimated
+    /// except the ETA (remaining frames ÷ measured FPS of the last segment).
+    pub fn monitor(&self, id: &str) -> Result<Value, String> {
+        let p = get(&self.conn(), id)?;
+        let root = self.root(&p)?;
+        let wt = p.worktree.as_deref().map(|w| worktree_dir(&root, w)).filter(|d| d.exists());
+        let base = wt.clone().unwrap_or_else(|| root.clone());
+        let jid = p.job_id.clone().or_else(|| p.data["lastJob"].as_str().map(String::from));
+        let job = jid.as_deref().and_then(|j| db::job_get(&self.conn(), j).ok());
+        let job_lines: Vec<db::JobEvent> = jid.as_deref().map(|j| tail_events(&self.conn(), j, 300)).unwrap_or_default();
+        let render = render_stats(&job_lines);
+        // the latest AI run of this production (its job params carry the worktree id)
+        let ai_job: Option<String> = p.worktree.as_deref().and_then(|w| {
+            self.conn()
+                .query_row(
+                    "SELECT id FROM jobs WHERE kind IN ('claude_in','agent_cli') AND params_json LIKE ?1 ORDER BY created_at DESC LIMIT 1",
+                    [format!("%\"workdir\":\"{w}\"%")],
+                    |r| r.get(0),
+                )
+                .ok()
+        });
+        let ai_lines: Vec<Value> = ai_job
+            .as_deref()
+            .map(|j| tail_events(&self.conn(), j, 400))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| e.stream != "system" || e.level == "error")
+            .map(|e| {
+                let kind = if e.line.starts_with("[tool]") { "tool" } else if e.line.starts_with("[result") { if e.line.starts_with("[result ERROR]") { "toolError" } else { "result" } } else if e.line.starts_with("Claude:") { "text" } else if e.line.starts_with("[done]") { "done" } else { "log" };
+                json!({"ts": e.ts, "kind": kind, "level": e.level, "line": e.line})
+            })
+            .collect();
+        let ai_status = ai_job.as_deref().and_then(|j| db::job_get(&self.conn(), j).ok()).map(|j| json!({"id": j.id, "label": j.label, "status": j.status, "progressText": j.progress_text}));
+        // research sources
+        let E = ep_upper(&p.episode);
+        let src_file = [base.join(format!("{E}_SOURCES.md")), crate::layout::video_dir(&root, &p.episode).join("docs").join(format!("{E}_SOURCES.md"))].into_iter().find(|f| f.exists());
+        let sources: Vec<Value> = src_file
+            .and_then(|f| std::fs::read_to_string(f).ok())
+            .map(|s| {
+                static RE_MDLINK: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[([^\]]{1,200})\]\((https?://[^\s)]+)\)").unwrap());
+                static RE_URL: Lazy<Regex> = Lazy::new(|| Regex::new(r"https?://[^\s)>\]]+").unwrap());
+                let mut v: Vec<Value> = vec![];
+                // the title is on the URL's line ("[title](url)", "title — url") or on the nearest line above it
+                // (a heading / numbered item / "標題：…" line) when the URL line only says "網址：" / "URL:"
+                let mut last_title = String::new();
+                let strip = |l: &str| l.trim().trim_start_matches(|c: char| c == '#' || c == '-' || c == '*' || c == '>' || c.is_ascii_digit() || c == '.' || c == '、' || c.is_whitespace()).trim().to_string();
+                let label = |t: &str| {
+                    let t = t.trim_matches(|c: char| c.is_whitespace() || "-*：:|#()（）".contains(c));
+                    let lower = t.to_lowercase();
+                    let generic = ["網址", "网址", "url", "link", "連結", "链接", "來源", "来源", "source"];
+                    if t.chars().count() < 2 || generic.iter().any(|g| lower == *g || lower.ends_with(g) && t.chars().count() <= 4) { String::new() } else { t.to_string() }
+                };
+                for l in s.lines() {
+                    if let Some(c) = RE_MDLINK.captures(l) {
+                        let t = label(&c[1]);
+                        v.push(json!({"title": if t.is_empty() { last_title.clone() } else { t }, "url": c[2].to_string()}));
+                    } else if let Some(m) = RE_URL.find(l) {
+                        let own = label(&strip(&l.replace(m.as_str(), "")).replace("<>", ""));
+                        let t = if own.is_empty() { last_title.clone() } else { own };
+                        v.push(json!({"title": t.chars().take(160).collect::<String>(), "url": m.as_str()}));
+                    } else {
+                        let t = strip(l);
+                        let t = t.trim_start_matches("標題").trim_start_matches("标题").trim_start_matches("Title").trim_start_matches(|c: char| c == '：' || c == ':' || c.is_whitespace()).replace("**", "");
+                        if !t.is_empty() && !t.starts_with("支持") && !t.starts_with("支援") && t.chars().count() <= 160 {
+                            last_title = t;
+                        }
+                    }
+                }
+                v
+            })
+            .unwrap_or_default();
+        // file changes in the worktree since the production started
+        let mut changes: Vec<Value> = vec![];
+        if let Some(w) = &wt {
+            if let Ok(o) = git(w, &["status", "--porcelain", "--untracked-files=normal"]) {
+                for l in o.stdout.lines().take(200) {
+                    if l.len() > 3 {
+                        changes.push(json!({"status": l[..2].trim(), "path": l[3..].trim(), "committed": false}));
+                    }
+                }
+            }
+            // diff against the commit the worktree started from (recorded at prepare; older productions: the
+            // prepare checkpoint, which is that same commit because preparing commits nothing)
+            let base = p.data["baseSha"].as_str().map(String::from).or_else(|| p.stages.iter().find(|s| s.id == "prepare").and_then(|s| s.checkpoint.clone()));
+            if let Some(cp) = base {
+                if let Ok(o) = git(w, &["diff", "--numstat", &cp, "HEAD"]) {
+                    for l in o.stdout.lines().take(200) {
+                        let f: Vec<&str> = l.split('\t').collect();
+                        if f.len() == 3 {
+                            changes.push(json!({"status": "C", "path": f[2], "added": f[0], "removed": f[1], "committed": true}));
+                        }
+                    }
+                }
+            }
+        }
+        // script preview (master narration; zh-CN copy when there is one)
+        let script = crate::narration::read(&base, "zh-TW").ok().map(|r| r["doc"]["sequences"][&p.episode].clone()).filter(|v| !v.is_null());
+        // storyboard: key frames (review stills, low-res previews, thumbnails)
+        let mut stills = vec![];
+        for (d, kind) in [("out/stills", "still"), ("out/preview", "preview")] {
+            if let Ok(rd) = std::fs::read_dir(base.join(d)) {
+                let mut v: Vec<_> = rd.flatten().filter(|e| e.file_name().to_string_lossy().starts_with(&E)).collect();
+                v.sort_by_key(|e| e.file_name());
+                for e in v.into_iter().take(40) {
+                    stills.push(json!({"kind": kind, "name": e.file_name().to_string_lossy(), "path": e.path().to_string_lossy()}));
+                }
+            }
+        }
+        // voice audition: generated narration audio with its Whisper result
+        let mut voice = vec![];
+        for d in ["public/assets/audio/voiceover_cosy", "public/assets/audio/voiceover_cosy_cn"] {
+            let dir = base.join(d).join(&p.episode);
+            if let Ok(rd) = std::fs::read_dir(&dir) {
+                let mut v: Vec<_> = rd.flatten().filter(|e| e.file_name().to_string_lossy().ends_with(".mp3")).collect();
+                v.sort_by_key(|e| e.file_name());
+                for e in v.into_iter().take(80) {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    let meta: Value = std::fs::read_to_string(dir.join(name.replace(".mp3", ".json"))).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+                    voice.push(json!({
+                        "id": name.trim_end_matches(".mp3"), "lang": if d.ends_with("_cn") { "zh-CN" } else { "main" }, "path": e.path().to_string_lossy(),
+                        "speak": meta["speak"], "duration": meta["duration"], "cer": meta["alignment"]["cer"], "asr": meta["alignment"]["asr"],
+                    }));
+                }
+            }
+        }
+        // finished / preview videos
+        let mut videos = vec![];
+        for d in [base.clone(), crate::layout::video_dir(&root, &p.episode).join("output")] {
+            if let Ok(rd) = std::fs::read_dir(&d) {
+                for e in rd.flatten() {
+                    let n = e.file_name().to_string_lossy().to_string();
+                    if n.starts_with(&E) && n.ends_with(".mp4") {
+                        videos.push(json!({"name": n, "path": e.path().to_string_lossy(), "bytes": e.metadata().map(|m| m.len()).unwrap_or(0)}));
+                    }
+                }
+            }
+        }
+        // errors, fixes and environment repairs
+        let history: Vec<Value> = events(&self.conn(), id, 0, 5000)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| e.level != "info" || e.line.contains("修正") || e.line.contains("🛠") || e.line.starts_with('▶') && e.line.contains("修正"))
+            .map(|e| json!({"ts": e.ts, "level": e.level, "stage": e.stage, "line": e.line}))
+            .collect();
+        Ok(json!({
+            "id": p.id, "status": p.status, "stage": p.stage, "attempt": p.attempt, "mode": p.mode,
+            "worktree": wt.as_ref().map(|w| w.to_string_lossy().to_string()),
+            "job": job.map(|j| json!({"id": j.id, "kind": j.kind, "label": j.label, "status": j.status, "progress": j.progress, "progressText": j.progress_text, "step": j.step, "steps": j.steps, "startedAt": j.started_at, "error": j.error})),
+            "jobLines": job_lines.iter().map(|e| json!({"ts": e.ts, "stream": e.stream, "level": e.level, "line": e.line})).collect::<Vec<_>>(),
+            "render": render,
+            "ai": {"job": ai_status, "lines": ai_lines},
+            "sources": sources, "changes": changes, "script": script, "stills": stills, "voice": voice, "videos": videos, "history": history,
+        }))
+    }
+
+    /// Queue a low-resolution storyboard preview (12 key frames at 640×360, out/preview/) of the production's
+    /// current code and timeline. Uses the GPU queue like any other job (waits while a render holds the GPU).
+    pub fn preview(&self, id: &str) -> Result<db::Job, String> {
+        let p = get(&self.conn(), id)?;
+        let root = self.root(&p)?;
+        let w = p.worktree.clone().ok_or("這次製作沒有工作樹（已完成或已捨棄），無法預覽")?;
+        let wt = worktree_dir(&root, &w);
+        let src = if content::cn_only(&p.config) { "src_cn" } else { "src" };
+        let tl: Value = std::fs::read_to_string(wt.join(src).join("data/timeline.generated.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .ok_or("還沒有時間軸（配音與時間軸完成後才能預覽）")?;
+        let total = tl[&p.episode]["totalFrames"].as_u64().ok_or("時間軸裡還沒有這一集")? / 2;
+        let n = 12u64.min(total.max(1));
+        let frames: Vec<String> = (0..n).map(|i| ((total.saturating_sub(1)) * (2 * i + 1) / (2 * n)).to_string()).collect();
+        let _ = std::fs::remove_dir_all(wt.join("out/preview"));
+        let params = json!({"workdir": w, "episode": p.episode, "comp": format!("{}-30fps", ep_upper(&p.episode)), "frames": frames.join(","), "src": src, "scale": 0.3333});
+        let j = self.queue.enqueue(p.project_id.as_deref(), "stills", &params, &crate::jobs::job_root(&root, &params)?)?;
+        self.log(&p, "info", &format!("▶ 低解析度預覽（{} 張關鍵幀，640×360）", frames.len()));
+        Ok(j)
+    }
+
     // -------------------------------------------------------------- inline actions
 
     fn inline(&self, p: &mut Production, name: &str) -> Result<(), Check> {
@@ -1218,15 +1709,61 @@ impl Autopilot {
                 let w = p.worktree.clone().unwrap_or_else(|| format!("auto-{}-{}", p.episode, &p.id[..8]));
                 let br = format!("studio/auto/{}-{}", p.episode, &p.id[..8]);
                 let info = prepare_worktree(&root, &w, &br).map_err(Check::Hard)?;
+                let wtp = worktree_dir(&root, &w);
                 p.worktree = Some(w);
                 p.branch = Some(br);
                 self.log(p, "info", &info);
+                if p.data["baseSha"].is_null() {
+                    if let Ok(o) = git(&wtp, &["rev-parse", "HEAD"]) {
+                        p.data["baseSha"] = json!(o.stdout.trim());
+                    }
+                }
+                // requirements and material where every agent (Claude, 豆包, external) can read them
+                let _ = std::fs::create_dir_all(wtp.join("out/auto"));
+                let _ = std::fs::write(wtp.join("out/auto/BRIEF.md"), content::brief_markdown(&p.config, &p.episode));
+                if !p.config.assets.is_empty() {
+                    let adir = crate::layout::video_dir(&root, &p.episode).join("assets");
+                    crate::assets::link(&wtp, &p.episode, &adir).map_err(Check::Hard)?;
+                    let md = crate::assets::manifest(&wtp, &p.episode, &p.config.assets);
+                    let frames = md.matches("asset_frames/").count();
+                    self.log(p, "info", &format!("素材 {} 個已連結到 public/user/{}；清單 out/auto/ASSETS.md{}", p.config.assets.len(), p.episode, if frames > 0 { format!("，擷取 {frames} 張影片關鍵幀") } else { String::new() }));
+                }
+                Ok(())
+            }
+            "import_script" => {
+                let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
+                let en = content::is_en(&p.config);
+                let (title, scenes) = content::parse_script(&p.config.script_text, en, &p.config.chapters);
+                if scenes.is_empty() {
+                    return Err(Check::Hard("自訂腳本沒有任何內容可以匯入".into()));
+                }
+                let title = title.unwrap_or_else(|| p.config.topic.chars().take(24).collect());
+                let seq = content::script_to_seq(&p.episode, &title, &scenes);
+                let path = crate::narration::file_path(&wt, "zh-TW").map_err(Check::Hard)?;
+                let raw = std::fs::read_to_string(&path).map_err(|e| Check::Hard(e.to_string()))?;
+                let mut doc: Value = serde_json::from_str(raw.trim_start_matches('\u{feff}')).map_err(|e| Check::Hard(e.to_string()))?;
+                if doc["sequences"].get(&p.episode).is_none() || p.data["scriptImported"].as_bool() != Some(true) {
+                    doc["sequences"][&p.episode] = seq;
+                    std::fs::write(&path, crate::narration::serialize_like(&doc, &raw).map_err(Check::Hard)?).map_err(|e| Check::Hard(e.to_string()))?;
+                    p.data["scriptImported"] = json!(true);
+                }
+                let n: usize = scenes.iter().map(|s| s.1.len()).sum();
+                self.log(p, "info", &format!("已匯入使用者腳本：{} 個章節、{n} 句（逐字使用，AI 只補錨點、念法與標題）", scenes.len()));
                 Ok(())
             }
             "check_script" => {
                 let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
-                let r = check_script(&wt, &p.episode, p.config.minutes * p.config.tw_cps.unwrap_or(3.6) / 3.6).map_err(Check::Fail)?;
-                self.log(p, "info", &r);
+                let c = &p.config;
+                let script_mode = content::mode(c) == "script";
+                let target = c.minutes * 60.0 * content::rate(c);
+                let r = check_script(&wt, &p.episode, &ScriptRules { target_units: target, words: content::is_en(c), check_length: !script_mode, min_sources: c.min_sources() }).map_err(Check::Fail)?;
+                let doc = crate::narration::read(&wt, "zh-TW").map_err(Check::Hard)?;
+                let seq = doc["doc"]["sequences"][&p.episode].clone();
+                if script_mode {
+                    content::fidelity(&c.script_text, &seq, content::is_en(c)).map_err(Check::Fail)?;
+                }
+                let notes = content::check_requirements(c, &seq).map_err(Check::Fail)?;
+                self.log(p, "info", &format!("{r}{}{}", if script_mode { "；字幕與使用者腳本逐字相符" } else { "" }, if notes.is_empty() { String::new() } else { format!("；{}", notes.join("；")) }));
                 Ok(())
             }
             "check_animate" => {
@@ -1247,9 +1784,22 @@ impl Autopilot {
                 // Raw CER also counts digits vs Chinese numerals and homophones written with other characters
                 // ("16" vs 十六, 他/它, 占/站). Re-check those lines by pronunciation: pinyin error rate.
                 let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
-                let dir = wt.join("public/assets/audio/voiceover_cosy").join(&p.episode);
+                let dir = wt.join(if content::cn_only(&p.config) { "public/assets/audio/voiceover_cosy_cn" } else { "public/assets/audio/voiceover_cosy" }).join(&p.episode);
                 let mut bad = vec![];
                 let mut ok_after = 0;
+                if content::is_en(&p.config) {
+                    // English: no pinyin comparison; the character error rate of the letters is the measure
+                    for (id, cer, _) in &raw {
+                        let v: Value = std::fs::read_to_string(dir.join(format!("{id}.json"))).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+                        bad.push(format!("{id}  CER {cer:.3}\n    應念：{}\n    聽到：{}", v["speak"].as_str().unwrap_or(""), v["alignment"]["asr"].as_str().unwrap_or("")));
+                    }
+                    if bad.is_empty() {
+                        self.log(p, "info", "發音檢查通過（英文，Whisper 字元錯誤率 ≤ 0.15）");
+                        return Ok(());
+                    }
+                    p.data["badLines"] = json!(raw.iter().map(|r| r.0.clone()).collect::<Vec<_>>());
+                    return Err(Check::Fail(format!("{} 句讀音可能有誤（字元錯誤率 > 0.15）：\n{}", bad.len(), bad.join("\n"))));
+                }
                 for (id, cer, _) in &raw {
                     let v: Value = std::fs::read_to_string(dir.join(format!("{id}.json"))).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
                     let speak = v["speak"].as_str().unwrap_or("");
@@ -1275,7 +1825,7 @@ impl Autopilot {
             }
             "plan_stills" => {
                 let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
-                let frames = still_frames(&wt, &p.episode).map_err(Check::Hard)?;
+                let frames = still_frames(&wt, &p.episode, if content::cn_only(&p.config) { "src_cn" } else { "src" }).map_err(Check::Hard)?;
                 let comp = format!("{E}-30fps");
                 let _ = std::fs::remove_dir_all(wt.join("out/stills"));
                 let _ = std::fs::remove_file(wt.join("out/auto/review.json"));
@@ -1336,7 +1886,7 @@ impl Autopilot {
                 let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
                 let f = wt.join(format!("{E}_PUBLISH_METADATA.md"));
                 match std::fs::read_to_string(&f) {
-                    Ok(s) if s.contains("YouTube") && s.chars().count() > 200 => Ok(()),
+                    Ok(s) if (s.contains("YouTube") || s.contains("Bilibili")) && s.chars().count() > 200 => Ok(()),
                     _ => Err(Check::Fail(format!("{E}_PUBLISH_METADATA.md 沒有寫出或內容不完整"))),
                 }
             }
@@ -1347,7 +1897,7 @@ impl Autopilot {
                 self.log(p, if merged { "info" } else { "warn" }, &note);
                 if merged {
                     let w = p.worktree.clone().unwrap_or_default();
-                    match remove_worktree(&root, &w, true) {
+                    match remove_worktree(&root, &w, !crate::layout::is_test(&p.episode)) {
                         Ok(()) => p.worktree = None,
                         Err(e) => self.log(p, "warn", &format!("工作樹清除失敗（可稍後按「捨棄」）：{e}")),
                     }
@@ -1370,6 +1920,72 @@ enum Check {
     Retry(String),
     /// production finished (merged or needs manual merge)
     Done(bool),
+}
+
+/// The last `n` events of a job (oldest first).
+fn tail_events(conn: &rusqlite::Connection, job_id: &str, n: i64) -> Vec<db::JobEvent> {
+    let max: i64 = conn.query_row("SELECT COALESCE(MAX(id),0) FROM job_events WHERE job_id=?1", [job_id], |r| r.get(0)).unwrap_or(0);
+    let after: i64 = conn
+        .query_row("SELECT COALESCE(MIN(id),0) FROM (SELECT id FROM job_events WHERE job_id=?1 ORDER BY id DESC LIMIT ?2)", params![job_id, n], |r| r.get(0))
+        .unwrap_or(0);
+    let _ = max;
+    db::events_list(conn, job_id, (after - 1).max(0), n).unwrap_or_default()
+}
+
+/// Render progress from render.mjs's own log lines: frames done / total (cached segments included), measured FPS
+/// of the last segment and on average, concurrency, ETA (remaining frames ÷ last FPS), encode phase.
+pub fn render_stats(lines: &[db::JobEvent]) -> Value {
+    static RE_TOTAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"渲染 (\S+)：(\d+) 幀，(\d+) 段").unwrap());
+    static RE_DONE: Lazy<Regex> = Lazy::new(|| Regex::new(r"區段 (\d+)[–-](\d+)：(\d+)s，([\d.]+) fps，並行 (\d+)(?:，GPU 平均 (\d+)%)?(?:，VRAM 峰值 (\d+) MiB)?(?:，最高 ([\d.]+)°C)?").unwrap());
+    static RE_SKIP: Lazy<Regex> = Lazy::new(|| Regex::new(r"區段 (\d+)[–-](\d+)：已完成，略過").unwrap());
+    static RE_REUSE: Lazy<Regex> = Lazy::new(|| Regex::new(r"↻ (\d+)[–-](\d+) 這一段沿用 (\d+) 幀").unwrap());
+    let start = lines.iter().rposition(|e| RE_TOTAL.is_match(&e.line));
+    let Some(start) = start else { return Value::Null };
+    let c = RE_TOTAL.captures(&lines[start].line).unwrap();
+    let total: u64 = c[2].parse().unwrap_or(0);
+    let (mut done, mut cached, mut chunks_done, mut secs_sum, mut rendered) = (0u64, 0u64, 0u64, 0f64, 0u64);
+    let (mut fps, mut conc, mut gpu, mut vram, mut temp) = (None, None, None, None, None);
+    let mut phase = "render";
+    let mut last_ts = lines[start].ts;
+    let mut scene_note = None;
+    for e in &lines[start + 1..] {
+        let l = e.line.as_str();
+        if let Some(c) = RE_SKIP.captures(l) {
+            let n = c[2].parse::<u64>().unwrap_or(0).saturating_sub(c[1].parse().unwrap_or(0)) + 1;
+            done += n;
+            cached += n;
+            chunks_done += 1;
+        } else if let Some(c) = RE_DONE.captures(l) {
+            let n = c[2].parse::<u64>().unwrap_or(0).saturating_sub(c[1].parse().unwrap_or(0)) + 1;
+            done += n;
+            chunks_done += 1;
+            let s: f64 = c[3].parse().unwrap_or(0.0);
+            let f: f64 = c[4].parse().unwrap_or(0.0);
+            secs_sum += s;
+            rendered += (f * s).round() as u64;
+            fps = Some(f);
+            conc = c[5].parse::<u64>().ok();
+            gpu = c.get(6).and_then(|m| m.as_str().parse::<u64>().ok());
+            vram = c.get(7).and_then(|m| m.as_str().parse::<u64>().ok());
+            temp = c.get(8).and_then(|m| m.as_str().parse::<f64>().ok());
+            last_ts = e.ts;
+        } else if let Some(c) = RE_REUSE.captures(l) {
+            cached += c[3].parse::<u64>().unwrap_or(0);
+        } else if l.contains("場景級增量渲染") {
+            scene_note = Some(l.trim().to_string());
+        } else if l.contains("開始編碼") || l.contains("編碼中") {
+            phase = "encode";
+        } else if l.trim_start().starts_with("完成：") {
+            phase = "done";
+        }
+    }
+    let remaining = total.saturating_sub(done);
+    let eta = if phase == "render" { fps.filter(|f| *f > 0.0).map(|f| (remaining as f64 / f).round()) } else { None };
+    json!({
+        "comp": c[1].to_string(), "totalFrames": total, "doneFrames": done.min(total), "cachedFrames": cached, "chunks": c[3].parse::<u64>().unwrap_or(0), "chunksDone": chunks_done,
+        "fps": fps, "avgFps": if secs_sum > 0.0 { Some((rendered as f64 / secs_sum * 10.0).round() / 10.0) } else { None }, "concurrency": conc,
+        "gpuAvg": gpu, "vramPeakMiB": vram, "maxTempC": temp, "etaSec": eta, "phase": phase, "lastSegmentTs": last_ts, "sceneCache": scene_note,
+    })
 }
 
 fn first_line(s: &str) -> String {
@@ -1544,8 +2160,17 @@ fn latest_qa_report(wt: &Path) -> String {
     newest.and_then(|e| std::fs::read_to_string(e.path()).ok()).map(|s| clip(&s, 4000)).unwrap_or_default()
 }
 
+pub struct ScriptRules {
+    /// target narration length in characters (zh) or words (en)
+    pub target_units: f64,
+    pub words: bool,
+    /// false in custom-script mode (the user's script is as long as it is)
+    pub check_length: bool,
+    pub min_sources: u32,
+}
+
 /// Script checks: valid narration, the episode exists with ≥ 2 scenes, length near target, sources file with URLs.
-pub fn check_script(wt: &Path, ep: &str, minutes: f64) -> Result<String, String> {
+pub fn check_script(wt: &Path, ep: &str, rules: &ScriptRules) -> Result<String, String> {
     let r = crate::narration::read(wt, "zh-TW")?;
     let doc = &r["doc"];
     let v = crate::narration::validate(doc);
@@ -1555,18 +2180,20 @@ pub fn check_script(wt: &Path, ep: &str, minutes: f64) -> Result<String, String>
     }
     let seq = doc["sequences"].get(ep).ok_or(format!("narration.json 裡沒有 sequences.{ep}"))?;
     let scenes = seq["scenes"].as_array().cloned().unwrap_or_default();
-    if scenes.len() < 2 {
+    if scenes.is_empty() || (scenes.len() < 2 && rules.check_length) {
         return Err(format!("{ep} 只有 {} 個場景，至少需要 2 個", scenes.len()));
     }
-    let chars: usize = scenes
+    let texts: Vec<String> = scenes
         .iter()
         .flat_map(|s| s["lines"].as_array().cloned().unwrap_or_default())
-        .map(|l| crate::narration::norm(l["speak"].as_str().filter(|s| !s.trim().is_empty()).or(l["subtitle"].as_str()).unwrap_or("")).chars().count())
-        .sum();
-    let target = minutes * 60.0 * 3.6;
-    let ratio = chars as f64 / target;
-    if !(0.6..=1.5).contains(&ratio) {
-        return Err(format!("旁白共 {chars} 字，目標約 {:.0} 字（{minutes} 分鐘）。請{}到目標的 ±15% 內。", target, if ratio < 1.0 { "增加內容" } else { "精簡" }));
+        .map(|l| l["speak"].as_str().filter(|s| !s.trim().is_empty()).or(l["subtitle"].as_str()).unwrap_or("").to_string())
+        .collect();
+    let chars: usize = if rules.words { texts.iter().map(|t| t.split_whitespace().count()).sum() } else { texts.iter().map(|t| crate::narration::norm(t).chars().count()).sum() };
+    let unit = if rules.words { "words" } else { "字" };
+    let target = rules.target_units;
+    let ratio = chars as f64 / target.max(1.0);
+    if rules.check_length && !(0.6..=1.5).contains(&ratio) {
+        return Err(format!("旁白共 {chars} {unit}，目標約 {:.0} {unit}。請{}到目標的 ±15% 內。", target, if ratio < 1.0 { "增加內容" } else { "精簡" }));
     }
     for k in ["title"] {
         if seq[k].as_str().map(|s| s.trim().is_empty()).unwrap_or(true) {
@@ -1574,17 +2201,25 @@ pub fn check_script(wt: &Path, ep: &str, minutes: f64) -> Result<String, String>
         }
     }
     let src = wt.join(format!("{}_SOURCES.md", ep_upper(ep)));
-    let s = std::fs::read_to_string(&src).map_err(|_| format!("沒有 {}（資料來源清單）", clean_path(&src)))?;
+    let s = match std::fs::read_to_string(&src) {
+        Ok(s) => s,
+        Err(_) if rules.min_sources == 0 => String::new(),
+        Err(_) => return Err(format!("沒有 {}（資料來源清單）", clean_path(&src))),
+    };
     let urls = Regex::new(r"https?://[^\s)>\]]+").unwrap().find_iter(&s).count();
-    if urls < 3 {
-        return Err(format!("{} 只有 {urls} 個網址，至少需要 3 個真實來源", ep_upper(ep) + "_SOURCES.md"));
+    if (urls as u32) < rules.min_sources {
+        return Err(format!("{} 只有 {urls} 個網址，至少需要 {} 個真實來源", ep_upper(ep) + "_SOURCES.md", rules.min_sources));
     }
-    Ok(format!("劇本檢查通過：{} 個場景、{chars} 字（目標 {:.0}）、{urls} 個來源網址", scenes.len(), target))
+    Ok(format!(
+        "劇本檢查通過：{} 個場景、{chars} {unit}{}、{urls} 個來源網址",
+        scenes.len(),
+        if rules.check_length { format!("（目標 {target:.0}）") } else { "（自訂腳本，不檢查長度）".into() }
+    ))
 }
 
 /// One 30 fps frame per scene: just after the scene's last anchor fires (all cards on screen), else mid-scene.
-pub fn still_frames(wt: &Path, ep: &str) -> Result<Vec<u64>, String> {
-    let tl: Value = serde_json::from_str(&std::fs::read_to_string(wt.join("src/data/timeline.generated.json")).map_err(|e| format!("讀不到時間軸：{e}"))?)
+pub fn still_frames(wt: &Path, ep: &str, src: &str) -> Result<Vec<u64>, String> {
+    let tl: Value = serde_json::from_str(&std::fs::read_to_string(wt.join(src).join("data/timeline.generated.json")).map_err(|e| format!("讀不到時間軸：{e}"))?)
         .map_err(|e| e.to_string())?;
     let t = tl.get(ep).ok_or(format!("時間軸沒有 {ep}"))?;
     let total = t["totalFrames"].as_u64().unwrap_or(0);
@@ -1689,6 +2324,7 @@ fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<String, Stri
 /// Remove junctions first (so nothing is deleted through them), then the worktree, then (optionally) the branch.
 pub fn remove_worktree(root: &Path, wid: &str, delete_branch: bool) -> Result<(), String> {
     let wt = worktree_dir(root, wid);
+    crate::assets::unlink_all(&wt); // public/user/<ep> material junctions (the material itself stays)
     for rel in LINKS {
         let l = wt.join(rel);
         if std::fs::symlink_metadata(&l).is_ok() {
@@ -1712,52 +2348,144 @@ pub fn remove_worktree(root: &Path, wid: &str, delete_branch: bool) -> Result<()
     Ok(())
 }
 
-/// Move the episode's finished files to the project root (never overwrite), commit the worktree, merge its branch.
+/// Write the episode's narration into `<video>/script/` (JSON + readable Markdown).
+fn write_script_files(src_root: &Path, dst: &Path, ep: &str, cn_tree: bool) {
+    let _ = std::fs::create_dir_all(dst);
+    for (loc, suffix) in [("zh-TW", ""), ("zh-CN", "_zh-CN")] {
+        if loc == "zh-CN" && !cn_tree {
+            continue;
+        }
+        let Ok(r) = crate::narration::read(src_root, loc) else { continue };
+        let seq = &r["doc"]["sequences"][ep];
+        if seq.is_null() {
+            continue;
+        }
+        let _ = std::fs::write(dst.join(format!("{}{suffix}.narration.json", ep_upper(ep))), serde_json::to_string_pretty(seq).unwrap_or_default());
+        let mut md = format!("# {} {}\n\n", ep_upper(ep), seq["title"].as_str().unwrap_or(""));
+        for sc in seq["scenes"].as_array().cloned().unwrap_or_default() {
+            md.push_str(&format!("## {} {}\n\n", sc["id"].as_str().unwrap_or(""), sc["title"].as_str().unwrap_or("")));
+            for l in sc["lines"].as_array().cloned().unwrap_or_default() {
+                md.push_str(&format!("- {}\n", l["subtitle"].as_str().unwrap_or("")));
+            }
+            md.push('\n');
+        }
+        let _ = std::fs::write(dst.join(format!("{}{suffix}.md", ep_upper(ep))), md);
+    }
+}
+
+/// Link (or copy) files of `from` whose names pass `keep` into `to`.
+fn link_files(from: &Path, to: &Path, keep: &dyn Fn(&str) -> bool) -> usize {
+    let Ok(rd) = std::fs::read_dir(from) else { return 0 };
+    let _ = std::fs::create_dir_all(to);
+    let mut n = 0;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !e.path().is_file() || !keep(&name) {
+            continue;
+        }
+        let dst = to.join(&name);
+        if dst.exists() {
+            continue;
+        }
+        if std::fs::hard_link(e.path(), &dst).or_else(|_| std::fs::copy(e.path(), &dst).map(|_| ())).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// Delivery (v0.2.1 layout). Every output goes into the video's own folder (`projects/EP07/…`, see layout.rs):
+/// output/ (.mp4), subtitles/, thumbnail/, docs/ (sources, upload text, QA), script/, scenes/ (key frames), voice/.
+/// Formal episodes: text files are committed in the worktree under `projects/EP07/` and the branch is merged
+/// (`--no-ff`, episode-aware conflict resolution); videos, stills and voice are moved / linked (git-ignored).
+/// Sandbox tests (TEST numbers): everything is copied to `sandbox/TEST001/`; nothing is merged into the project.
+/// Never overwrites a different existing file.
 fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<String>, bool, String), String> {
     let E = ep_upper(&p.episode);
+    let sandbox = crate::layout::is_test(&p.episode);
+    let vrel = crate::layout::video_rel(&p.episode);
     let re = Regex::new(&format!(r"^{E}(_.*)?\.(mp4|srt|png|md)$")).unwrap();
-    let mut moved = vec![];
-    let mut tracked_outputs = vec![];
+    let cn_tree = content::wants_cn(&p.config);
+    // 1. sort the worktree's outputs into the video folder (inside the worktree)
+    let wv = wt.join(vrel.replace('/', "\\"));
+    for s in crate::layout::SUBDIRS {
+        let _ = std::fs::create_dir_all(wv.join(s));
+    }
+    let mut videos = vec![];
     for e in std::fs::read_dir(wt).map_err(|e| e.to_string())?.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
-        if !e.path().is_file() || !re.is_match(&name) || name.ends_with("_SOURCES.md") {
+        if !e.path().is_file() || !re.is_match(&name) {
             continue;
         }
-        let dst = root.join(&name);
-        if dst.exists() {
-            let same = std::fs::read(&dst).ok().zip(std::fs::read(e.path()).ok()).map(|(a, b)| a == b).unwrap_or(false);
-            if !same {
-                return Err(format!("專案資料夾已經有 {name}，內容不同，不會覆寫。請改名或移走後按「繼續」。"));
-            }
-            // delivered by an earlier (interrupted or conflicted) attempt: identical copy
-            if !name.ends_with(".mp4") {
-                // the merge brings tracked files; an identical untracked copy would block it
-                let _ = std::fs::remove_file(&dst);
-                tracked_outputs.push(name.clone());
-            }
-            moved.push(name);
-            continue;
-        }
+        let dst = wv.join(crate::layout::subdir_for(&name)).join(&name);
         if name.ends_with(".mp4") {
-            std::fs::rename(e.path(), &dst).or_else(|_| std::fs::copy(e.path(), &dst).map(|_| ())).map_err(|x| format!("移動 {name} 失敗：{x}"))?;
+            videos.push(name.clone());
+        }
+        if !dst.exists() {
+            std::fs::rename(e.path(), &dst).or_else(|_| std::fs::copy(e.path(), &dst).map(|_| ())).map_err(|x| format!("整理 {name} 失敗：{x}"))?;
         } else {
-            // text / image outputs are also committed with the branch; copy and let the merge bring them
-            tracked_outputs.push(name.clone());
+            let _ = std::fs::remove_file(e.path());
         }
-        moved.push(name);
     }
-    // QA reports
-    let qa_dst = root.join("out/qa");
-    let _ = std::fs::create_dir_all(&qa_dst);
-    if let Ok(rd) = std::fs::read_dir(wt.join("out/qa")) {
-        for e in rd.flatten() {
-            if e.file_name().to_string_lossy().starts_with(&E) {
-                let _ = std::fs::copy(e.path(), qa_dst.join(e.file_name()));
+    write_script_files(wt, &wv.join("script"), &p.episode, cn_tree);
+    let _ = std::fs::copy(wt.join("out/auto/BRIEF.md"), wv.join("BRIEF.md"));
+    if wt.join("out/auto/ASSETS.md").exists() {
+        let _ = std::fs::copy(wt.join("out/auto/ASSETS.md"), wv.join("docs").join(format!("{E}_ASSETS.md")));
+    }
+    let _ = link_files(&wt.join("out/qa"), &wv.join("docs").join("qa"), &|n| n.starts_with(&E));
+    let _ = std::fs::write(
+        wv.join("production.json"),
+        serde_json::to_string_pretty(&json!({"id": p.id, "episode": p.episode, "topic": p.config.topic, "mode": content::mode(&p.config), "language": content::lang(&p.config), "createdAt": p.created_at, "sandbox": sandbox, "warnings": p.warnings})).unwrap_or_default(),
+    );
+    // stills / voice: binary, git-ignored — linked straight into the project's video folder below
+    let rv = root.join(vrel.replace('/', "\\"));
+    let voice_dirs: Vec<PathBuf> = ["public/assets/audio/voiceover_cosy", "public/assets/audio/voiceover_cosy_cn"].iter().map(|d| wt.join(d).join(&p.episode)).filter(|d| d.exists()).collect();
+    let link_binaries = |rv: &Path| {
+        let _ = link_files(&wt.join("out/stills"), &rv.join("scenes"), &|n| n.starts_with(&E));
+        for d in &voice_dirs {
+            let to = if d.to_string_lossy().contains("voiceover_cosy_cn") { rv.join("voice").join("zh-CN") } else { rv.join("voice") };
+            let _ = link_files(d, &to, &|n| n.ends_with(".mp3") || n.ends_with(".wav") || n.ends_with(".json"));
+        }
+    };
+    if sandbox {
+        // copy the whole video folder; the project's source tree is not touched
+        let n = copy_tree(&wv, &rv)?;
+        link_binaries(&rv);
+        let mut all = list_outputs(root, &vrel);
+        all.sort();
+        return Ok((all.clone(), true, format!("Sandbox 測試完成（不合併到專案、不佔用正式集數）：{n} 個檔案已放到 {vrel}/；成品：{}", all.join("、"))));
+    }
+    // 2. formal: videos to the project's video folder (ignored by git), then commit + merge the text outputs
+    for name in &videos {
+        let (a, b) = (wv.join("output").join(name), rv.join("output").join(name));
+        std::fs::create_dir_all(b.parent().unwrap()).map_err(|e| e.to_string())?;
+        if b.exists() {
+            let same = std::fs::metadata(&a).ok().zip(std::fs::metadata(&b).ok()).map(|(x, y)| x.len() == y.len()).unwrap_or(false);
+            if !same {
+                return Err(format!("專案已經有 {vrel}/output/{name}，內容不同，不會覆寫。請改名或移走後按「繼續」。"));
             }
+            continue;
         }
+        std::fs::rename(&a, &b).or_else(|_| std::fs::copy(&a, &b).map(|_| ())).map_err(|x| format!("移動 {name} 失敗：{x}"))?;
     }
+    link_binaries(&rv);
     checkpoint(wt, &format!("auto({E}): 交付 {}", p.config.topic.chars().take(40).collect::<String>()));
     let br = p.branch.clone().ok_or("沒有分支")?;
+    // files the branch adds under the video folder that already exist untracked in the project (an interrupted
+    // earlier delivery, BRIEF.md written at start): identical → remove so the merge can bring them; different → stop
+    if let Ok(o) = git(root, &["diff", "--name-only", "--diff-filter=A", &format!("HEAD...{br}"), "--", &vrel]) {
+        for f in o.stdout.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+            let (a, b) = (wt.join(f.replace('/', "\\")), root.join(f.replace('/', "\\")));
+            if b.is_file() {
+                let same = std::fs::read(&a).ok().zip(std::fs::read(&b).ok()).map(|(x, y)| x == y).unwrap_or(false);
+                if same || f.ends_with("BRIEF.md") || f.ends_with("production.json") {
+                    let _ = std::fs::remove_file(&b);
+                } else {
+                    return Err(format!("專案已經有 {f}，內容不同，不會覆寫。請改名或移走後按「繼續」。"));
+                }
+            }
+        }
+    }
     let o = crate::util::run_env(
         "git",
         &["merge", "--no-ff", "--no-edit", "-m", &format!("Studio 自動製作 {E}：{}", p.config.topic.chars().take(60).collect::<String>()), &br],
@@ -1768,27 +2496,55 @@ fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<String>, bool,
     let merged_ok = o.ok() || resolve_episode_conflicts(root, &p.episode).unwrap_or(false);
     if !merged_ok {
         let _ = git(root, &["merge", "--abort"]);
-        // the main tree has no branch files: copy the non-mp4 outputs so the user still gets everything
-        for n in &tracked_outputs {
-            if !root.join(n).exists() {
-                let _ = std::fs::copy(wt.join(n), root.join(n));
-            }
-        }
+        // the project has no branch files: copy the video folder so the user still gets everything
+        let _ = copy_tree(&wv, &rv);
         return Ok((
-            moved,
+            list_outputs(root, &vrel),
             false,
             format!(
-                "成品已移到專案資料夾，但原始碼無法自動合併（專案在製作期間有其他修改）：{}\n分支 {br} 與工作樹保留；請在「提示詞」頁的工作樹清單檢視差異後手動合併，或解決衝突後按「繼續」。",
+                "成品已放到 {vrel}/，但原始碼無法自動合併（專案在製作期間有其他修改）：{}\n分支 {br} 與工作樹保留；請在「提示詞」頁的工作樹清單檢視差異後手動合併，或解決衝突後按「繼續」。",
                 first_line(&o.combined())
             ),
         ));
     }
-    // list from the project root: a delivery that was interrupted and retried has already moved some files
-    let mut all: Vec<String> = std::fs::read_dir(root)
-        .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| re.is_match(n)).collect())
-        .unwrap_or_default();
+    // imported material stays usable for re-renders in the project itself
+    if !p.config.assets.is_empty() {
+        let _ = crate::assets::link(root, &p.episode, &rv.join("assets"));
+    }
+    let mut all = list_outputs(root, &vrel);
     all.sort();
-    Ok((all.clone(), true, format!("已合併 {br}，成品：{}", all.join("、"))))
+    Ok((all.clone(), true, format!("已合併 {br}，成品在 {vrel}/：{}", all.join("、"))))
+}
+
+/// Copy a folder tree (files that already exist with the same size are skipped; different ones are not overwritten).
+fn copy_tree(a: &Path, b: &Path) -> Result<usize, String> {
+    let mut n = 0;
+    std::fs::create_dir_all(b).map_err(|e| e.to_string())?;
+    for e in std::fs::read_dir(a).map_err(|e| e.to_string())?.flatten() {
+        let (pa, pb) = (e.path(), b.join(e.file_name()));
+        if pa.is_dir() {
+            n += copy_tree(&pa, &pb)?;
+        } else if !pb.exists() {
+            std::fs::copy(&pa, &pb).map_err(|x| format!("複製 {} 失敗：{x}", clean_path(&pa)))?;
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// Finished files of a video folder (relative to the project root): videos, subtitles, thumbnails, docs.
+fn list_outputs(root: &Path, vrel: &str) -> Vec<String> {
+    let mut out = vec![];
+    for s in ["output", "subtitles", "thumbnail", "docs"] {
+        if let Ok(rd) = std::fs::read_dir(root.join(vrel.replace('/', "\\")).join(s)) {
+            for e in rd.flatten() {
+                if e.path().is_file() {
+                    out.push(format!("{vrel}/{s}/{}", e.file_name().to_string_lossy()));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Episode-aware conflict resolution for a merge in progress. Productions add a new key (`sequences.<ep>` in
@@ -1952,7 +2708,8 @@ mod tests {
         }
         p.attempt = 2;
         match &actions(&p)[1] {
-            Action::Job { params, .. } => assert_eq!(params["fresh"], true, "re-render after a fix"),
+            // v0.2.1: no full re-render after a fix — render.mjs's scene fingerprints re-render only changed scenes
+            Action::Job { params, .. } => assert_eq!(params["fresh"], false, "scene-level incremental re-render"),
             _ => panic!(),
         }
         p.stage = "script".into();
@@ -1965,6 +2722,99 @@ mod tests {
             }
             _ => panic!(),
         }
+    }
+
+    fn kinds(a: &[Action]) -> Vec<String> {
+        a.iter()
+            .map(|x| match x {
+                Action::Job { kind, params } => format!("{kind}{}", params.get("src").and_then(|v| v.as_str()).map(|s| format!("@{s}")).unwrap_or_default()),
+                Action::Inline(n) => format!("inline:{n}"),
+                Action::Agent { .. } => "agent".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn zh_cn_only_never_renders_traditional() {
+        let mut c = AutoConfig { topic: "互联网".into(), language: "zh-CN".into(), youtube: true, ..Default::default() };
+        c.validate().unwrap();
+        assert!(!c.youtube && c.bilibili);
+        assert!(!stage_enabled("youtube", &c) && !stage_enabled("bilibili", &c), "the Simplified video is the final stage itself");
+        let mut p = Production { episode: "ep07".into(), worktree: Some("auto-ep07-x".into()), attempt: 1, config: c, ..Default::default() };
+        p.stage = "voice".into();
+        assert_eq!(kinds(&actions(&p)), ["make_cn", "voiceover_cn", "inline:check_voice"]);
+        p.stage = "timeline".into();
+        assert_eq!(kinds(&actions(&p)), ["timeline@src_cn"]);
+        p.stage = "visual".into();
+        assert_eq!(kinds(&actions(&p)), ["make_cn", "inline:plan_stills", "stills@src_cn", "claude_in", "typecheck", "inline:check_visual"]);
+        p.stage = "final".into();
+        let a = actions(&p);
+        assert_eq!(kinds(&a), ["typecheck", "bilibili", "inline:check_qa"]);
+        match &a[1] {
+            Action::Job { params, .. } => assert!(params["skipVoice"] == true && params["reconvert"] == true),
+            _ => panic!(),
+        }
+        p.stage = "thumbnail".into();
+        assert_eq!(kinds(&actions(&p)), ["make_cn", "stills@src_cn", "inline:copy_thumb_cn"]);
+        p.stage = "script".into();
+        let pr = match &actions(&p)[0] { Action::Job { params, .. } => params["prompt"].as_str().unwrap().to_string(), _ => panic!() };
+        assert!(pr.contains("简体中文") && pr.contains("不会先做繁体版"), "{pr}");
+    }
+
+    #[test]
+    fn english_and_script_mode_plans() {
+        let mut c = AutoConfig { topic: "How the internet works".into(), language: "en".into(), mode: "script".into(), script_text: "## Intro\nPackets travel.".into(), ..Default::default() };
+        c.validate().unwrap();
+        c.require_script().unwrap();
+        assert_eq!(c.min_sources(), 0);
+        let mut p = Production { episode: "test001".into(), worktree: Some("auto-test001-x".into()), attempt: 1, config: c, ..Default::default() };
+        p.stage = "script".into();
+        assert_eq!(kinds(&actions(&p)), ["inline:import_script", "claude_in", "inline:check_script"]);
+        p.stage = "voice".into();
+        match &actions(&p)[0] {
+            Action::Job { kind, params } => assert!(*kind == "voiceover_tw" && params["lang"] == "en"),
+            _ => panic!(),
+        }
+        p.stage = "final".into();
+        match &actions(&p)[1] {
+            Action::Job { kind, params } => assert!(*kind == "final_tw" && params["out"] == "TEST001_Final_en.mp4"),
+            _ => panic!(),
+        }
+        assert!(!stage_enabled("bilibili", &p.config) && !stage_enabled("youtube", &p.config));
+        let mut empty = AutoConfig { topic: "x 測試".into(), mode: "script".into(), ..Default::default() };
+        empty.validate().unwrap();
+        assert!(empty.require_script().is_err());
+    }
+
+    #[test]
+    fn requirements_reach_fix_prompts() {
+        let mut p = Production { episode: "ep07".into(), attempt: 2, ..Default::default() };
+        p.config = AutoConfig { topic: "網路".into(), mode: "guided".into(), must_avoid: "比特幣".into(), brief: "請用快遞比喻".into(), ..Default::default() };
+        p.stage = "final".into();
+        for f in [Fixer::Script, Fixer::Code, Fixer::Pronunciation, Fixer::Qa] {
+            let s = prompt_fix(&p, f, "err");
+            assert!(s.contains("比特幣") && s.contains("請用快遞比喻") && s.contains("指導模式"), "{f:?}");
+        }
+        assert!(prompt_publish(&p).contains("比特幣"));
+        assert!(prompt_animate(&p).contains("請用快遞比喻"));
+    }
+
+    #[test]
+    fn render_stats_from_log() {
+        let ev = |i: i64, l: &str| db::JobEvent { id: i, job_id: "j".into(), ts: i * 1000, stream: "stdout".into(), level: "info".into(), line: l.into() };
+        let lines = vec![
+            ev(1, "渲染 EP06-30fps：17313 幀，10 段（每段 1800 幀），GPU：ANGLE / D3D11；VRAM 基準 1120 MiB，上限 5300 MiB"),
+            ev(2, "  區段 0–1799：已完成，略過"),
+            ev(3, "  區段 1800–3599：50s，36.0 fps，並行 6，GPU 平均 22%，VRAM 峰值 2212 MiB，最高 44.34°C"),
+        ];
+        let r = render_stats(&lines);
+        assert_eq!(r["totalFrames"], 17313);
+        assert_eq!(r["doneFrames"], 3600);
+        assert_eq!(r["cachedFrames"], 1800);
+        assert_eq!(r["fps"], 36.0);
+        assert_eq!(r["concurrency"], 6);
+        assert_eq!(r["etaSec"], ((17313.0 - 3600.0) / 36.0_f64).round());
+        assert_eq!(r["phase"], "render");
     }
 
     #[test]
@@ -1991,11 +2841,14 @@ mod tests {
             {"id": "s02", "title": "b", "lines": (10..20).map(line).collect::<Vec<_>>()}]}}});
         std::fs::write(d.join("src/data/narration.json"), serde_json::to_string_pretty(&doc).unwrap()).unwrap();
         // 20 lines × 20 chars = 400 chars ≈ 1.85 min
-        assert!(check_script(&d, "ep04", 1.8).unwrap_err().contains("SOURCES"));
+        let zr = |m: f64| ScriptRules { target_units: m * 60.0 * 3.6, words: false, check_length: true, min_sources: 3 };
+        assert!(check_script(&d, "ep04", &zr(1.8)).unwrap_err().contains("SOURCES"));
+        assert!(check_script(&d, "ep04", &ScriptRules { min_sources: 0, ..zr(1.8) }).is_ok(), "custom script: sources optional");
         std::fs::write(d.join("EP04_SOURCES.md"), "- https://a.example/1\n- https://b.example/2\n- https://c.example/3\n").unwrap();
-        assert!(check_script(&d, "ep04", 1.8).unwrap().contains("劇本檢查通過"));
-        assert!(check_script(&d, "ep04", 5.0).unwrap_err().contains("增加內容"));
-        assert!(check_script(&d, "ep09", 1.8).unwrap_err().contains("沒有 sequences.ep09"));
+        assert!(check_script(&d, "ep04", &zr(1.8)).unwrap().contains("劇本檢查通過"));
+        assert!(check_script(&d, "ep04", &zr(5.0)).unwrap_err().contains("增加內容"));
+        assert!(check_script(&d, "ep04", &ScriptRules { check_length: false, ..zr(5.0) }).is_ok(), "custom script: length not checked");
+        assert!(check_script(&d, "ep09", &zr(1.8)).unwrap_err().contains("沒有 sequences.ep09"));
         let _ = std::fs::remove_dir_all(&d);
     }
 }

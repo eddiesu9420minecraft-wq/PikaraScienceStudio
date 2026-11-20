@@ -112,7 +112,32 @@ async function renderDetail(ctx, box, p) {
       h('section.section', h('div.section-head', h('h2.title2', t('快速動作'))), h('div.panel.panel-body.col',
         h('div.row.wrap', btn(t('編輯腳本'), { icon: 'script', onClick: () => ctx.go('script') }), btn(t('一鍵製作'), { icon: 'film', onClick: () => ctx.go('production') }),
           btn(t('環境檢查'), { icon: 'doctor', onClick: () => ctx.go('doctor') }), btn(t('預覽與發佈'), { icon: 'publish', onClick: () => ctx.go('publish') }))))),
-    h('section.section', h('div.section-head', h('h2.title2', t('輸出檔案')), h('span.caption.muted', t('依修改時間排序'))), outBox));
+    h('section.section', h('div.section-head', h('h2.title2', t('輸出檔案')), h('span.caption.muted', t('依修改時間排序'))), outBox),
+    layoutSection(p));
+}
+
+// v0.2.1 folder layout: every video in projects/EPnn (tests in sandbox/TESTnnn). Legacy root files are copied /
+// hard-linked into it — never moved or deleted. Preview first, then apply.
+function layoutSection(p) {
+  const out = h('div.col', { style: { gap: '6px' } });
+  const run = async (apply, button) => {
+    if (apply && !(await confirmSheet({ title: t('整理影片資料夾'), text: t('把專案根目錄的舊成品複製（影片用硬連結，不佔額外空間）到 projects/EPnn/ 的 output、subtitles、thumbnail、docs；測試影片放到 sandbox/legacy-tests/。原檔全部留在原位，不移動、不刪除。'), confirmLabel: t('開始整理') }))) return;
+    button.disabled = true;
+    try {
+      const r = await call('layout_migrate', { projectId: p.id, apply });
+      const items = r.items || [];
+      mount(out, h('div.caption', apply ? t('完成 {n} 個檔案（報告：projects/MIGRATION.md）', { n: r.done }) : t('預覽：{n} 個檔案（尚未執行）', { n: items.length })),
+        (r.errors || []).length ? h('div.caption.fail-text', r.errors.join('\n')) : null,
+        h('div.auto-log.mono.selectable', items.map((i) => h('div', `${i.from} → ${i.to}　${i.action}`))));
+    } catch (e) { toastError(e, t('整理資料夾')); }
+    finally { button.disabled = false; }
+  };
+  const preview = btn(t('預覽'), { small: true, icon: 'search', onClick: () => run(false, preview) });
+  const apply = btn(t('執行整理'), { small: true, kind: 'primary', icon: 'check', onClick: () => run(true, apply) });
+  return h('section.section', h('div.section-head', h('h2.title2', t('影片資料夾（v0.2.1）'))),
+    h('div.panel.panel-body.col',
+      h('div.caption.muted', t('新的影片會放在 projects/EPnn/（腳本、分鏡、配音、字幕、封面、成品、素材各自一個資料夾），Sandbox 測試放在 sandbox/TESTnnn/，不佔用正式集數。舊的成品可以無損整理到同樣的結構。')),
+      h('div.row', preview, apply), out));
 }
 
 function stat(k, v) { return h('div.panel.stat', h('div.k', k), h('div.v', String(v))); }

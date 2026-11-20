@@ -1,6 +1,6 @@
 [package]
 name = "pikara-science-studio"
-version = "0.2.0"
+version = "0.2.1"
 description = "Pikara Science Studio"
 authors = ["Pikara Science contributors"]
 license = "MIT"
@@ -33,7 +33,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 sha2 = "0.10"
 regex = "1"
 once_cell = "1"
-windows-sys = { version = "0.59", features = ["Win32_System_Power", "Win32_System_Console"] }
+windows-sys = { version = "0.59", features = ["Win32_System_Power", "Win32_System_Console", "Win32_UI_Controls_Dialogs", "Win32_Foundation"] }
 
 [profile.release]
 opt-level = 3

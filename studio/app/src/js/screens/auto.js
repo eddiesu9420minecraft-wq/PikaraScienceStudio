@@ -1,8 +1,9 @@
 // 0. Autonomous Production — the main screen: fill in a topic, press 開始製作, watch it run.
 // Backend: auto_defaults / auto_start / auto_list / auto_events / auto_control (+ production://update, production://event).
 import { t } from '../i18n.js';
-import { call, hasTauri } from '../api.js';
-import { h, mount, btn, seg, toggle, field, tag, progress, loading, errorBox, notReady, needProject, toast, toastError, confirmSheet, fmtDur, fmtTime, fmtNum } from '../ui.js';
+import { call, hasTauri, listen } from '../api.js';
+import { h, mount, btn, seg, toggle, field, tag, progress, loading, errorBox, notReady, needProject, toast, toastError, confirmSheet, fmtDur, fmtTime, fmtNum, fmtBytes, basename } from '../ui.js';
+import { LiveMonitor } from './automon.js';
 import { icon } from '../icons.js';
 import { currentProject, on, monitorHistory } from '../store.js';
 
@@ -72,22 +73,85 @@ class Auto {
   // ---------------------------------------------------------------- form
   paintForm() {
     const c = this.cfg;
+    c.mode = c.mode || 'auto';
+    c.language = c.language || (c.bilibili ? 'both' : 'zh-TW');
+    c.assets = Array.isArray(c.assets) ? c.assets : [];
     const set = (k) => (v) => { c[k] = v; this.saveDraft(); };
-    const topic = h('textarea.textarea', { rows: 3, placeholder: t('例如：為什麼手機充電會發熱？鋰電池裡發生了什麼事'), 'aria-label': t('主題') });
-    topic.value = c.topic || '';
-    topic.addEventListener('input', () => { c.topic = topic.value; this.saveDraft(); });
-
-    const minVal = h('span.val', `${c.minutes}`);
-    const minutes = h('input', { type: 'range', min: '0.5', max: '20', step: '0.5', value: c.minutes, 'aria-label': t('影片長度（分鐘）') });
-    minutes.addEventListener('input', () => { c.minutes = Number(minutes.value); minVal.textContent = `${c.minutes}`; this.saveDraft(); });
-
-    const style = seg([
-      { value: 'ai', label: t('AI 動畫（Claude 撰寫畫面）') },
-      { value: 'generic', label: t('通用樣板（較快）') },
-    ], c.style, set('style'), { aria: t('畫面風格') });
-
+    const area = (k, rows, ph, aria) => { const el = h('textarea.textarea', { rows, placeholder: ph || '', 'aria-label': aria || ph || k }); el.value = c[k] || ''; el.addEventListener('input', () => { c[k] = el.value; this.saveDraft(); }); return el; };
     const text = (k, ph) => { const el = h('input.input', { value: c[k] || '', placeholder: ph || '' }); el.addEventListener('input', () => { c[k] = el.value; this.saveDraft(); }); return el; };
     const num = (k, min, max) => { const el = h('input.input.num', { type: 'number', min, max, value: c[k] }); el.addEventListener('change', () => { c[k] = Math.max(min, Math.min(max, Number(el.value) || min)); el.value = c[k]; this.saveDraft(); }); return el; };
+
+    const topic = h('input.input', { value: c.topic || '', placeholder: t('例如：網際網路是如何運作的？'), 'aria-label': t('影片主題') });
+    topic.addEventListener('input', () => { c.topic = topic.value; this.saveDraft(); });
+
+    // production mode
+    const modeInfo = h('div.caption.muted');
+    const scriptBox = h('div');
+    const paintMode = () => {
+      mount(modeInfo, {
+        auto: t('全自主：AI 自行研究主題並撰寫腳本；下方的內容與要求會當作方向。'),
+        guided: t('指導：AI 必須遵循你提供的內容、章節、必須介紹與禁止出現的項目，Studio 會自動檢查章節名稱、禁止詞與關鍵詞，不符合時交給 AI 修正。'),
+        script: t('自訂腳本：你的腳本就是旁白，逐字使用；AI 只能加動畫錨點、念法與標題，不得改寫內容（Studio 會逐字比對）。用「## 章節名稱」分章節；也可以匯入 TXT／Markdown 腳本素材。'),
+      }[c.mode]);
+      mount(scriptBox, c.mode === 'script' ? field(t('完整腳本（Markdown；# 集名、## 章節、每段文字會依句號切成字幕）'), area('scriptText', 12, '# 集名\n\n## 第一章\n第一句。第二句。\n\n## 第二章\n…', t('完整腳本'))) : null);
+    };
+    const mode = seg([
+      { value: 'auto', label: t('全自主模式') },
+      { value: 'guided', label: t('指導模式') },
+      { value: 'script', label: t('自訂腳本模式') },
+    ], c.mode, (v) => { c.mode = v; this.saveDraft(); paintMode(); }, { aria: t('製作模式') });
+    paintMode();
+
+    // brief (Markdown) with preview
+    const brief = area('brief', 9, t('用 Markdown 寫下影片要講什麼、怎麼講，例如：\n## 重點\n- 用寄包裹比喻封包\n- 介紹 IP、DNS、TCP\n## 畫面\n- 用 3D 地球與光纖動畫\n- 使用我匯入的真實截圖'), t('影片內容與製作要求'));
+    const briefPrev = h('div.md-preview', { hidden: true });
+    const prevBtn = btn(t('預覽 Markdown'), { small: true, kind: 'plain', onClick: () => { briefPrev.hidden = !briefPrev.hidden; if (!briefPrev.hidden) briefPrev.innerHTML = mdToHtml(c.brief || ''); } });
+    brief.addEventListener('input', () => { if (!briefPrev.hidden) briefPrev.innerHTML = mdToHtml(c.brief || ''); });
+    const chapters = h('textarea.textarea', { rows: 4, placeholder: t('每行一個章節（依序），例如：\n什麼是封包\n路由器怎麼找路\nDNS：網路的電話簿'), 'aria-label': t('自訂章節') });
+    chapters.value = (c.chapters || []).join('\n');
+    chapters.addEventListener('input', () => { c.chapters = chapters.value.split('\n').map((s) => s.trim()).filter(Boolean); this.saveDraft(); });
+
+    // output language
+    const ytBox = h('span');
+    const paintYt = () => mount(ytBox, ['zh-TW', 'both'].includes(c.language) ? toggle(t('另做 YouTube 1.5× 版（繁中）'), c.youtube, set('youtube')) : null);
+    const lang = seg([
+      { value: 'zh-TW', label: t('僅繁體中文') },
+      { value: 'zh-CN', label: t('僅簡體中文') },
+      { value: 'both', label: t('繁體＋簡體中文') },
+      { value: 'en', label: t('英文') },
+    ], c.language, (v) => { c.language = v; c.bilibili = v === 'zh-CN' || v === 'both'; this.saveDraft(); paintYt(); paintLangInfo(); }, { aria: t('輸出語言') });
+    const langInfo = h('div.caption.muted');
+    const paintLangInfo = () => mount(langInfo, {
+      'zh-TW': t('繁中正式版（台灣配音）。'),
+      'zh-CN': t('直接用簡體中文腳本、大陸用語、大陸配音製作 Bilibili 版；不會先渲染繁中版，也不做繁簡轉換。'),
+      both: t('先做繁中正式版，再轉換為簡中（大陸用語、大陸配音）另外渲染 Bilibili 版。'),
+      en: t('英文旁白、英文字幕與畫面文字（CosyVoice 以同一參考人聲跨語言合成，Whisper 以英文檢查發音）。'),
+    }[c.language]);
+    paintYt(); paintLangInfo();
+
+    // material
+    this.assetEl = h('div.col', { style: { gap: '6px' } });
+    const pick = btn(t('選擇檔案…'), { small: true, icon: 'plus', onClick: async () => { try { const paths = await call('pick_files', { title: t('選擇要匯入的素材'), multi: true }); await this.addAssets(paths); } catch (e) { toastError(e, t('選擇檔案')); } } });
+    const pathIn = h('input.input', { placeholder: t('或貼上檔案完整路徑後按 Enter；也可以把檔案拖曳到視窗中') });
+    pathIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && pathIn.value.trim()) { const v = pathIn.value.trim().replace(/^"|"$/g, ''); pathIn.value = ''; this.addAssets([v]); } });
+    this.paintAssets();
+
+    const lead = h('div.panel.panel-body.col',
+      field(t('影片主題'), topic),
+      field(t('製作模式'), mode, modeInfo),
+      h('div.field', h('div.row', h('label.grow', t('影片內容與製作要求（支援 Markdown）')), prevBtn), brief, briefPrev),
+      scriptBox,
+      h('div.grid2', field(t('自訂影片章節（選填）'), chapters),
+        h('div.col', { style: { gap: '8px' } }, field(t('必須介紹的內容（每行一項；短關鍵詞會自動檢查）'), area('mustInclude', 2, t('例如：IP 位址、DNS、TCP'))), field(t('禁止出現的內容（每行一項；會自動檢查）'), area('mustAvoid', 2, t('例如：政治議題、未經證實的數據'))))),
+      h('div.grid2', field(t('開場'), text('opening', t('例如：用「你按下 Enter 後的 0.1 秒」開場'))), field(t('片尾'), text('ending', t('例如：總結三個重點，邀請訂閱')))),
+      h('div.grid3', field(t('配音語氣'), text('voiceTone', t('例如：輕鬆、像朋友聊天'))), field(t('動畫風格'), text('animationStyle', t('例如：2D 圖解＋3D 地球、霓虹科技感'))), field(t('節奏'), text('pacing', t('例如：前 30 秒快節奏，之後穩定')))),
+      h('div.field', h('label', t('素材（TXT、Markdown、PDF、圖片、影片、操作錄影、背景音樂、自訂腳本、參考文件）')), h('div.row', pick, h('div.grow', pathIn)), this.assetEl,
+        h('div.caption.muted', t('素材會複製到這部影片的資料夾（projects/EPxx/assets），原檔不動。AI 會讀取素材清單：圖片與錄影會直接用在畫面中（不虛構介面），文字與 PDF 作為內容依據，背景音樂會取代自動配樂。'))),
+      h('div.grid2', { style: { alignItems: 'end' } },
+        field(t('影片長度（分鐘，實際長度由旁白決定）'), (() => { const v = h('span.val', `${c.minutes}`); const r = h('input', { type: 'range', min: '0.5', max: '20', step: '0.5', value: c.minutes, 'aria-label': t('影片長度（分鐘）') }); r.addEventListener('input', () => { c.minutes = Number(r.value); v.textContent = `${c.minutes}`; this.saveDraft(); }); return h('div.slider', r, v); })()),
+        field(t('畫面風格'), seg([{ value: 'ai', label: t('AI 動畫（2D＋3D）') }, { value: 'generic', label: t('通用樣板（較快）') }], c.style, set('style'), { aria: t('畫面風格') }))),
+      field(t('輸出語言'), lang, h('div.row.wrap', { style: { gap: '16px', marginTop: '4px' } }, langInfo, ytBox)),
+      toggle(t('Sandbox 測試（使用 TEST 編號，成品放在 sandbox/，不合併到專案、不佔用正式集數）'), !!c.sandbox, set('sandbox')));
 
     const budgetBox = h('div');
     const paintBudget = () => mount(budgetBox, c.billing === 'api'
@@ -124,32 +188,66 @@ class Auto {
     ], c.agent || 'claude', (v) => { c.agent = v; this.saveDraft(); paintAgent(); }, { aria: t('AI 提供者') });
     setTimeout(paintAgent, 0);
     const more = h('details.panel', { style: { padding: '0' } },
-      h('summary.panel-body', { style: { cursor: 'default' } }, h('span.headline', t('更多選項')), h('span.caption.muted', { style: { marginLeft: '12px' } }, t('語氣、觀眾、檢查項目、重試與時間上限、Claude 計費'))),
+      h('summary.panel-body', { style: { cursor: 'default' } }, h('span.headline', t('更多選項')), h('span.caption.muted', { style: { marginLeft: '12px' } }, t('語氣、觀眾、資料來源、檢查項目、重試與時間上限、AI 提供者、Claude 計費'))),
       h('div.panel-body.col', { style: { paddingTop: 0 } },
-        h('div.grid2', field(t('語氣'), text('tone')), field(t('觀眾'), text('audience'))),
-        field(t('補充說明（希望涵蓋的重點、要避免的內容、指定資料來源…）'), (() => { const el = h('textarea.textarea', { rows: 2 }); el.value = c.notes || ''; el.addEventListener('input', () => { c.notes = el.value; this.saveDraft(); }); return el; })()),
+        h('div.grid2', field(t('整體語氣'), text('tone')), field(t('觀眾'), text('audience'))),
+        field(t('補充說明'), area('notes', 2)),
+        h('div.grid2', field(t('最少資料來源數（空白 = 自訂腳本 0、其他 3）'), (() => { const el = h('input.input.num', { type: 'number', min: '0', max: '20', value: c.minSources ?? '', placeholder: c.mode === 'script' ? '0' : '3' }); el.addEventListener('change', () => { c.minSources = el.value === '' ? null : Math.max(0, Math.min(20, Number(el.value))); this.saveDraft(); }); return el; })()),
+          field(t('繁中語速（字／秒；空白 = 自然語速約 3.6）'), (() => { const el = h('input.input.num', { type: 'number', min: '2.5', max: '7', step: '0.1', value: c.twCps ?? '', placeholder: '3.6' }); el.addEventListener('change', () => { c.twCps = el.value === '' ? null : Math.max(2.5, Math.min(7, Number(el.value))); el.value = c.twCps ?? ''; this.saveDraft(); }); return el; })())),
         h('div.row.wrap', { style: { gap: '20px' } },
           toggle(t('封面'), c.thumbnail, set('thumbnail')), toggle(t('上架資訊'), c.publishInfo, set('publishInfo')),
           toggle(t('畫面 AI 審查'), c.visualReview, set('visualReview')), toggle(t('發音檢查（Whisper）'), c.pronunciationCheck, set('pronunciationCheck'))),
-        field(t('繁中語速（字／秒；空白 = 配音員自然語速，約 3.6）'), (() => { const el = h('input.input.num', { type: 'number', min: '2.5', max: '7', step: '0.1', value: c.twCps ?? '', placeholder: '3.6' }); el.addEventListener('change', () => { c.twCps = el.value === '' ? null : Math.max(2.5, Math.min(7, Number(el.value))); el.value = c.twCps ?? ''; this.saveDraft(); }); return el; })(),
-          h('div.caption.muted', t('簡中版固定約每秒 5.4 字（大陸配音）。音色由專案的參考人聲決定（tools/CosyVoice/reference），更換請使用明確授權的聲音。'))),
+        h('div.caption.muted', t('簡中固定約每秒 5.4 字（大陸配音）。音色由專案的參考人聲決定（tools/CosyVoice/reference），「配音語氣」影響用字與句型，不會改變音色。')),
         h('div.grid3', field(t('每個階段最多嘗試'), num('maxAttempts', 1, 10)), field(t('總時間上限（分鐘）'), num('maxMinutes', 10, 1440)), field(t('Claude 每次最多回合'), num('maxTurns', 10, 400))),
         field(t('AI 提供者'), agentSeg), agentBox,
         h('div', { hidden: c.agent !== 'claude' || null, dataset: { claudeOnly: '1' } }, field(t('Claude 計費方式'), billing), budgetBox)));
 
     const start = btn(t('開始製作'), { kind: 'primary', icon: 'play', onClick: () => this.start(start) });
-    mount(this.formEl, h('div.panel.panel-body.col',
-      field(t('主題'), topic),
-      h('div.grid2', { style: { alignItems: 'end' } },
-        field(t('影片長度（分鐘，實際長度由旁白決定）'), h('div.slider', minutes, minVal)),
-        field(t('畫面風格'), style)),
-      h('div.row.wrap', { style: { gap: '20px' } },
-        h('span.caption.muted', t('輸出')),
-        toggle(t('繁中正式版'), true, () => {}, { disabled: true, title: t('一定會產生') }),
-        toggle(t('YouTube 1.5×（繁中）'), c.youtube, set('youtube')),
-        toggle(t('Bilibili（簡中、大陸用語、大陸配音）'), c.bilibili, set('bilibili'))),
-      more,
-      h('div.row', h('div.caption.muted.grow', t('集數會自動分配（不會覆蓋既有集數）；所有修改在隔離的 git 工作樹進行，全部檢查通過才合併。不會自動上傳或發布。')), start)));
+    mount(this.formEl, h('div.col', { style: { gap: '12px' } }, lead, more,
+      h('div.row', h('div.caption.muted.grow', t('集數自動分配（不覆蓋既有集數）；所有修改在隔離的 git 工作樹進行，全部檢查通過才合併。製作要求與素材會存進任務資料庫，傳給研究、腳本、動畫、配音、QA、修正與上架資訊每一個步驟。不會自動上傳或發布。')), start)));
+    if (!this.dropWired) {
+      this.dropWired = true;
+      this.ctx.cleanup(listen('tauri://drag-drop', (e) => { const paths = (e && e.paths) || []; if (paths.length && document.body.contains(this.formEl)) this.addAssets(paths); }));
+    }
+  }
+
+  addAssets(paths) {
+    // one import at a time (Enter pressed twice quickly, or a drop while a probe is running)
+    this.assetChain = (this.assetChain || Promise.resolve()).then(() => this.addAssetsNow(paths));
+    return this.assetChain;
+  }
+
+  async addAssetsNow(paths) {
+    if (!paths || !paths.length) return;
+    try {
+      const info = await call('asset_probe', { paths });
+      const c = this.cfg;
+      for (const a of info) {
+        if (!a.exists) { toast(t('找不到檔案：{p}', { p: a.source }), 'warn'); continue; }
+        if (!a.kind) { toast(t('不支援的格式：{p}', { p: basename(a.source) }), 'warn'); continue; }
+        if (c.assets.some((x) => x.source === a.source)) continue;
+        let kind = a.kind;
+        if (kind === 'text' && c.mode === 'script' && !c.assets.some((x) => x.kind === 'script')) kind = 'script';
+        c.assets.push({ source: a.source, kind, note: '', bytes: a.bytes });
+      }
+      this.saveDraft();
+      this.paintAssets();
+    } catch (e) { toastError(e, t('匯入素材')); }
+  }
+
+  paintAssets() {
+    const c = this.cfg;
+    if (!this.assetEl) return;
+    if (!c.assets.length) { mount(this.assetEl, h('div.caption.muted', t('尚未加入素材'))); return; }
+    const kinds = [['text', '文字'], ['pdf', 'PDF'], ['image', '圖片／截圖'], ['video', '影片素材'], ['recording', '操作錄影'], ['music', '背景音樂'], ['script', '自訂腳本'], ['reference', '參考文件']];
+    mount(this.assetEl, c.assets.map((a, i) => {
+      const sel = h('select.input', { style: { width: '140px' } }, kinds.map(([v, l]) => h('option', { value: v, selected: a.kind === v || null }, t(l))));
+      sel.addEventListener('change', () => { a.kind = sel.value; this.saveDraft(); });
+      const note = h('input.input', { value: a.note || '', placeholder: t('說明（例如：Studio 安裝畫面的真實截圖）') });
+      note.addEventListener('input', () => { a.note = note.value; this.saveDraft(); });
+      return h('div.row', { style: { gap: '8px' } }, h('span.caption.mono.ellipsis', { title: a.source, style: { width: '30%' } }, basename(a.source)), h('span.caption.muted', fmtBytes(a.bytes || 0)), sel, h('div.grow', note),
+        btn('', { small: true, icon: 'x', kind: 'plain', title: t('移除'), onClick: () => { c.assets.splice(i, 1); this.saveDraft(); this.paintAssets(); } }));
+    }));
   }
 
   async testAgent(provider, button, out) {
@@ -171,24 +269,35 @@ class Auto {
 
   async start(button) {
     const c = { ...this.cfg };
-    if (!c.topic || c.topic.trim().length < 2) { toast(t('請輸入主題'), 'warn'); return; }
+    if (!c.topic || c.topic.trim().length < 2) { toast(t('請輸入影片主題'), 'warn'); return; }
     if (c.billing === 'api' && !(c.budgetUsd > 0)) { toast(t('API 付費模式必須設定美元上限'), 'warn'); return; }
+    if (c.mode === 'script' && !(c.scriptText || '').trim() && !(c.assets || []).some((a) => a.kind === 'script')) { toast(t('自訂腳本模式需要完整腳本（貼上，或匯入自訂腳本素材）'), 'warn'); return; }
+    const LANG = { 'zh-TW': t('僅繁體中文'), 'zh-CN': t('僅簡體中文'), both: t('繁體＋簡體中文'), en: t('英文') };
+    const MODE = { auto: t('全自主模式'), guided: t('指導模式'), script: t('自訂腳本模式') };
+    const outs = { 'zh-TW': [t('繁中正式版'), c.youtube && 'YouTube 1.5×'], 'zh-CN': [t('Bilibili 簡中版（直接製作，不渲染繁中）')], both: [t('繁中正式版'), c.youtube && 'YouTube 1.5×', 'Bilibili zh-CN'], en: [t('英文正式版')] }[c.language] || [];
     const ok = await confirmSheet({
-      title: t('開始自動製作'),
+      title: c.sandbox ? t('開始 Sandbox 測試') : t('開始自動製作'),
       text: t('Studio 會依序執行所有階段，可能需要數十分鐘到數小時，期間會使用 GPU。你可以隨時暫停或停止。'),
       detail: [
-        `${t('主題')}：${c.topic}`, `${t('長度')}：${c.minutes} ${t('分鐘')}`, `${t('畫面')}：${c.style === 'ai' ? t('AI 動畫') : t('通用樣板')}`,
-        `${t('輸出')}：${[t('繁中正式版'), c.youtube && 'YouTube 1.5×', c.bilibili && 'Bilibili zh-CN'].filter(Boolean).join('、')}`,
+        `${t('主題')}：${c.topic}`, `${t('模式')}：${MODE[c.mode] || c.mode}`, `${t('輸出語言')}：${LANG[c.language] || c.language}`,
+        `${t('長度')}：${c.minutes} ${t('分鐘')}`, `${t('畫面')}：${c.style === 'ai' ? t('AI 動畫') : t('通用樣板')}`,
+        `${t('輸出')}：${outs.filter(Boolean).join('、')}`,
+        (c.chapters || []).length ? `${t('章節')}：${c.chapters.join('、')}` : null,
+        (c.assets || []).length ? `${t('素材')}：${c.assets.length} ${t('個')}` : null,
+        c.sandbox ? t('Sandbox：TEST 編號、放在 sandbox/、不合併到專案') : null,
         c.agent === 'claude' ? `Claude：${c.billing === 'api' ? t('API 付費，每次上限 ${x}', { x: c.budgetUsd }) : t('訂閱（已登入的 Claude Code，不設美元上限）')}` : `${t('AI 提供者')}：${c.agent === 'doubao' ? t('豆包 CLI') : t('外部 Agent（豆包工作）')}`,
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
       confirmLabel: t('開始製作'),
     });
     if (!ok) return;
     button.disabled = true;
     try {
-      const prod = await call('auto_start', { projectId: this.p.id, config: c });
+      const cfg = { ...c, assets: (c.assets || []).map(({ source, kind, note }) => ({ source, kind, note })) };
+      const prod = await call('auto_start', { projectId: this.p.id, config: cfg });
       toast(t('已開始：{ep}', { ep: prod.episode.toUpperCase() }), 'ok');
-      this.cfg.topic = ''; this.saveDraft(); this.paintForm();
+      // per-video content is cleared; style preferences stay
+      Object.assign(this.cfg, { topic: '', brief: '', scriptText: '', chapters: [], mustInclude: '', mustAvoid: '', opening: '', ending: '', assets: [] });
+      this.saveDraft(); this.paintForm();
       this.list.unshift(prod); this.open.add(prod.id); this.paintList();
     } catch (e) { toastError(e, t('開始製作')); }
     finally { button.disabled = false; }
@@ -268,8 +377,10 @@ class Auto {
       out.length ? h('div.col', { style: { gap: '6px' } }, h('span.headline', t('成品（在專案資料夾）')),
         h('div.row.wrap', out.map((f) => btn(f, { small: true, icon: /\.mp4$/.test(f) ? 'play' : 'external', onClick: () => call('open_path', { projectId: this.p.id, path: f, reveal: false }).catch((e) => toastError(e, t('開啟'))) }))),
         h('div.caption.muted', t('發布請自行到各平台手動上傳；上架文字在 {f}。', { f: `${x.episode.toUpperCase()}_PUBLISH_METADATA.md` }))) : null,
+      this.monitorFor(x).el,
       h('dl.kv',
         h('dt', t('集數')), h('dd', x.episode.toUpperCase()),
+        h('dt', t('模式')), h('dd', `${{ auto: t('全自主'), guided: t('指導'), script: t('自訂腳本') }[x.config.mode] || t('全自主')}・${{ 'zh-TW': t('僅繁中'), 'zh-CN': t('僅簡中'), both: t('繁＋簡'), en: t('英文') }[x.config.language] || (x.config.bilibili ? t('繁＋簡') : t('僅繁中'))}${x.config.sandbox ? '・Sandbox' : ''}${(x.config.assets || []).length ? `・${t('素材 {n} 個', { n: x.config.assets.length })}` : ''}`),
         h('dt', t('工作樹')), h('dd.mono', x.worktree ? `.studio/worktrees/${x.worktree}（${x.branch}）` : t('已清除')),
         h('dt', t('已執行')), h('dd', `${fmtDur(x.activeMs / 1000)}（${t('上限 {m} 分鐘', { m: x.config.maxMinutes })}）`),
         h('dt', 'Claude'), h('dd', `${x.claudeRuns} ${t('次')}・${x.config.billing === 'api' ? t('API 付費（每次上限 ${b}）', { b: x.config.budgetUsd }) : t('訂閱')}・${t('模型等價估算 ${c}', { c: fmtNum(x.claudeCostUsd, 2) })}`),
@@ -277,6 +388,18 @@ class Auto {
       h('div.col', { style: { gap: '6px' } }, h('div.row', h('span.headline.grow', t('活動紀錄')), btn(t('前往佇列'), { small: true, icon: 'queue', onClick: () => { if (x.jobId) sessionStorage.setItem('queue.select', x.jobId); this.ctx.go('queue'); } })),
         h('div.auto-log.mono.selectable', { dataset: { log: x.id } }, (this.logs[x.id] || []).slice(-300).map((e) => logLine(e)))),
     ];
+  }
+
+  monitorFor(x) {
+    this.monitors = this.monitors || {};
+    let m = this.monitors[x.id];
+    if (!m) { m = this.monitors[x.id] = new LiveMonitor(x, this.p.id); m.refresh(); m.timer = null; }
+    m.update(x);
+    if (!m.timer) {
+      const active = () => ['running', 'queued', 'waiting_agent', 'paused', 'paused_limit'].includes(m.prod.status);
+      m.timer = setInterval(() => { if (!document.body.contains(m.el)) { clearInterval(m.timer); m.timer = null; return; } if (active() || m.tab === 'video') m.refresh(); }, 2000);
+    }
+    return m;
   }
 
   repaint(x) {
@@ -337,4 +460,23 @@ function logLine(e) {
   const d = new Date(e.ts);
   const p = (n) => String(n).padStart(2, '0');
   return h('div', { class: `auto-log-line ${e.level}` }, h('span.muted', `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} `), e.line);
+}
+
+// Minimal, safe Markdown preview (escaped first): headings, lists, bold, inline code, paragraphs.
+function mdToHtml(src) {
+  const esc = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (x) => esc(x).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  const out = [];
+  let list = null;
+  for (const raw of String(src).split(/\r?\n/)) {
+    const l = raw.trim();
+    const m = /^(#{1,4})\s+(.*)$/.exec(l);
+    const li = /^([-*+]|\d+[.、])\s+(.*)$/.exec(l);
+    if (!li && list) { out.push(`</${list}>`); list = null; }
+    if (m) out.push(`<h${m[1].length + 2}>${inline(m[2])}</h${m[1].length + 2}>`);
+    else if (li) { const tag = /\d/.test(li[1]) ? 'ol' : 'ul'; if (!list) { list = tag; out.push(`<${tag}>`); } out.push(`<li>${inline(li[2])}</li>`); }
+    else if (l) out.push(`<p>${inline(l)}</p>`);
+  }
+  if (list) out.push(`</${list}>`);
+  return out.join('');
 }

@@ -43,6 +43,10 @@ PUNCT = "，。？！；：、,.?!;:「」『』（）() "
 sys.stdout.reconfigure(encoding="utf-8")
 
 
+# 旁白語言：PIKARA_LANG=en 時 Whisper 以英文辨識、不做繁簡轉換（Studio「英文」輸出）
+LANG = "en" if os.environ.get("PIKARA_LANG", "zh").lower().startswith("en") else "zh"
+
+
 def norm(s: str) -> str:
     return "".join(ch for ch in s if ch not in PUNCT and not ch.isspace()).lower()
 
@@ -147,18 +151,18 @@ def asr_model():
                 break
             except Exception as e:  # noqa: BLE001
                 print(f"  ASR {d}/{ct} 無法使用：{e}", flush=True)
-        _cc = opencc.OpenCC(os.environ.get("PIKARA_ASR_CC", "s2twp"))  # zh-CN 用 t2s
+        _cc = opencc.OpenCC(os.environ.get("PIKARA_ASR_CC", "s2twp")) if LANG == "zh" else None  # zh-CN 用 t2s；英文不轉換
     return _asr
 
 
 def transcribe_words(path: Path) -> list[tuple[str, float, float]]:
     m = asr_model()
-    segs, _ = m.transcribe(str(path), language="zh", word_timestamps=True, beam_size=5, vad_filter=False,
+    segs, _ = m.transcribe(str(path), language=LANG, word_timestamps=True, beam_size=5, vad_filter=False,
                            condition_on_previous_text=False)
     words = []
     for s in segs:
         for w in s.words or []:
-            words.append((_cc.convert(w.word), float(w.start), float(w.end)))
+            words.append((_cc.convert(w.word) if _cc else w.word, float(w.start), float(w.end)))
     return words
 
 

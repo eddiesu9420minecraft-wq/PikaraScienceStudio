@@ -284,6 +284,17 @@ fn mix_args(seq: &str, src: &str) -> Vec<String> {
     a
 }
 
+/// `bgm`: user-supplied background music inside the job directory (`public/user/<ep>/…`), passed to mix_audio.py.
+fn with_bgm(p: &Value, mut a: Vec<String>) -> Result<Vec<String>, String> {
+    if let Some(b) = p.get("bgm").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        if !b.starts_with("public/user/") || b.contains("..") {
+            return Err(format!("bgm 必須是 public/user/ 底下的素材：{b}"));
+        }
+        a.extend(["--bgm".into(), safe_token(b, "bgm")?]);
+    }
+    Ok(a)
+}
+
 /// `fresh: true` → render.mjs --fresh (drop cached frame chunks; used after code was changed by a fix).
 fn fresh(p: &Value, mut a: Vec<String>) -> Vec<String> {
     if p["fresh"].as_bool().unwrap_or(false) {
@@ -440,6 +451,17 @@ pub fn worktree_dir(root: &Path, wid: &str) -> PathBuf {
 }
 
 pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, String> {
+    let mut steps = build_steps_inner(kind, params, ctx)?;
+    // English narration (Studio output language "en"): Whisper / subtitle splitting in English
+    if sp(params, "lang", "") == "en" {
+        for s in &mut steps {
+            s.env.push(("PIKARA_LANG".into(), "en".into()));
+        }
+    }
+    Ok(steps)
+}
+
+fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, String> {
     let p = params;
     Ok(match kind {
         "voiceover_tw" => vec![ctx.cosy("配音 zh-TW", &voice_args(p, false)?, &[])],
@@ -451,7 +473,7 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
         }
         "mix" => {
             let seq = episode_of(p)?;
-            let a = mix_args(&seq, &src_of(p)?);
+            let a = with_bgm(p, mix_args(&seq, &src_of(p)?))?;
             vec![ctx.py("混音", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>())]
         }
         "render" => {
@@ -511,7 +533,7 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
             let ep = ep_upper(&seq);
             let out = out_name(p, &format!("{ep}_Final.mp4"))?;
             let tl = timeline_args(&seq, "src", false);
-            let mx = mix_args(&seq, "src");
+            let mx = with_bgm(p, mix_args(&seq, "src"))?;
             vec![
                 ctx.py(&format!("時間軸 {ep}"), &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}.srt"), &format!("{ep}.srt")], Parser::Plain),
@@ -536,11 +558,18 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
             let out = out_name(p, &format!("{ep}_Bilibili_zh-CN.mp4"))?;
             let srt = out.trim_end_matches(".mp4").to_string() + ".srt";
             let tl = timeline_args(&seq, "src_cn", false);
-            let mx = mix_args(&seq, "src_cn");
+            let mx = with_bgm(p, mix_args(&seq, "src_cn"))?;
             let mix_name = format!("{seq}_cn");
-            vec![
-                ctx.py("make_cn（src → src_cn）", &["scripts/make_cn.py", "--seq", &seq]),
-                ctx.cosy("配音 zh-CN", &voice_args(&json!({"episode": seq}), true)?, &[("PIKARA_ASR_CC", "t2s")]),
+            let mut make = vec!["scripts/make_cn.py", "--seq", &seq];
+            if p["reconvert"].as_bool().unwrap_or(false) {
+                make.push("--reconvert");
+            }
+            let mut v = vec![ctx.py("make_cn（src → src_cn）", &make)];
+            // zh-CN only: the Simplified narration was already voiced (and pronunciation-checked) in the voice stage
+            if !p["skipVoice"].as_bool().unwrap_or(false) {
+                v.push(ctx.cosy("配音 zh-CN", &voice_args(&json!({"episode": seq}), true)?, &[("PIKARA_ASR_CC", "t2s")]));
+            }
+            v.extend([
                 ctx.py("時間軸 zh-CN", &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}_cn.srt"), &srt], Parser::Plain),
                 ctx.py("混音 zh-CN", &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
@@ -549,7 +578,8 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
                     &fresh(p, ["gpu", "--comp", &format!("{ep}-30fps"), "--src", "src_cn", "--mix", &mix_name, "--out", &out].map(String::from).to_vec()),
                 ),
                 ctx.py("品質檢查 zh-CN", &["scripts/qa_video.py", &out, "--seq", &seq, "--src", "src_cn"]),
-            ]
+            ]);
+            v
         }
         "claude_in" => claude_in_steps(p, ctx)?,
         "agent_cli" => agent_cli_steps(p, ctx)?,
@@ -564,7 +594,12 @@ pub fn build_steps(kind: &str, params: &Value, ctx: &Ctx) -> Result<Vec<Step>, S
                 "src_cn" => "src_cn/index.ts",
                 s => return Err(format!("src must be src or src_cn, got {s}")),
             };
-            vec![ctx.step(&format!("關鍵幀 {comp}"), &ctx.node(), &["scripts/stills.mjs", frames, &comp, entry], Parser::Plain)]
+            let mut s = ctx.step(&format!("關鍵幀 {comp}"), &ctx.node(), &["scripts/stills.mjs", frames, &comp, entry], Parser::Plain);
+            if let Some(sc) = p.get("scale").and_then(|v| v.as_f64()).filter(|s| *s > 0.05 && *s < 1.0) {
+                s.label = format!("低解析度預覽 {comp}");
+                s.env.push(("PIKARA_STILL_SCALE".into(), format!("{sc:.4}")));
+            }
+            vec![s]
         }
         "typecheck" => vec![ctx.step("tsc --noEmit", &ctx.node(), &["node_modules/typescript/bin/tsc", "--noEmit", "--pretty", "false"], Parser::Plain)],
         "custom" => {

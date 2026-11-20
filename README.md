@@ -4,7 +4,7 @@
 
 輸入一個主題，自動做出一支 AI 科普動畫影片的 Windows 桌面工作台：資料研究、劇本、動畫程式、本地配音（CosyVoice 3）、Whisper 發音檢查、字幕、GPU 渲染、NVENC 編碼、自動品質檢查與修正、封面與上架文字，並輸出繁中 YouTube 版與簡中 Bilibili 版。
 
-> **v0.2.0-alpha**：公開測試版，主要功能是「自動製作」（見 [CHANGELOG](CHANGELOG.md)）。仍是 Alpha，請先閱讀下方〈已知限制〉，成品發布前務必人工審閱。
+> **v0.2.1-alpha**：新增影片內容控制（全自主／指導／自訂腳本）、輸出語言（繁、簡、繁＋簡、英文）、素材匯入、即時工作監控、每部影片獨立資料夾與 Sandbox、環境自動修復（見 [CHANGELOG](CHANGELOG.md)）。**本版未完成完整測試**，請先閱讀 `studio/app/TEST_REPORT_v0.2.1.md` 與下方〈已知限制〉，成品發布前務必人工審閱。
 
 ## 包含什麼
 
@@ -17,7 +17,7 @@
 
 ### 1. 安裝 Studio
 
-到 [Releases](../../releases) 下載 `Pikara Science Studio_0.2.0_x64-setup.exe` 並安裝（或下載免安裝的 `PikaraScienceStudio.exe`）。需要 Windows 10/11 64 位元；安裝程式會在需要時下載 Microsoft WebView2。可用 Release 附的 `SHA256SUMS.txt` 核對檔案。
+到 [Releases](../../releases) 下載 `Pikara.Science.Studio_0.2.1_x64-setup.exe` 並安裝（或下載免安裝的 `PikaraScienceStudio.exe`）。需要 Windows 10/11 64 位元；安裝程式會在需要時下載 Microsoft WebView2。可用 Release 附的 `SHA256SUMS.txt` 核對檔案。
 
 ### 2. 準備範本專案
 
@@ -60,8 +60,9 @@ git clone https://github.com/eddiesu9420minecraft-wq/PikaraScienceStudio.git
 - **命令列**：`PikaraScienceStudio.exe --cli auto-start|auto-run|auto-status|agent-task|agent-done|agent-check|job-log|…`。
 - 既有功能：劇本編輯（繁／簡）、提示詞與 Claude 工作樹、SQLite 持久化佇列（GPU 鎖、心跳、中斷恢復）、即時資源監控、環境醫生、預覽與發布中心（**沒有任何上傳程式碼，發布一律由你手動完成**）、git 回滾。
 
-## 已知限制（v0.2.0-alpha）
+## 已知限制（v0.2.1-alpha）
 
+- **v0.2.1 的新功能大多沒有端到端實測**（內容控制的劇本階段與需求檢查已實際跑過；英文、僅簡中渲染、素材在畫面中的使用、增量渲染、環境自動修復等未驗證）。
 - **仍為 Alpha 測試版本。** 成品請人工審閱影片內容與資料來源後再自行發布。
 - **豆包 CLI 尚未使用真實帳號實際測試**（程式已完成；連線與能力測試需帳號持有人掃碼登入）。
 - **豆包工作桌面客戶端尚未實機驗證**；技能＋命令列流程已依技能內容逐步操作、完成模擬端到端測試（由測試者扮演 Agent）。

@@ -51,7 +51,10 @@ def opt(name: str, default=None):
 
 
 def infer_seq(video: Path) -> str | None:
-    """由檔名推斷集數：EP02_Final.mp4 → ep02。"""
+    """由檔名推斷集數：EP02_Final.mp4 → ep02；TEST001_Final.mp4 → test001。"""
+    t = re.search(r"(?i)\bTEST\s*0*(\d{1,3})", video.stem)
+    if t:
+        return f"test{int(t.group(1)):03d}"
     m = re.search(r"(?i)\bEP\s*0*(\d{1,3})", video.stem)
     return f"ep{int(m.group(1)):02d}" if m else None
 

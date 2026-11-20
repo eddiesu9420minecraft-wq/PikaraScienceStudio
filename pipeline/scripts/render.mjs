@@ -30,7 +30,7 @@ const comp = opt('comp', 'EP01');
 const SRC = opt('src', 'src'); // 例：--src src_cn（大陸簡體版）
 const MIXNAME = opt('mix', null); // 例：--mix ep01_cn
 // 集數由 composition 名稱推得：EP02 / EP02-30fps / EP02-YT15 / EP02-Act03 → ep02（--seq 可覆寫）
-const EP_COMP = /^(EP\d{2,3})(?:-(30fps|YT15|Act\d+))?$/i.exec(comp);
+const EP_COMP = /^(EP\d{2,3}|TEST\d{3})(?:-(30fps|YT15|Act\d+))?$/i.exec(comp);
 const VARIANT = EP_COMP ? (EP_COMP[2] ?? '').toLowerCase() : null; // '' | '30fps' | 'yt15' | 'actNN'
 const SPEED = VARIANT === 'yt15' ? 1.5 : 1; // 1.5 倍速版：音訊 atempo=1.5（音調不變）
 const codec = opt('codec', 'h264');
@@ -121,15 +121,73 @@ const fingerprint = (() => {
   return h.digest('hex').slice(0, 16);
 })();
 const fpFile = join(frameDir, 'fingerprint.txt');
+// 場景級增量渲染：本集每個場景一個指紋（共用程式碼 + 該場景的幕元件 + 該場景的時間軸片段）。
+// 只有某幾個場景的動畫或旁白改變時（例如 QA／畫面審查修正了 S03.tsx），只刪除那幾個場景範圍（前後各多 1 秒，涵蓋轉場）的幀；
+// 共用程式碼、場景數量或整體長度改變時才全部重來。
+const sceneFp = (() => {
+  const seqTl = seqId && tlAll[seqId];
+  if (!seqTl || !Array.isArray(seqTl.scenes) || !seqTl.scenes.length || !EP_COMP || !['', '30fps', 'yt15'].includes(VARIANT)) return null;
+  const actDir = join(ROOT, SRC, 'acts', seqId);
+  const files = [];
+  const walk = (d) => {
+    for (const e of readdirSync(d, {withFileTypes: true}).sort((x, y) => (x.name < y.name ? -1 : 1))) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(tsx?|json|css)$/.test(e.name) && !/^(timeline\.generated|narration)\.json$/.test(e.name)) files.push(p);
+    }
+  };
+  walk(join(ROOT, SRC));
+  const sceneOf = (p) => {
+    if (!p.startsWith(actDir)) return null;
+    const base = p.slice(actDir.length + 1).split(/[\/]/)[0].replace(/\.(tsx?)$/, '').toLowerCase();
+    return seqTl.scenes.find((s) => s.id.toLowerCase() === base)?.id ?? null;
+  };
+  const common = createHash('sha256');
+  const per = Object.fromEntries(seqTl.scenes.map((s) => [s.id, createHash('sha256')]));
+  for (const p of files) {
+    const sid = sceneOf(p);
+    (sid ? per[sid] : common).update(p.slice(ROOT.length)).update(readFileSync(p));
+  }
+  const narP = join(ROOT, SRC, 'data', 'narration.json');
+  const nar = existsSync(narP) ? JSON.parse(readFileSync(narP, 'utf8')).sequences?.[seqId] ?? null : null;
+  const {scenes: _s, lines: _l, mix: _m, ...rest} = seqTl;
+  common.update(JSON.stringify(rest)).update(JSON.stringify(nar?.title ?? null)).update(comp).update(isPreview ? 'p' : 'f');
+  const ratio = FPS_OUT === 60 ? 1 : VARIANT === 'yt15' ? 1 / 3 : 1 / 2;
+  const margin = FPS_OUT;
+  const out = {v: 2, common: common.digest('hex').slice(0, 16), total: seqTl.totalFrames, scenes: {}};
+  for (const s of seqTl.scenes) {
+    const lines = (seqTl.lines ?? []).filter((l) => l.scene === s.id || (l.startFrame >= s.startFrame && l.startFrame < s.endFrame));
+    per[s.id].update(JSON.stringify(s)).update(JSON.stringify(lines));
+    out.scenes[s.id] = {hash: per[s.id].digest('hex').slice(0, 16), a: Math.max(0, Math.floor(s.startFrame * ratio) - margin), z: Math.ceil(s.endFrame * ratio) + margin};
+  }
+  return out;
+})();
+const sceneFile = join(frameDir, 'fingerprint.scenes.json');
 if (existsSync(frameDir) && readdirSync(frameDir).some((f) => f.endsWith('.jpeg'))) {
   const old = existsSync(fpFile) ? readFileSync(fpFile, 'utf8').trim() : null;
+  const oldScenes = existsSync(sceneFile) ? JSON.parse(readFileSync(sceneFile, 'utf8')) : null;
   if (old !== null && old !== fingerprint) {
-    console.log(`  原始碼或時間軸已變更（${old} → ${fingerprint}），清除舊幀後重新渲染`);
-    rmSync(frameDir, {recursive: true, force: true});
+    const sameShape = sceneFp && oldScenes && oldScenes.v === 2 && oldScenes.common === sceneFp.common && oldScenes.total === sceneFp.total &&
+      Object.keys(oldScenes.scenes).join() === Object.keys(sceneFp.scenes).join();
+    if (sameShape) {
+      const changed = Object.entries(sceneFp.scenes).filter(([id, s]) => oldScenes.scenes[id].hash !== s.hash);
+      let removed = 0;
+      for (const [, s] of changed) {
+        for (let f = s.a; f <= s.z; f++) {
+          const p = join(frameDir, `f${String(f).padStart(6, '0')}.jpeg`);
+          if (existsSync(p)) { rmSync(p, {force: true}); removed++; }
+        }
+      }
+      console.log(`  場景級增量渲染：${changed.length}/${Object.keys(sceneFp.scenes).length} 個場景有變更（${changed.map(([id]) => id).join('、') || '無'}），清除 ${removed} 幀，其餘沿用`);
+    } else {
+      console.log(`  原始碼或時間軸已變更（${old} → ${fingerprint}），清除舊幀後重新渲染`);
+      rmSync(frameDir, {recursive: true, force: true});
+    }
   }
 }
 mkdirSync(frameDir, {recursive: true});
 writeFileSync(fpFile, fingerprint);
+if (sceneFp) writeFileSync(sceneFile, JSON.stringify(sceneFp));
 const outFile = opt('out', join(ROOT, 'out', isPreview ? `${comp}-preview-720p.mp4` : `${comp}-${useGpu ? 'gpu' : 'cpu'}-1080p60.mp4`));
 const fname = (f) => join(frameDir, `f${String(f).padStart(6, '0')}.jpeg`);
 
@@ -170,13 +228,20 @@ console.log(`渲染 ${comp}：${rangeB - rangeA + 1} 幀，${chunks.length} 段�
 const chunkLog = [];
 const tr = Date.now();
 for (const [a, z] of chunks) {
-  const need = z - a + 1;
   let have = 0;
-  for (let f = a; f <= z; f++) if (existsSync(fname(f))) have++;
-  if (have === need) {
+  let m1 = -1;
+  let m2 = -1;
+  for (let f = a; f <= z; f++) {
+    if (existsSync(fname(f))) have++;
+    else { if (m1 < 0) m1 = f; m2 = f; }
+  }
+  if (have === z - a + 1) {
     console.log(`  區段 ${a}–${z}：已完成，略過`);
     continue;
   }
+  // 只渲染這一段中缺少的範圍（場景級增量渲染只刪除變更場景的幀）
+  const need = m2 - m1 + 1;
+  if (need < z - a + 1) console.log(`  ↻ ${a}–${z} 這一段沿用 ${have} 幀，只渲染 ${m1}–${m2}`);
   const tmp = join(frameDir, `_chunk_${a}`);
   rmSync(tmp, {recursive: true, force: true});
   const cs = Date.now();
@@ -185,7 +250,7 @@ for (const [a, z] of chunks) {
     remotionBin, 'render', BUILD, comp, tmp,
     '--sequence', '--image-format=jpeg', `--jpeg-quality=${isPreview ? 88 : 95}`,
     `--gl=${useGpu ? 'angle' : 'swangle'}`, `--concurrency=${concurrency}`,
-    `--frames=${a}-${z}`, '--log=error',
+    `--frames=${m1}-${m2}`, '--log=error',
     ...(isPreview ? ['--scale=0.6666667'] : []),
     ...(browser ? [`--browser-executable=${browser}`] : []),
   ];

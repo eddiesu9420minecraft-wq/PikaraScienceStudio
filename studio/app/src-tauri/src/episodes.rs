@@ -11,13 +11,14 @@ use std::path::Path;
 
 static RE_EP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^ep\d{2,3}$").unwrap());
 
-/// `ep01`, `ep02`, `ep120` (lower-case "ep" + 2–3 digits).
+/// `ep01`, `ep02`, `ep120` (lower-case "ep" + 2–3 digits), or a Sandbox test `test001`.
 pub fn valid_id(id: &str) -> bool {
-    RE_EP.is_match(id)
+    RE_EP.is_match(id) || crate::layout::is_test(id)
 }
 
+/// Formal episode number (`ep07` → 7); None for Sandbox tests.
 pub fn number(id: &str) -> Option<u32> {
-    valid_id(id).then(|| id[2..].parse().ok()).flatten()
+    RE_EP.is_match(id).then(|| id[2..].parse().ok()).flatten()
 }
 
 /// Next free id after the highest existing `epNN` (ep01 when none).
@@ -163,7 +164,7 @@ pub fn list(root: &Path) -> Value {
             })));
         }
     }
-    ids.sort_by_key(|k| number(k).unwrap_or(0));
+    ids.sort_by_key(|k| number(k).unwrap_or_else(|| 100_000 + crate::layout::test_number(k).unwrap_or(0)));
     Value::Array(
         ids.iter()
             .map(|k| {
@@ -173,8 +174,11 @@ pub fn list(root: &Path) -> Value {
                     .unwrap()
                     .iter()
                     .map(|(n, f)| {
-                        let p = root.join(f.as_str().unwrap());
-                        (n.clone(), if p.is_file() { json!(clean_path(&p)) } else { Value::Null })
+                        // v0.2.1 layout (projects/EP07/output, subtitles …) first, then the legacy project root
+                        let name = f.as_str().unwrap();
+                        let vdir = crate::layout::video_dir(root, k);
+                        let p = [vdir.join(crate::layout::subdir_for(name)).join(name), root.join(name)].into_iter().find(|p| p.is_file());
+                        (n.clone(), p.map(|p| json!(clean_path(&p))).unwrap_or(Value::Null))
                     })
                     .collect();
                 let locales: Map<String, Value> = per.iter().filter(|(id, _)| id == k).map(|(_, v)| (v["locale"].as_str().unwrap().to_string(), v.clone())).collect();

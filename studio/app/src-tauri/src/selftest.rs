@@ -263,6 +263,32 @@ pub fn run(args: &[String]) -> i32 {
         }
         Ok(json!({"nextEpisode": next, "stages": ap::STAGES.len(), "perDigits": per_ok, "perMisread": per_bad}))
     });
+    step(&mut results, "content.modes_and_language", || {
+        // v0.2.1: three modes, four output languages, requirements reach every AI step, custom script is verbatim
+        use crate::autopilot as ap;
+        use crate::content;
+        let mut c = ap::AutoConfig { topic: "自我檢查".into(), mode: "guided".into(), language: "zh-CN".into(), must_avoid: "禁止詞甲".into(), chapters: vec!["第一章".into()], ..Default::default() };
+        c.validate()?;
+        if c.youtube || !content::cn_only(&c) {
+            return Err("zh-CN only must not plan a zh-TW / YouTube render".into());
+        }
+        let b = content::brief_block(&c, "fix");
+        if !b.contains("禁止詞甲") || !b.contains("指導模式") {
+            return Err("brief missing from fix prompt".into());
+        }
+        let script = "## 開場\n第一句話。第二句話。";
+        let (_, sc) = content::parse_script(script, false, &[]);
+        let seq = content::script_to_seq("test001", "自我檢查", &sc);
+        content::fidelity(script, &seq, false)?;
+        Ok(json!({"modes": content::MODES, "languages": content::LANGS, "scriptLines": sc[0].1.len()}))
+    });
+    step(&mut results, "layout.and_envfix", || {
+        // per-video folders and TEST numbering; venv diagnosis of this project's CosyVoice (read-only)
+        let next_test = crate::layout::next_test(&project_root, &[]);
+        let venv = project_root.join("tools").join("CosyVoice").join(".venv");
+        let d = crate::envfix::diagnose(&venv);
+        Ok(json!({"videoFolder": crate::layout::video_rel("ep07"), "nextTest": next_test, "venv": {"found": d.cfg_found, "homeExists": d.home_exists, "pythonOk": d.python_ok, "problem": d.problem}, "studioPackaged": d.studio_packaged}))
+    });
     step(&mut results, "claude.detect", || Ok(claude::detect()));
     step(&mut results, "git.log", || Ok(json!(gitops::log(&project_root, 3)?)));
     step(&mut results, "doctor.instructions_only_for_system", || {

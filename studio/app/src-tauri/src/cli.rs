@@ -21,7 +21,15 @@
 //!   job-log        --id <job> [--tail <n>]
 //!   narration-get  --project <dir> --episode <ep> [--locale zh-TW|zh-CN]
 //!   narration-set  --project <dir> --episode <ep> --file <seq.json> [--locale …]   validate + save + git commit
+//!   auto-monitor   --id <p> [--brief]  live view: running job + log, render FPS / frames / ETA, AI output, sources,
+//!                                      file changes, script, stills, voice files, error / fix history
+//!   auto-preview   --id <p>            queue a low-resolution storyboard preview (12 key frames, 640×360)
+//!   layout-migrate --project <dir> [--apply]   non-destructive move of legacy root outputs into projects/EPnn/
+//!   env-venv       --project <dir> [--repair]  CosyVoice venv diagnosis (MSIX AppData redirection) / safe repair
 //! ```
+//! auto-start config (v0.2.1): mode auto|guided|script, brief (Markdown), chapters [..], mustInclude, mustAvoid,
+//! opening, ending, voiceTone, animationStyle, pacing, scriptText, language zh-TW|zh-CN|both|en, minSources,
+//! assets [{source, kind?, note?}], sandbox (TEST number, delivered to sandbox/, never merged).
 //! `--data` isolates the queue (PIKARA_STUDIO_DATA); default is the app's real data dir.
 //! Prints JSON (one object per command) or, for run-queue, one line per status change. Exit 0 = success.
 
@@ -259,6 +267,85 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             let p = autopilot(db, q).agent_done(&id, flag(args, "--failed"), arg(args, "--note").as_deref())?;
             out(&json!({"ok": true, "id": p.id, "status": p.status, "stage": p.stage, "next": "Studio 會接著執行檢查與後續步驟；用 auto-status 追蹤"}));
             Ok(0)
+        }
+        // UI test bridge: the same backend functions the Tauri commands call, read-only subset, for driving the real
+        // web UI in a browser against real data (no second Studio window, no scheduler lock).
+        "ui-invoke" => {
+            let name = arg(args, "--cmd").ok_or("缺少 --cmd")?;
+            let a: Value = match arg(args, "--args-file") {
+                Some(f) => serde_json::from_str(&read_text_file(&f)?).map_err(|e| e.to_string())?,
+                None => json!({}),
+            };
+            let s = |k: &str| a.get(k).and_then(|v| v.as_str()).map(String::from).unwrap_or_default();
+            let root_of = |pid: &str| crate::db::project_get(&db.lock().unwrap(), pid).map(|p| PathBuf::from(p.root_path));
+            let v: Value = match name.as_str() {
+                "app_info" => json!({"version": env!("CARGO_PKG_VERSION"), "dataDir": crate::util::data_dir(), "schedulerActive": false, "uiBridge": true}),
+                "project_list" => serde_json::to_value(crate::db::project_list(&db.lock().unwrap())?).unwrap(),
+                "project_info" => serde_json::to_value(crate::project::info(&crate::db::project_get(&db.lock().unwrap(), &s("projectId"))?)).unwrap(),
+                "queue_status" => q.status(),
+                "claude_detect" => crate::claude::detect(),
+                "auto_defaults" => json!({"config": crate::autopilot::AutoConfig::default(), "stages": crate::autopilot::STAGES.iter().map(|(id, l)| json!({"id": id, "label": l})).collect::<Vec<_>>()}),
+                "auto_list" => serde_json::to_value(crate::autopilot::list(&db.lock().unwrap(), a["limit"].as_i64().unwrap_or(50))?).unwrap(),
+                "auto_get" => serde_json::to_value(crate::autopilot::get(&db.lock().unwrap(), &s("id"))?).unwrap(),
+                "auto_events" => serde_json::to_value(crate::autopilot::events(&db.lock().unwrap(), &s("id"), a["afterId"].as_i64().unwrap_or(0), a["limit"].as_i64().unwrap_or(500))?).unwrap(),
+                "auto_monitor" => autopilot(db, q).monitor(&s("id"))?,
+                "asset_probe" => json!(a["paths"].as_array().cloned().unwrap_or_default().iter().filter_map(|p| p.as_str()).map(|p| {
+                    let m = std::fs::metadata(p);
+                    json!({"source": p, "kind": crate::assets::detect_kind(p), "bytes": m.as_ref().map(|m| m.len()).unwrap_or(0), "exists": m.map(|m| m.is_file()).unwrap_or(false)})
+                }).collect::<Vec<_>>()),
+                "layout_migrate" => crate::layout::migrate(&root_of(&s("projectId"))?, false)?, // dry run only through the bridge
+                "asset_url_allowed" => json!({"allowed": true}),
+                "episode_list" => crate::episodes::list(&root_of(&s("projectId"))?),
+                other => return Err(format!("ui-invoke 不支援 {other}（只提供唯讀指令）")),
+            };
+            out(&v);
+            Ok(0)
+        }
+        "auto-monitor" => {
+            let id = arg(args, "--id").ok_or("缺少 --id")?;
+            let full = crate::autopilot::get(&db.lock().unwrap(), &id)?.id;
+            let mut v = autopilot(db, q).monitor(&full)?;
+            if flag(args, "--brief") {
+                for k in ["jobLines", "script", "voice", "stills"] {
+                    if let Some(a) = v[k].as_array() {
+                        v[k] = json!(format!("（{} 項）", a.len()));
+                    } else if !v[k].is_null() {
+                        v[k] = json!("（省略）");
+                    }
+                }
+                if let Some(a) = v["ai"]["lines"].as_array().cloned() {
+                    v["ai"]["lines"] = json!(a.into_iter().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>());
+                }
+            }
+            out(&v);
+            Ok(0)
+        }
+        "auto-preview" => {
+            let id = arg(args, "--id").ok_or("缺少 --id")?;
+            let full = crate::autopilot::get(&db.lock().unwrap(), &id)?.id;
+            let j = autopilot(db, q).preview(&full)?;
+            out(&json!({"ok": true, "job": j.id, "label": j.label, "next": "用 run-queue 或開著的 Studio 執行；完成後 out/preview/ 有 640×360 關鍵幀"}));
+            Ok(0)
+        }
+        "layout-migrate" => {
+            let (_, root) = project_id(&db, args)?;
+            let r = crate::layout::migrate(&root, flag(args, "--apply"))?;
+            println!("{}", r["report"].as_str().unwrap_or(""));
+            Ok(if r["errors"].as_array().map(|a| a.is_empty()).unwrap_or(true) { 0 } else { 1 })
+        }
+        "env-venv" => {
+            let (_, root) = project_id(&db, args)?;
+            let venv = root.join("tools").join("CosyVoice").join(".venv");
+            if flag(args, "--repair") {
+                let r = crate::envfix::repair(&venv);
+                out(&json!({"ok": r.is_ok(), "repair": r.as_ref().ok(), "error": r.as_ref().err(), "diagnosis": crate::envfix::diagnose(&venv)}));
+                Ok(if r.is_ok() { 0 } else { 1 })
+            } else {
+                let d = crate::envfix::diagnose(&venv);
+                let ok = d.problem.is_none();
+                out(&json!({"ok": ok, "diagnosis": d, "studioPackage": crate::envfix::current_package()}));
+                Ok(if ok { 0 } else { 1 })
+            }
         }
         "agent-check" => {
             let prov = arg(args, "--provider").unwrap_or_else(|| "claude".into());
