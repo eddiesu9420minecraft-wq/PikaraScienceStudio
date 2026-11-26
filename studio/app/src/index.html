@@ -3,32 +3,46 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="light dark" />
   <title>Pikara Science Studio</title>
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+  <script>
+    // apply the theme before the first paint (no flash): light | dark | system (default)
+    (function () {
+      var p = localStorage.getItem('ui.theme') || 'system';
+      var dark = p === 'dark' || (p === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/v03.css" />
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar" aria-label="側欄">
+    <aside class="sidebar" aria-label="側邊欄" data-i18n-aria="側邊欄">
       <div class="brand">
         <img src="assets/logo.svg" alt="" />
         <div>
           <div class="name">Pikara Studio</div>
-          <div class="sub" data-i18n="科普影片工作室">科普影片工作室</div>
+          <div class="sub" id="brand-sub" data-i18n="科普影片工作室">科普影片工作室</div>
         </div>
       </div>
-      <nav class="nav" id="nav" aria-label="主要導覽"></nav>
+      <nav class="nav" id="nav" aria-label="主要導覽" data-i18n-aria="主要導覽"></nav>
       <div class="sidebar-footer">
         <div class="project-chip" id="project-chip"></div>
-        <label class="toggle" id="mode-toggle" title="顯示配音、渲染、佇列、提示詞等單一步驟工具" data-i18n-title="顯示配音、渲染、佇列、提示詞等單一步驟工具">
-          <input type="checkbox" role="switch" /><span class="caption" data-i18n="進階模式">進階模式</span>
-        </label>
+        <div class="row" style="justify-content: space-between">
+          <span class="caption muted" data-i18n="外觀">外觀</span>
+          <div class="seg" role="group" id="theme-seg" aria-label="外觀" data-i18n-aria="外觀">
+            <button type="button" data-theme="light" data-i18n="淺色">淺色</button>
+            <button type="button" data-theme="dark" data-i18n="深色">深色</button>
+            <button type="button" data-theme="system" data-i18n="自動">自動</button>
+          </div>
+        </div>
         <div class="row" style="justify-content: space-between">
           <span class="caption muted" data-i18n="介面語言">介面語言</span>
-          <div class="seg" role="group" aria-label="介面語言" id="lang-seg">
+          <div class="seg" role="group" aria-label="介面語言" data-i18n-aria="介面語言" id="lang-seg">
             <button type="button" data-lang="zh-TW" aria-pressed="true">繁</button>
             <button type="button" data-lang="zh-CN" aria-pressed="false">简</button>
           </div>

@@ -2,7 +2,7 @@
 
 [English](README.en.md) ｜ 繁體中文
 
-輸入一個主題，自動做出一支 AI 科普動畫影片的 Windows 桌面工作台：資料研究、劇本、動畫程式、本地配音（CosyVoice 3）、Whisper 發音檢查、字幕、GPU 渲染、NVENC 編碼、自動品質檢查與修正、封面與上架文字，並輸出繁中 YouTube 版與簡中 Bilibili 版。
+輸入一個主題，自動做出一支 AI 科普動畫影片的 Windows 桌面工作台：資料研究、劇本、動畫程式、本地配音（CosyVoice 3）、Whisper 發音檢查、字幕、GPU 渲染、硬體影片編碼（NVIDIA NVENC／AMD AMF／Intel QSV，沒有時用 CPU）、自動品質檢查與修正、封面與上架文字，並輸出繁中 YouTube 版與簡中 Bilibili 版。
 
 > **v0.2.1-alpha**：新增影片內容控制（全自主／指導／自訂腳本）、輸出語言（繁、簡、繁＋簡、英文）、素材匯入、即時工作監控、每部影片獨立資料夾與 Sandbox、環境自動修復（見 [CHANGELOG](CHANGELOG.md)）。**本版未完成完整測試**，請先閱讀 `studio/app/TEST_REPORT_v0.2.1.md` 與下方〈已知限制〉，成品發布前務必人工審閱。
 
@@ -46,8 +46,8 @@ git clone https://github.com/eddiesu9420minecraft-wq/PikaraScienceStudio.git
 |---|---|---|
 | Node.js 20+ | Remotion 渲染、腳本 | 手動安裝（nodejs.org） |
 | Python 3.11 | 時間軸、混音、QA 腳本 | 手動安裝 |
-| ffmpeg（含 h264_nvenc） | 編碼、混音、檢查 | 手動安裝（例如 `winget install Gyan.FFmpeg`）。GPL 版本，本專案不隨附 |
-| NVIDIA 顯示卡＋驅動 | GPU 渲染（ANGLE）、NVENC、CosyVoice CUDA | 選用；沒有時可用 CPU 相容模式 |
+| ffmpeg（建議含硬體編碼器的 full build） | 編碼、混音、檢查 | 手動安裝（例如 `winget install Gyan.FFmpeg`）。GPL 版本，本專案不隨附 |
+| 顯示卡＋驅動（NVIDIA／AMD／Intel） | GPU 渲染（ANGLE）、硬體編碼；NVIDIA 另可跑 CosyVoice CUDA | 選用；沒有 NVIDIA 時配音用 CPU（較慢），沒有 GPU 時全部用 CPU 相容模式 |
 | CosyVoice 3（Python 3.10 venv＋模型） | 本地配音 | 手動安裝，步驟見 `studio/docs/ENVIRONMENT_SETUP.md`；模型權重需自行下載 |
 | Claude Code CLI 或 豆包 CLI | 自動製作的研究、劇本、動畫程式與修正 | 使用你自己的帳號登入；Studio 不要求、不保存 API Key 或帳號資訊 |
 

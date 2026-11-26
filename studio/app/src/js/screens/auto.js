@@ -197,7 +197,7 @@ class Auto {
         h('div.row.wrap', { style: { gap: '20px' } },
           toggle(t('封面'), c.thumbnail, set('thumbnail')), toggle(t('上架資訊'), c.publishInfo, set('publishInfo')),
           toggle(t('畫面 AI 審查'), c.visualReview, set('visualReview')), toggle(t('發音檢查（Whisper）'), c.pronunciationCheck, set('pronunciationCheck'))),
-        h('div.caption.muted', t('簡中固定約每秒 5.4 字（大陸配音）。音色由專案的參考人聲決定（tools/CosyVoice/reference），「配音語氣」影響用字與句型，不會改變音色。')),
+        h('div.caption.muted', t('簡中使用大陸配音員的自然語速（約每秒 3.4 字）；語速倍率限制在 0.85–1.15，避免變速造成卡頓與吞字。音色由專案的參考人聲決定（tools/CosyVoice/reference），「配音語氣」影響用字與句型，不會改變音色。')),
         h('div.grid3', field(t('每個階段最多嘗試'), num('maxAttempts', 1, 10)), field(t('總時間上限（分鐘）'), num('maxMinutes', 10, 1440)), field(t('Claude 每次最多回合'), num('maxTurns', 10, 400))),
         field(t('AI 提供者'), agentSeg), agentBox,
         h('div', { hidden: c.agent !== 'claude' || null, dataset: { claudeOnly: '1' } }, field(t('Claude 計費方式'), billing), budgetBox)));

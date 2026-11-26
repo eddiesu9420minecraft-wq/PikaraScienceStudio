@@ -75,7 +75,7 @@ pub fn rate(c: &AutoConfig) -> f64 {
     if is_en(c) {
         2.5 // words / s
     } else if cn_only(c) {
-        5.4
+        3.4 // natural pace of the zh-CN reference voice (speed ≤ 1.15)
     } else {
         c.tw_cps.unwrap_or(3.6)
     }

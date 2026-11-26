@@ -1,0 +1,25 @@
+{
+  "_comment": "PronunciationEngine 預設字典。只改送進 TTS 的文字，不改字幕、旁白稿或 narration.json。kind：acronym＝逐字母念（自動變成「C P U」）；word／brand／product／tech＝依 say 的寫法念（沒有 say 就照原字）。say 可以是字串或依語音 {\"zh-TW\":…,\"zh-CN\":…,\"en\":…}。ignoreCase 預設：acronym 為 false，其他為 true。使用者覆寫：專案根目錄 pronunciation.user.json（同格式，後載入者優先）。verified:「whisper」＝經過 CosyVoice3 實際合成＋Whisper 聽寫與長度量測（out/pron/），尚待人耳確認；verified:false＝還沒合成驗證。",
+  "terms": [
+    {"term": "CPU", "kind": "acronym", "verified": "whisper"},
+    {"term": "GPU", "kind": "acronym", "verified": "whisper"},
+    {"term": "AMD", "kind": "acronym", "verified": "whisper", "note": "zh-TW 語音念「AMD」會吞掉 A（Whisper：md），逐字母較穩"},
+    {"term": "CUDA", "kind": "product", "say": {"zh-TW": "酷達", "zh-CN": "库达", "en": "Cuda"}, "verified": "whisper",
+     "note": "大寫 CUDA 會被逐字母念成 C-U-D-A（1.2–2.4 秒）；音譯「酷達／库达」被 Whisper 聽成 kuda／库达（0.4–0.5 秒），是自然的單字念法"},
+    {"term": "NVIDIA", "kind": "brand", "say": "Nvidia", "verified": "whisper", "note": "全大寫會被念成 inmedia／invedi；Nvidia 寫法兩種語音都正確"},
+    {"term": "Intel", "kind": "brand", "say": "intel", "verified": "whisper", "note": "zh-TW 語音念 Intel 常變成 inter；小寫較穩"},
+    {"term": "Python", "kind": "word", "say": "Python", "verified": "whisper"},
+    {"term": "Linux", "kind": "word", "say": "Linux", "verified": "whisper"},
+    {"term": "Windows", "kind": "word", "say": "Windows", "verified": "whisper"},
+    {"term": "NVENC", "kind": "tech", "say": "N V ENC", "verified": false},
+    {"term": "VRAM", "kind": "tech", "say": "V RAM", "verified": false},
+    {"term": "RAM", "kind": "word", "say": "RAM", "ignoreCase": false, "verified": false},
+    {"term": "WebGL", "kind": "tech", "say": "Web G L", "verified": false},
+    {"term": "OpenGL", "kind": "tech", "say": "Open G L", "verified": false},
+    {"term": "macOS", "kind": "product", "say": "mac O S", "verified": false},
+    {"term": "iPhone", "kind": "product", "say": "iPhone", "verified": false},
+    {"term": "ChatGPT", "kind": "product", "say": "Chat G P T", "verified": false},
+    {"term": "GitHub", "kind": "product", "say": "Git Hub", "verified": false},
+    {"term": "YouTube", "kind": "product", "say": "YouTube", "verified": false}
+  ]
+}

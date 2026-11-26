@@ -53,3 +53,21 @@ export const findFfmpeg = () => {
   const r = run(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg']);
   return r.code === 0 ? r.out.split(/\r?\n/)[0].trim() : null;
 };
+
+// ---- v0.3 render GPU selection (Studio's DeviceSelector passes PIKARA_RENDER_GPU_LUID="<high>,<low>") ----
+// Chromium (ANGLE / D3D11) picks the adapter with --use-adapter-luid. The value format is fixed by what was measured on
+// a real hybrid laptop (see HARDWARE.md); PIKARA_ADAPTER_LUID_FORMAT overrides it for experiments.
+export const renderAdapterFlags = () => {
+  const v = process.env.PIKARA_RENDER_GPU_LUID;
+  if (!v || process.env.PIKARA_RENDER_TARGET === 'cpu') return null;
+  const [hi, lo] = v.split(',').map((x) => Number(x));
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  const fmt = process.env.PIKARA_ADAPTER_LUID_FORMAT || 'dec';
+  const hex = (n) => '0x' + (n >>> 0).toString(16);
+  const value = fmt === 'hex' ? `${hex(hi)},${hex(lo)}` : `${hi},${lo}`;
+  return {'use-adapter-luid': value};
+};
+export const chromiumFlagsArg = () => {
+  const f = renderAdapterFlags();
+  return f ? [`--chromium-flags=${JSON.stringify(f)}`] : [];
+};

@@ -10,7 +10,7 @@ const SEEN_KEY = 'guide.seen.v2';
 // Each step: what to do, where, and how to tell it worked. `go` = screen to open.
 const STEPS = [
   { icon: 'doctor', title: '1. 檢查環境', go: 'doctor', body: [
-    '開啟「環境」頁按「重新檢查」。紅色項目要先處理：Node.js、ffmpeg（含 ffprobe、NVENC）、Python 3.11、CosyVoice 3、Chrome Headless Shell、Claude Code。',
+    '開啟「環境」頁按「重新檢查」。紅色項目要先處理：Node.js、ffmpeg（含 ffprobe；硬體編碼器 NVENC／AMF／QSV 可選，沒有時用 CPU）、Python 3.11、CosyVoice 3、Chrome Headless Shell、Claude Code。',
     '標示「可自動修復」的項目按「修復」；其他項目會顯示要執行的指令。系統層級設定（例如長路徑、睡眠）只提供說明，不會自動更改。',
   ] },
   { icon: 'terminal', title: '2. 登入 Claude Code', body: [

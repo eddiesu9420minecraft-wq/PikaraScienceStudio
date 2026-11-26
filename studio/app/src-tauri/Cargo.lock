@@ -2777,7 +2777,7 @@ dependencies = [
 
 [[package]]
 name = "pikara-science-studio"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "once_cell",
@@ -2793,6 +2793,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-single-instance",
  "uuid",
+ "windows 0.62.2",
  "windows-sys 0.59.0",
 ]
 

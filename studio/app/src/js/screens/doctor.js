@@ -15,7 +15,7 @@ export default {
     const p = currentProject();
     const body = h('div.col');
     const runBtn = btn(t('重新檢查'), { kind: 'primary', icon: 'refresh', onClick: () => run() });
-    const gpuToggle = toggle(t('包含 GPU 測試（NVENC 試編碼）'), opts.gpuTests, (v) => { opts.gpuTests = v; }, { title: t('只有 GPU 空閒時才會執行，否則標示為略過') });
+    const gpuToggle = toggle(t('包含 GPU 測試（硬體編碼器試編碼）'), opts.gpuTests, (v) => { opts.gpuTests = v; }, { title: t('只有 GPU 空閒時才會執行，否則標示為略過') });
     ctx.toolbar(t('環境檢查'), p ? p.name : t('未選擇專案（只檢查系統項目）'), [gpuToggle, runBtn]);
     mount(ctx.content, h('div.page', body));
 

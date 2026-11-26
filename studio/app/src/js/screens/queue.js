@@ -75,7 +75,7 @@ class QueueView {
   paintList() {
     this.rowEls.clear();
     const jobs = [...this.jobs.values()].filter((j) => this.visible(j)).sort((a, b) => (rank(a) - rank(b)) || String(b.createdAt).localeCompare(String(a.createdAt)));
-    if (!jobs.length) { mount(this.listBox, empty(t('沒有工作'), ui.filter === 'all' ? t('在「製作」頁加入工作後，會出現在這裡。') : t('這個篩選條件下沒有工作。'), 'queue')); return; }
+    if (!jobs.length) { mount(this.listBox, empty(t('沒有工作'), ui.filter === 'all' ? t('在「單集編輯」重新配音、重新渲染，或在「專案」開始新影片後，工作會出現在這裡。') : t('這個篩選條件下沒有工作。'), 'queue')); return; }
     const list = h('div.list', { role: 'listbox', 'aria-label': t('工作') });
     for (const j of jobs) { const el = this.jobRow(j); this.rowEls.set(j.id, el); list.appendChild(el); }
     mount(this.listBox, list);
@@ -159,12 +159,26 @@ class QueueView {
     const applyWin = () => save(winOn.v ? { windowStart: ws.value || null, windowEnd: we.value || null } : { windowStart: null, windowEnd: null });
     ws.disabled = we.disabled = !winOn.v;
     ws.addEventListener('change', applyWin); we.addEventListener('change', applyWin);
+    // 渲染效能模式：只是起點，render.mjs 每段依實測 VRAM／GPU／CPU／RAM／fps 調整並行數
+    const perf = h('select.input', { 'aria-label': t('渲染效能模式'), style: { width: '170px' } },
+      ...[['eco', t('省電（起始並行 1）')], ['balanced', t('平衡（起始並行 2，預設）')], ['performance', t('效能（起始並行 3）')]]
+        .map(([v, l]) => h('option', { value: v, selected: (s.perfMode || 'balanced') === v ? true : null }, l)));
+    perf.addEventListener('change', () => save({ perfMode: perf.value, renderStartConcurrency: { eco: 1, balanced: 2, performance: 3 }[perf.value] }));
+    const perfSelect = h('div.row.gap2', { title: t('起始值與上限；實際並行數依每段實測自動調整，調整原因記錄在渲染報告') }, h('span', t('渲染效能')), perf);
+    // 旁白語速：時間軸階段對配音「複本」做保留音高的伸縮；原始配音檔不變。改了之後需重建時間軸／混音／渲染才生效
+    const curTempo = [0.9, 1.0, 1.1, 1.2].reduce((a, b) => (Math.abs(b - (s.voiceTempo || 1)) < Math.abs(a - (s.voiceTempo || 1)) ? b : a), 1.0);
+    const tempo = h('select.input', { 'aria-label': t('旁白語速'), style: { width: '150px' } },
+      ...[[0.9, t('慢速 0.90×')], [1.0, t('正常 1.00×（預設）')], [1.1, t('稍快 1.10×')], [1.2, t('快速 1.20×')]]
+        .map(([v, l]) => h('option', { value: String(v), selected: curTempo === v ? true : null }, l)));
+    tempo.addEventListener('change', () => save({ voiceTempo: Number(tempo.value) }));
+    const tempoSelect = h('div.row.gap2', { title: t('相對於該語言的正常語速；保留音高，不修改原始配音檔。下次建立時間軸時生效') }, h('span', t('旁白語速')), tempo);
     mount(this.unattended, h('div.panel', h('div.row.wrap', { style: { padding: '12px 16px', gap: '24px' } },
       h('span.headline', t('無人值守')),
       toggle(t('自動執行佇列'), s.queueEnabled, (v) => save({ queueEnabled: v })),
       toggle(t('執行時防止睡眠'), s.keepAwake, (v) => save({ keepAwake: v })),
       h('div.row.gap2', toggle(t('GPU 只在時段內'), winOn.v, (v) => { winOn.v = v; ws.disabled = we.disabled = !v; if (v && (!ws.value || !we.value)) return; applyWin(); }), ws, h('span.muted', '–'), we),
-      h('span.caption.muted', t('同時 CPU 工作數：{n}', { n: s.maxCpuJobs })))));
+      h('span.caption.muted', t('同時 CPU 工作數：{n}', { n: s.maxCpuJobs })),
+      btn(t('渲染效能與旁白語速…'), { small: true, kind: 'plain', onClick: () => { location.hash = '#/settings'; } }))));
   }
 
   // ---------- log viewer ----------

@@ -43,9 +43,9 @@ fn instr(id: &str, label: &str) -> Option<Value> {
 pub fn instructions(id: &str) -> Option<&'static str> {
     Some(match id {
         "longpaths_instructions" => "LongPathsEnabled=0：Studio 不會修改系統設定。目前專案路徑夠短，不影響使用；若要啟用，請以「系統管理員」開啟 PowerShell 執行：\n  reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f\n然後重新開機。",
-        "driver_instructions" => "請從 https://www.nvidia.com/Download/index.aspx 下載並安裝最新的 GeForce/Studio 驅動（需要 R530 以上才支援 CUDA 12.1）。Studio 不會自動安裝驅動。",
+        "driver_instructions" => "請從顯示卡廠商官網安裝最新驅動（Studio 不會自動安裝或修改驅動）：\n  NVIDIA：https://www.nvidia.com/Download/index.aspx（CosyVoice 的 CUDA 12.1 需要 R530 以上）\n  AMD：https://www.amd.com/support\n  Intel：https://www.intel.com/content/www/us/en/download-center/home.html\n沒有 NVIDIA 顯示卡也能製作：畫面渲染與影片編碼會使用其他品牌 GPU 或 CPU，配音（CosyVoice）改用 CPU，速度較慢。",
         "install_python311" => "請安裝 Python 3.11：winget install Python.Python.3.11（或 uv python install 3.11），安裝後 `py -3.11 --version` 應可執行。",
-        "install_ffmpeg" => "請安裝含 NVENC 的 ffmpeg：winget install Gyan.FFmpeg（GPLv3，Studio 不內含），安裝後重新開啟 Studio。",
+        "install_ffmpeg" => "請安裝含硬體編碼器（NVENC／AMF／QSV）的 ffmpeg：winget install Gyan.FFmpeg（full build，GPLv3，Studio 不內含），安裝後重新開啟 Studio。沒有硬體編碼器時會用 libx264（CPU）編碼。",
         "install_node" => "請安裝 Node.js 20 以上（https://nodejs.org，LTS），或在 設定 > nodeDir 指定 node.exe 所在資料夾。",
         "install_git" => "請安裝 Git for Windows：winget install Git.Git",
         "install_claude" => "選用：安裝 Claude Code CLI（https://docs.claude.com/en/docs/claude-code），並在終端機自行執行 `claude` 登入。Studio 不會代為登入。",
@@ -116,13 +116,19 @@ fn check_webview2() -> Check {
     c("webview2", "WebView2 Runtime", "error", "找不到 WebView2 Runtime", None, None)
 }
 
+/// Display adapters of any vendor. NVIDIA additionally reports VRAM and the driver (CUDA for CosyVoice).
+/// Missing NVIDIA is a warning, not an error: rendering and encoding have other-vendor and CPU paths.
 fn check_gpu() -> Check {
+    const L: &str = "GPU 與驅動";
+    let adapters = crate::hardware::adapters::detect();
+    let list = adapters.iter().map(|a| format!("{}（{}，驅動 {}）", a.name, a.vendor(), if a.driver.is_empty() { "?" } else { &a.driver })).collect::<Vec<_>>().join("；");
+    let has_nv = adapters.iter().any(|a| a.vendor_id == "10de");
     match run("nvidia-smi", &["--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"], None, T) {
         Ok(o) if o.ok() => {
             let line = o.stdout.lines().next().unwrap_or("").to_string();
             let f: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
             if f.len() < 3 {
-                return c("gpu.driver", "NVIDIA GPU 與驅動", "warn", format!("無法解析：{line}"), None, None);
+                return c("gpu.driver", L, "warn", format!("nvidia-smi 輸出無法解析：{line}；顯示卡：{list}"), None, None);
             }
             let vram: f64 = f[2].parse().unwrap_or(0.0);
             let drv_major: u32 = f[1].split('.').next().and_then(|x| x.parse().ok()).unwrap_or(0);
@@ -133,15 +139,26 @@ fn check_gpu() -> Check {
             if drv_major < 530 {
                 issues.push(format!("驅動 {} 低於 R530（CUDA 12.1）", f[1]));
             }
-            let detail = format!("{}，驅動 {}，VRAM {} MiB", f[0], f[1], f[2]);
+            let others: Vec<&str> = adapters.iter().filter(|a| a.vendor_id != "10de").map(|a| a.name.as_str()).collect();
+            let more = if others.is_empty() { String::new() } else { format!("；其他顯示卡：{}", others.join("、")) };
+            let detail = format!("{}，驅動 {}，VRAM {} MiB（CUDA 配音可用）{more}", f[0], f[1], f[2]);
             if issues.is_empty() {
-                c("gpu.driver", "NVIDIA GPU 與驅動", "ok", detail, Some(line), None)
+                c("gpu.driver", L, "ok", detail, Some(line), None)
             } else {
-                c("gpu.driver", "NVIDIA GPU 與驅動", "warn", format!("{detail}：{}", issues.join("；")), Some(line), instr("driver_instructions", "更新驅動說明"))
+                c("gpu.driver", L, "warn", format!("{detail}：{}", issues.join("；")), Some(line), instr("driver_instructions", "更新驅動說明"))
             }
         }
-        Ok(o) => c("gpu.driver", "NVIDIA GPU 與驅動", "error", format!("nvidia-smi 失敗：{}", o.combined().trim()), None, instr("driver_instructions", "安裝驅動說明")),
-        Err(_) => c("gpu.driver", "NVIDIA GPU 與驅動", "error", "找不到 nvidia-smi（沒有 NVIDIA 驅動）；只能用 CPU 模式渲染", None, instr("driver_instructions", "安裝驅動說明")),
+        r => {
+            let why = match r {
+                Ok(o) => format!("nvidia-smi 失敗：{}", o.combined().trim()),
+                Err(_) if has_nv => "偵測到 NVIDIA 顯示卡但找不到 nvidia-smi（驅動可能未安裝完整）".into(),
+                Err(_) => "沒有 NVIDIA 顯示卡".into(),
+            };
+            if adapters.is_empty() {
+                return c("gpu.driver", L, "warn", format!("{why}；也沒有偵測到其他顯示卡。畫面渲染、編碼與配音都會用 CPU（較慢）"), None, instr("driver_instructions", "驅動說明"));
+            }
+            c("gpu.driver", L, "warn", format!("{list}。{why}：畫面渲染與影片編碼可用這些顯示卡（實際能力見「ffmpeg 硬體編碼」與 GPU 實測），CosyVoice 配音沒有 CUDA，會用 CPU（較慢）"), Some(list.clone()), instr("driver_instructions", "驅動說明"))
+        }
     }
 }
 
@@ -202,11 +219,14 @@ fn check_chs(root: &Path) -> Check {
     }
 }
 
-fn check_ffmpeg(gpu_tests: bool, gpu_free: bool) -> (Check, Check) {
+/// ffmpeg presence + video encoders. Hardware encoders of every vendor are candidates; without "GPU 實測" only the
+/// encoder list and the results render.mjs cached (`out/hwenc-cache.json`) are shown — no GPU is touched.
+fn check_ffmpeg(root: Option<&Path>, gpu_tests: bool, gpu_free: bool) -> (Check, Check) {
+    const L: &str = "ffmpeg 硬體編碼";
     let Some(path) = crate::util::tool("ffmpeg") else {
         return (
             c("ffmpeg.present", "ffmpeg", "error", "PATH 上找不到 ffmpeg", None, instr("install_ffmpeg", "安裝 ffmpeg 說明")),
-            c("ffmpeg.nvenc", "ffmpeg NVENC", "skipped", "沒有 ffmpeg", None, None),
+            c("ffmpeg.hwenc", L, "skipped", "沒有 ffmpeg", None, None),
         );
     };
     let ver = run(&path, &["-version"], None, T).ok();
@@ -220,28 +240,34 @@ fn check_ffmpeg(gpu_tests: bool, gpu_free: bool) -> (Check, Check) {
         Some(first.clone()),
         None,
     );
-    let enc = run(&path, &["-hide_banner", "-encoders"], None, T).map(|o| o.stdout).unwrap_or_default();
-    if !enc.contains("h264_nvenc") {
-        return (present, c("ffmpeg.nvenc", "ffmpeg NVENC", "error", "這個 ffmpeg 沒有 h264_nvenc 編碼器", None, instr("install_ffmpeg", "改用含 NVENC 的 ffmpeg")));
-    }
-    if !gpu_tests {
-        return (present, c("ffmpeg.nvenc", "ffmpeg NVENC", "ok", "已列出 h264_nvenc（未執行實測編碼；勾選「GPU 實測」可測試）", Some("listed".into()), None));
-    }
-    if !gpu_free {
-        return (present, c("ffmpeg.nvenc", "ffmpeg NVENC", "skipped", "已列出 h264_nvenc；GPU 使用中，略過實測編碼", Some("listed".into()), None));
-    }
-    let t = run(
-        &path,
-        &["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=s=1920x1080:r=60", "-t", "2", "-c:v", "h264_nvenc", "-f", "null", "-"],
-        None,
-        Duration::from_secs(60),
-    );
-    let nv = match t {
-        Ok(o) if o.ok() => c("ffmpeg.nvenc", "ffmpeg NVENC", "ok", "h264_nvenc 實測編碼 2 秒 1080p60 成功", Some("tested".into()), None),
-        Ok(o) => c("ffmpeg.nvenc", "ffmpeg NVENC", "error", format!("實測編碼失敗：{}", crate::util::tail_lines(&o.combined(), 3)), None, instr("driver_instructions", "檢查驅動")),
-        Err(e) => c("ffmpeg.nvenc", "ffmpeg NVENC", "error", e, None, None),
+    use crate::hardware::encoders;
+    let listed = encoders::parse_encoder_list(&run(&path, &["-hide_banner", "-encoders"], None, T).map(|o| o.stdout).unwrap_or_default());
+    let test = gpu_tests && gpu_free;
+    // 找到第一個可用的編碼器就停（all=false）：不在每次環境檢查時對每張顯示卡、每個編碼器試編碼。
+    // 2026-11-23 17:21–17:23 對所有編碼器（NVENC／AMF／QSV／MF）連續試編碼期間，Windows 記錄到顯示驅動逾時重置
+    // （LiveKernelEvent 141/117，工作列無回應）；只是時間吻合、未證實因果，但環境檢查不需要冒這個風險。
+    // 要逐一實測全部候選，手動執行 node scripts/hwenc.mjs --all --force。
+    let p = encoders::probe(root, &path, &listed, crate::hardware::adapters::detect(), "h264", test, false);
+    let show = |r: &encoders::EncResult| match r.works {
+        Some(true) => format!("{} ✓（{} ms）", r.id, r.ms),
+        Some(false) if !r.listed => format!("{} 未編譯", r.id),
+        Some(false) => format!("{} ✗", r.id),
+        None => format!("{} 已列出、未實測", r.id),
     };
-    (present, nv)
+    let summary = p.results.iter().map(show).collect::<Vec<_>>().join("、");
+    let hw_listed = p.results.iter().any(|r| r.listed && r.family != "cpu");
+    let value = serde_json::to_string(&p).ok();
+    let how = if test { "實測 1 秒 720p60：" } else if gpu_tests { "GPU 使用中，略過實測；" } else { "未實測（勾選「GPU 實測」可測試）；" };
+    let chk = if p.selected_hardware {
+        c("ffmpeg.hwenc", L, "ok", format!("使用 {}。{how}{summary}", p.selected.clone().unwrap_or_default()), value, None)
+    } else if test || p.results.iter().any(|r| r.family != "cpu" && r.works == Some(false) && r.listed) {
+        c("ffmpeg.hwenc", L, "warn", format!("沒有可用的硬體編碼器，會用 libx264（CPU，較慢、畫質相同）。{how}{summary}"), value, instr("driver_instructions", "檢查驅動"))
+    } else if hw_listed {
+        c("ffmpeg.hwenc", L, "ok", format!("{how}{summary}；渲染時會實測並自動選用，失敗自動改用下一個、最後是 libx264"), value, None)
+    } else {
+        c("ffmpeg.hwenc", L, "warn", format!("這個 ffmpeg 沒有任何硬體編碼器，會用 libx264（CPU）。{summary}"), value, instr("install_ffmpeg", "改用含硬體編碼器的 ffmpeg"))
+    };
+    (present, chk)
 }
 
 fn check_py311() -> Check {
@@ -410,17 +436,21 @@ pub fn run_all(root: Option<&Path>, s: &Settings, gpu_tests: bool, gpu_free: boo
         let s = s2.clone();
         std::thread::spawn(move || check_cosy(&rr, &s))
     });
-    let h_ff = std::thread::spawn(move || check_ffmpeg(gpu_tests, gpu_free));
+    let r_ff = r.clone();
+    let h_ff = std::thread::spawn(move || check_ffmpeg(r_ff.as_deref(), gpu_tests, gpu_free));
     let h_claude = std::thread::spawn(check_claude);
     let h_gpu = std::thread::spawn(check_gpu);
     let mut v = vec![check_os(), check_longpaths(root), check_webview2()];
-    v.push(h_gpu.join().unwrap_or_else(|_| c("gpu.driver", "NVIDIA GPU 與驅動", "error", "check panicked", None, None)));
+    // a crashing probe (driver bug, odd tool output) must never take Studio down: it becomes an "error" row
+    v.push(h_gpu.join().unwrap_or_else(|_| c("gpu.driver", "GPU 與驅動", "error", "顯示卡檢查發生內部錯誤（已略過）", None, None)));
     v.push(check_node(s));
     if let Some(rt) = root {
         v.push(check_npm_deps(rt));
         v.push(check_chs(rt));
     }
-    let (fp, fnv) = h_ff.join().unwrap();
+    let (fp, fnv) = h_ff.join().unwrap_or_else(|_| {
+        (c("ffmpeg.present", "ffmpeg", "error", "ffmpeg 檢查發生內部錯誤（已略過）", None, None), c("ffmpeg.hwenc", "ffmpeg 硬體編碼", "error", "編碼器檢查發生內部錯誤（已略過）", None, None))
+    });
     v.push(fp);
     v.push(fnv);
     v.push(check_py311());
@@ -429,7 +459,7 @@ pub fn run_all(root: Option<&Path>, s: &Settings, gpu_tests: bool, gpu_free: boo
     }
     v.push(check_disk(root));
     v.push(check_git(root));
-    v.push(h_claude.join().unwrap());
+    v.push(h_claude.join().unwrap_or_else(|_| c("claude", "Claude Code", "error", "檢查發生內部錯誤（已略過）", None, None)));
     if let Some(rt) = root {
         v.push(check_folders(rt));
     }
@@ -446,7 +476,7 @@ mod tests {
         let root = std::fs::canonicalize(&root).unwrap();
         let checks = run_all(Some(&root), &Settings::default(), false, false);
         let ids: Vec<&str> = checks.iter().map(|c| c.id).collect();
-        for want in ["os.version", "os.longpaths", "webview2", "gpu.driver", "node", "npm.deps", "browser.chs", "ffmpeg.present", "ffmpeg.nvenc", "py311", "cosy.venv", "cosy.model", "whisper.model", "disk.free", "git", "claude", "project.folders"] {
+        for want in ["os.version", "os.longpaths", "webview2", "gpu.driver", "node", "npm.deps", "browser.chs", "ffmpeg.present", "ffmpeg.hwenc", "py311", "cosy.venv", "cosy.model", "whisper.model", "disk.free", "git", "claude", "project.folders"] {
             assert!(ids.contains(&want), "missing check {want}");
         }
         for c in &checks {
@@ -460,8 +490,8 @@ mod tests {
             }
         }
         // never runs the GPU test encode unless asked
-        let nv = checks.iter().find(|c| c.id == "ffmpeg.nvenc").unwrap();
-        assert_ne!(nv.value.as_deref(), Some("tested"));
+        let hw = checks.iter().find(|c| c.id == "ffmpeg.hwenc").unwrap();
+        assert!(!hw.detail.contains("實測 1 秒"), "{}", hw.detail);
     }
 
     #[test]

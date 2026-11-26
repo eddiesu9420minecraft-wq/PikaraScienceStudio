@@ -6,10 +6,10 @@
 
 ```powershell
 npm install
-npm run gpu:check        # 實測 GPU：WebGL 後端、NVENC、驅動、VRAM
+npm run gpu:check        # 實測 GPU：WebGL 後端、硬體編碼器（NVENC／AMF／QSV／VideoToolbox…）、驅動
 npm run dev              # Remotion Studio（即時預覽、逐幀檢查）
 npm run preview          # 720p 快速預覽 → out/ArtTest-preview-720p.mp4
-npm run render:gpu       # 1080p60 正式渲染（ANGLE/D3D11 + h264_nvenc）
+npm run render:gpu       # 1080p60 正式渲染（ANGLE 硬體 WebGL＋實測可用的硬體編碼器，失敗自動改用 libx264）
 ```
 
 > Windows 注意：專案路徑太長時（超過 260 字元），Remotion 內建的 headless Chrome 無法啟動。`scripts/lib.mjs` 會自動把它複製到 `%LOCALAPPDATA%\pikara-science\chrome-headless-shell` 再使用。
@@ -18,7 +18,7 @@ npm run render:gpu       # 1080p60 正式渲染（ANGLE/D3D11 + h264_nvenc）
 
 | 指令 | 作用 |
 |---|---|
-| `npm run gpu:check` | 檢查 NVIDIA 驅動與 VRAM、`h264_nvenc`/`hevc_nvenc` 實際編碼測試、Chromium WebGL 實際使用的顯示卡；輸出 `out/gpu-check.json`。GPU 不可用時列出原因並提示 CPU 模式 |
+| `npm run gpu:check` | 列出所有顯示卡（不分品牌）、Chromium WebGL 實際使用的 GPU、每個硬體編碼器（NVENC／AMF／QSV／VideoToolbox／VA-API／Media Foundation）以正式參數實際試編碼 1 秒的結果；NVIDIA 另外顯示 VRAM 與溫度。輸出 `out/gpu-check.json`（WebGL 結果快取 24 小時，`--force` 重測）。單獨檢查編碼器：`node scripts/hwenc.mjs --all` |
 | `npm run preview` | 720p 預覽（GPU；不可用時自動改 CPU 並說明原因） |
 | `npm run render:gpu` | 1080p60 正式片。GPU 檢查不通過時**不會**自動降級，會停下並說明 |
 | `npm run render:cpu` | 相容模式：SwiftShader 軟體 WebGL + libx264，畫質參數同等 |
@@ -32,7 +32,7 @@ npm run render:gpu       # 1080p60 正式渲染（ANGLE/D3D11 + h264_nvenc）
 | `npm run stills` | 渲染關鍵幀 PNG 到 `out/stills/` 供美術檢查 |
 | `npm run typecheck` | TypeScript 檢查 |
 
-`render.mjs` 其他參數：`--codec hevc`（hevc_nvenc）、`--concurrency N`、`--frames a-b`、`--keep-frames`、`--allow-cpu-fallback`。
+`render.mjs` 其他參數：`--codec hevc`、`--encoder auto|h264_nvenc|h264_amf|h264_qsv|h264_videotoolbox|h264_vaapi|h264_mf|libx264`（預設 auto：依 `scripts/hw_encoders.json` 實測選用；編碼失敗會改用下一個，已渲染的幀不重做）、`--concurrency N`、`--frames a-b`、`--keep-frames`、`--allow-cpu-fallback`。
 
 ## 多集（EP01、EP02、EP03…）
 

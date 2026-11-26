@@ -13,17 +13,23 @@ pub mod db;
 pub mod doctor;
 pub mod episodes;
 pub mod gitops;
+pub mod gpulock;
 pub mod i18n;
-pub mod gpu;
+pub mod hardware;
+/// Compatibility path: NVIDIA telemetry used to live in `gpu.rs`.
+pub use hardware::telemetry as gpu;
 pub mod jobs;
 pub mod monitor;
 pub mod narration;
+pub mod pipeline;
+pub mod rerender;
 pub mod project;
 pub mod prompt;
 pub mod queue;
 pub mod scaffold;
 pub mod selftest;
 pub mod util;
+pub mod watchdog;
 
 use db::Db;
 use queue::Queue;
@@ -49,7 +55,7 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> R<T> + Send + 'static) 
 }
 
 fn root_of(db: &Db, project_id: &str) -> R<PathBuf> {
-    let p = db::project_get(&db.lock().unwrap(), project_id)?;
+    let p = db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), project_id)?;
     Ok(PathBuf::from(p.root_path))
 }
 
@@ -64,24 +70,29 @@ async fn app_info() -> R<Value> {
         "logsDir": util::logs_dir(),
         "exePath": std::env::current_exe().ok(),
         "schedulerActive": SCHEDULER_ON.load(std::sync::atomic::Ordering::Relaxed),
+        "schemaVersion": db::schema_version(),
+        // screenshot / layout tour (debug harness only): PIKARA_UI_TOUR=1 [PIKARA_UI_TOUR_STEP_MS=2500]
+        "uiTour": std::env::var("PIKARA_UI_TOUR").ok().filter(|v| v == "1").is_some(),
+        "uiTourStepMs": std::env::var("PIKARA_UI_TOUR_STEP_MS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(2500),
+        "uiTourEpisode": std::env::var("PIKARA_UI_TOUR_EPISODE").ok(),
     }))
 }
 
 #[tauri::command]
 async fn settings_get(st: State<'_, AppState>) -> R<db::Settings> {
-    Ok(db::settings_get(&st.db.lock().unwrap()))
+    Ok(db::settings_get(&st.db.lock().unwrap_or_else(|e| e.into_inner())))
 }
 
 #[tauri::command]
 async fn settings_set(st: State<'_, AppState>, settings: Value) -> R<db::Settings> {
-    db::settings_merge(&st.db.lock().unwrap(), &settings)
+    db::settings_merge(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &settings)
 }
 
 // ------------------------------------------------------------------ projects
 
 #[tauri::command]
 async fn project_list(st: State<'_, AppState>) -> R<Vec<db::Project>> {
-    db::project_list(&st.db.lock().unwrap())
+    db::project_list(&st.db.lock().unwrap_or_else(|e| e.into_inner()))
 }
 
 pub fn register_project(db: &Db, path: &str) -> R<db::Project> {
@@ -91,7 +102,7 @@ pub fn register_project(db: &Db, path: &str) -> R<db::Project> {
     }
     let canon = util::clean_path(&std::fs::canonicalize(p).map_err(|e| e.to_string())?);
     let name = Path::new(&canon).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(canon.clone());
-    db::project_upsert(&db.lock().unwrap(), &canon, &name)
+    db::project_upsert(&db.lock().unwrap_or_else(|e| e.into_inner()), &canon, &name)
 }
 
 #[tauri::command]
@@ -103,12 +114,12 @@ async fn project_register(app: tauri::AppHandle, st: State<'_, AppState>, path: 
 
 #[tauri::command]
 async fn project_remove(st: State<'_, AppState>, project_id: String) -> R<()> {
-    db::project_remove(&st.db.lock().unwrap(), &project_id)
+    db::project_remove(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &project_id)
 }
 
 #[tauri::command]
 async fn project_info(st: State<'_, AppState>, project_id: String) -> R<Value> {
-    let p = db::project_get(&st.db.lock().unwrap(), &project_id)?;
+    let p = db::project_get(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &project_id)?;
     blocking(move || Ok(project::info(&p))).await
 }
 
@@ -204,7 +215,7 @@ async fn prompt_tasks() -> R<Value> {
 
 fn job_extra(db: &Db, job_id: Option<&str>) -> R<prompt::Extra> {
     let Some(id) = job_id else { return Ok(prompt::Extra { job_summary: None, job_log_tail: None }) };
-    let c = db.lock().unwrap();
+    let c = db.lock().unwrap_or_else(|e| e.into_inner());
     let j = db::job_get(&c, id)?;
     let ev = db::events_list(&c, id, 0, 1_000_000)?;
     let tail: Vec<String> = ev.iter().rev().take(150).rev().map(|e| format!("[{}] {}", e.stream, e.line)).collect();
@@ -260,7 +271,7 @@ async fn claude_run(st: State<'_, AppState>, project_id: String, prompt: String,
 #[tauri::command]
 async fn claude_worktrees(st: State<'_, AppState>, project_id: String) -> R<Vec<Value>> {
     let root = root_of(&st.db, &project_id)?;
-    let jobs = db::job_list(&st.db.lock().unwrap(), Some(&project_id), None, 1000)?;
+    let jobs = db::job_list(&st.db.lock().unwrap_or_else(|e| e.into_inner()), Some(&project_id), None, 1000)?;
     blocking(move || {
         Ok(claude::list(&root, |wid| jobs.iter().find(|j| j.kind == "claude" && j.params["worktreeId"] == wid).map(|j| j.id.clone())))
     })
@@ -287,7 +298,7 @@ async fn claude_worktree_discard(st: State<'_, AppState>, project_id: String, wo
 
 #[tauri::command]
 async fn job_analyse_with_claude(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
-    let j = db::job_get(&st.db.lock().unwrap(), &job_id)?;
+    let j = db::job_get(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id)?;
     let pid = j.project_id.clone().ok_or("job has no project")?;
     let root = root_of(&st.db, &pid)?;
     let extra = job_extra(&st.db, Some(&job_id))?;
@@ -302,10 +313,10 @@ pub fn doctor_report(st_db: &Db, q: &Queue, project_id: Option<&str>, gpu_tests:
         Some(p) => Some(root_of(st_db, p)?),
         None => None,
     };
-    let s = db::settings_get(&st_db.lock().unwrap());
+    let s = db::settings_get(&st_db.lock().unwrap_or_else(|e| e.into_inner()));
     let gpu_free = gpu_tests && q.gpu_holder().is_none() && !q.check_external(None).busy;
     let checks = doctor::run_all(root.as_deref(), &s, gpu_tests, gpu_free);
-    let c = st_db.lock().unwrap();
+    let c = st_db.lock().unwrap_or_else(|e| e.into_inner());
     for ch in &checks {
         let _ = db::env_check_add(&c, ch.id, ch.status, &ch.to_json());
     }
@@ -350,6 +361,118 @@ async fn job_kinds() -> R<Value> {
     Ok(Value::Array(jobs::kinds().into_iter().map(|k| json!({"kind": k.kind, "label": k.label, "labelKey": k.kind, "labelCn": i18n::cn_label(k.kind), "resource": k.resource, "params": k.params})).collect()))
 }
 
+// ------------------------------------------------------------------ v0.3 workspace / re-voice / re-render
+
+fn ep_ref(db: &Db, project_id: &str, episode: &str, locale: &str) -> R<pipeline::Ep> {
+    pipeline::Ep::new(&root_of(db, project_id)?, episode, locale)
+}
+
+#[tauri::command]
+async fn workspace_get(st: State<'_, AppState>, project_id: String, episode: String, locale: String) -> R<Value> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    let db = st.db.clone();
+    blocking(move || {
+        let c = db.lock().unwrap_or_else(|e| e.into_inner());
+        let s = db::settings_get(&c);
+        pipeline::workspace(&c, &ep, &s)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn line_set(st: State<'_, AppState>, project_id: String, episode: String, locale: String, line: String, subtitle: Option<String>, speak: Option<String>) -> R<Value> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    blocking(move || rerender::line_set(&ep.root, &ep.locale, &ep.id, &line, subtitle.as_deref(), speak.as_deref())).await
+}
+
+#[tauri::command]
+async fn revoice_start(st: State<'_, AppState>, project_id: String, episode: String, locale: String, lines: Option<Vec<String>>, options: Option<Value>) -> R<db::Job> {
+    let root = root_of(&st.db, &project_id)?;
+    let mut p = options.unwrap_or(json!({}));
+    p["episode"] = json!(episode);
+    p["locale"] = json!(locale);
+    p["lines"] = json!(lines.unwrap_or_default().join(" "));
+    st.queue.enqueue(Some(&project_id), "revoice", &p, &root)
+}
+
+#[tauri::command]
+async fn voice_versions(st: State<'_, AppState>, project_id: String, episode: String, locale: String, line: Option<String>) -> R<Vec<Value>> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    Ok(pipeline::voice_versions(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &ep, line.as_deref()))
+}
+
+#[tauri::command]
+async fn voice_restore(st: State<'_, AppState>, project_id: String, episode: String, locale: String, line: String, version: i64) -> R<Value> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    pipeline::restore_voice(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &ep, &line, version, None)
+}
+
+#[tauri::command]
+async fn voice_reject(st: State<'_, AppState>, project_id: String, episode: String, locale: String, line: String, version: i64) -> R<()> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    pipeline::reject_candidate(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &ep, &line, version)
+}
+
+#[tauri::command]
+async fn rerender_plan(st: State<'_, AppState>, project_id: String, episode: String, locale: String, params: Option<Value>) -> R<Value> {
+    let ep = ep_ref(&st.db, &project_id, &episode, &locale)?;
+    blocking(move || {
+        // the plan runs two short scripts: use its own connection so the app's DB lock is not held meanwhile
+        let c = db::open(&util::data_dir().join("studio.db"))?;
+        let s = db::settings_get(&c);
+        rerender::plan(&c, &ep, &params.unwrap_or(json!({})), &s)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn rerender_start(st: State<'_, AppState>, project_id: String, episode: String, locale: String, params: Option<Value>) -> R<db::Job> {
+    let root = root_of(&st.db, &project_id)?;
+    let mut p = params.unwrap_or(json!({}));
+    p["episode"] = json!(episode);
+    p["locale"] = json!(locale);
+    st.queue.enqueue(Some(&project_id), "rerender", &p, &root)
+}
+
+#[tauri::command]
+async fn db_info(st: State<'_, AppState>) -> R<Value> {
+    let c = st.db.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(json!({"schemaVersion": db::user_version(&c), "latest": db::schema_version(), "path": util::data_dir().join("studio.db"),
+              "backups": db::backups(&util::data_dir().join("studio.db"))}))
+}
+
+#[tauri::command]
+async fn db_backup(st: State<'_, AppState>) -> R<Value> {
+    let c = st.db.lock().unwrap_or_else(|e| e.into_inner());
+    let v = db::user_version(&c);
+    let b = db::backup_verified(&c, &util::data_dir().join("studio.db"), v, "manual")?;
+    Ok(json!({"backup": b}))
+}
+
+/// Hardware & performance page / diagnostics: detected GPUs, assignment, options (only detected devices).
+#[tauri::command]
+async fn hw_info(st: State<'_, AppState>, project_id: Option<String>, redetect: Option<bool>) -> R<Value> {
+    let s = db::settings_get(&st.db.lock().unwrap_or_else(|e| e.into_inner()));
+    let root = project_id.and_then(|p| root_of(&st.db, &p).ok());
+    blocking(move || Ok(hardware::selector::info(&s, root.as_deref(), redetect.unwrap_or(false)))).await
+}
+
+/// Measured GPU usage per role (UI = this window's WebView2 processes).
+#[tauri::command]
+async fn hw_usage(ms: Option<u64>) -> R<Value> {
+    blocking(move || Ok(hardware::selector::usage(ms.unwrap_or(1500), std::process::id()))).await
+}
+
+/// Screenshot / layout tour (debug harness): the UI reports each step; the external capture script reads the file.
+#[tauri::command]
+async fn ui_tour_report(step: String, data: Value) -> R<()> {
+    let d = util::data_dir().join("ui-tour");
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    let safe: String = step.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+    std::fs::write(d.join(format!("{safe}.json")), serde_json::to_vec_pretty(&data).unwrap_or_default()).map_err(|e| e.to_string())?;
+    std::fs::write(d.join("current.txt"), &safe).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn job_enqueue(st: State<'_, AppState>, project_id: String, kind: String, params: Option<Value>) -> R<db::Job> {
     if kind == "claude" || kind == "doctor_fix" {
@@ -361,17 +484,17 @@ async fn job_enqueue(st: State<'_, AppState>, project_id: String, kind: String, 
 
 #[tauri::command]
 async fn job_list(st: State<'_, AppState>, project_id: Option<String>, status: Option<String>, limit: Option<i64>) -> R<Vec<db::Job>> {
-    db::job_list(&st.db.lock().unwrap(), project_id.as_deref(), status.as_deref(), limit.unwrap_or(200))
+    db::job_list(&st.db.lock().unwrap_or_else(|e| e.into_inner()), project_id.as_deref(), status.as_deref(), limit.unwrap_or(200))
 }
 
 #[tauri::command]
 async fn job_get(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
-    db::job_get(&st.db.lock().unwrap(), &job_id)
+    db::job_get(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id)
 }
 
 #[tauri::command]
 async fn job_events(st: State<'_, AppState>, job_id: String, after_id: Option<i64>, limit: Option<i64>) -> R<Vec<db::JobEvent>> {
-    db::events_list(&st.db.lock().unwrap(), &job_id, after_id.unwrap_or(0), limit.unwrap_or(1000))
+    db::events_list(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id, after_id.unwrap_or(0), limit.unwrap_or(1000))
 }
 
 #[tauri::command]
@@ -382,12 +505,12 @@ async fn job_cancel(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
 
 #[tauri::command]
 async fn job_retry(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
-    db::job_requeue(&st.db.lock().unwrap(), &job_id)
+    db::job_requeue(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id)
 }
 
 #[tauri::command]
 async fn job_remove(st: State<'_, AppState>, job_id: String) -> R<()> {
-    db::job_remove(&st.db.lock().unwrap(), &job_id)
+    db::job_remove(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id)
 }
 
 #[tauri::command]
@@ -489,17 +612,17 @@ async fn auto_start(st: State<'_, AppState>, project_id: String, config: Value) 
 
 #[tauri::command]
 async fn auto_list(st: State<'_, AppState>, limit: Option<i64>) -> R<Vec<autopilot::Production>> {
-    autopilot::list(&st.db.lock().unwrap(), limit.unwrap_or(50))
+    autopilot::list(&st.db.lock().unwrap_or_else(|e| e.into_inner()), limit.unwrap_or(50))
 }
 
 #[tauri::command]
 async fn auto_get(st: State<'_, AppState>, id: String) -> R<autopilot::Production> {
-    autopilot::get(&st.db.lock().unwrap(), &id)
+    autopilot::get(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &id)
 }
 
 #[tauri::command]
 async fn auto_events(st: State<'_, AppState>, id: String, after_id: Option<i64>, limit: Option<i64>) -> R<Vec<autopilot::PEvent>> {
-    autopilot::events(&st.db.lock().unwrap(), &id, after_id.unwrap_or(0), limit.unwrap_or(500))
+    autopilot::events(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &id, after_id.unwrap_or(0), limit.unwrap_or(500))
 }
 
 #[tauri::command]
@@ -601,6 +724,10 @@ pub fn open_db() -> R<Db> {
 
 pub fn run() {
     let db = open_db().expect("open studio.db");
+    // v0.3: choose the UI GPU before WebView2 starts (this process only; nothing system-wide is changed)
+    let _ = hardware::launch::prepare_ui(&db::settings_get(&db.lock().unwrap_or_else(|e| e.into_inner())));
+    // full detection (device manager, CUDA) in the background so the window is not delayed
+    std::thread::spawn(|| { let _ = std::panic::catch_unwind(hardware::manager::snapshot); });
     tauri::Builder::default()
         // A second launch focuses the running window instead of failing on the locked WebView2 profile.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -630,6 +757,8 @@ pub fn run() {
             } else if let Err(e) = &lock {
                 eprintln!("{e}");
             }
+            gpu::spawn_sampler();
+            watchdog::spawn();
             let mon = Arc::new(monitor::Monitor::new());
             // monitor thread: every 2 s → monitor://sample, metrics table every 10 s
             {
@@ -639,12 +768,18 @@ pub fn run() {
                     .spawn(move || {
                         let mut n = 0u64;
                         loop {
-                            let s = mon.sample(|g| q.check_external(g));
-                            let v = serde_json::to_value(&s).unwrap_or(Value::Null);
-                            if n % 5 == 0 {
-                                let _ = db::metric_add(&db.lock().unwrap(), &v);
-                            }
-                            emit("monitor://sample", v);
+                            watchdog::run_loop("monitor", || {
+                                watchdog::beat("monitor", "sample");
+                                let s = mon.sample(|g| q.check_external(g));
+                                let mut v = serde_json::to_value(&s).unwrap_or(Value::Null);
+                                if n % 5 == 0 {
+                                    watchdog::beat("monitor", "metrics → db");
+                                    let _ = db::metric_add(&db.lock().unwrap_or_else(|e| e.into_inner()), &v);
+                                }
+                                v["threads"] = watchdog::status();
+                                watchdog::beat("monitor", "emit");
+                                emit("monitor://sample", v);
+                            });
                             n += 1;
                             std::thread::sleep(std::time::Duration::from_secs(2));
                         }
@@ -652,7 +787,7 @@ pub fn run() {
                     .ok();
             }
             // allow <video src=convertFileSrc(...)> for registered projects
-            for p in db::project_list(&db.lock().unwrap()).unwrap_or_default() {
+            for p in db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner())).unwrap_or_default() {
                 let _ = app.asset_protocol_scope().allow_directory(&p.root_path, true);
             }
             let notify_handle = app.handle().clone();
@@ -679,6 +814,7 @@ pub fn run() {
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
             outputs_list, publish_metadata, open_path, asset_url_allowed,
             auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, agent_check, agent_done,
+            workspace_get, line_set, revoice_start, voice_versions, voice_restore, voice_reject, rerender_plan, rerender_start, db_info, db_backup, ui_tour_report, hw_info, hw_usage,
             auto_monitor, auto_preview, pick_files, asset_probe, layout_migrate, env_venv
         ])
         .run(tauri::generate_context!())

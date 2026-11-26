@@ -47,7 +47,7 @@ pub fn run(args: &[String]) -> i32 {
     let mut project_id = String::new();
 
     step(&mut results, "db.roundtrip", || {
-        let c = dbh.lock().unwrap();
+        let c = dbh.lock().unwrap_or_else(|e| e.into_inner());
         let v = db::user_version(&c);
         let s = db::settings_merge(&c, &json!({"maxCpuJobs": 2}))?;
         let tables: Vec<String> = c
@@ -61,7 +61,7 @@ pub fn run(args: &[String]) -> i32 {
     });
 
     step(&mut results, "project.register", || {
-        drop(dbh.lock().unwrap());
+        drop(dbh.lock().unwrap_or_else(|e| e.into_inner()));
         let p = crate::register_project(&dbh, &project_root.to_string_lossy())?;
         project_id = p.id.clone();
         let info = project::info(&p);
@@ -94,9 +94,9 @@ pub fn run(args: &[String]) -> i32 {
         let t = Instant::now();
         loop {
             q.tick();
-            let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+            let cur = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
             if cur.status == "succeeded" || cur.status == "failed" {
-                let ev = db::events_list(&dbh.lock().unwrap(), &j.id, 0, 100)?;
+                let ev = db::events_list(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id, 0, 100)?;
                 let lines: Vec<String> = ev.iter().map(|e| format!("[{}] {}", e.stream, e.line)).collect();
                 if cur.status != "succeeded" || !lines.iter().any(|l| l.contains("selftest-ok")) {
                     return Err(format!("job {}: {lines:?}", cur.status));
@@ -115,7 +115,7 @@ pub fn run(args: &[String]) -> i32 {
         q.force_external_busy.store(true, std::sync::atomic::Ordering::Relaxed);
         let j = q.enqueue(Some(&project_id), "render", &json!({"comp": "EP01-30fps", "out": "SELFTEST_never_rendered.mp4"}), &project_root)?;
         q.tick();
-        let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+        let cur = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
         q.force_external_busy.store(false, std::sync::atomic::Ordering::Relaxed);
         q.cancel(&j.id)?;
         if cur.status != "waiting_resource" {
@@ -125,13 +125,13 @@ pub fn run(args: &[String]) -> i32 {
     });
 
     step(&mut results, "queue.recovery", || {
-        let c = dbh.lock().unwrap();
+        let c = dbh.lock().unwrap_or_else(|e| e.into_inner());
         let j = db::job_insert(&c, Some(&project_id), "qa", "stale", &json!({}), "cpu", &["qa".into()])?;
         db::job_mark_started(&c, &j.id, "x")?;
         c.execute("UPDATE jobs SET heartbeat_ms=heartbeat_ms-60000 WHERE id=?1", [&j.id]).map_err(|e| e.to_string())?;
         drop(c);
         let ids = q.recover();
-        let after = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+        let after = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
         q.cancel(&j.id)?;
         if !ids.contains(&j.id) || after.status != "queued" {
             return Err(format!("recovery failed: {ids:?} {}", after.status));
@@ -172,7 +172,7 @@ pub fn run(args: &[String]) -> i32 {
             return Err(format!("ep01 not found: {ids:?}"));
         }
         // every episode maps to its own commands / output names
-        let s = db::settings_get(&dbh.lock().unwrap());
+        let s = db::settings_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()));
         let ctx = crate::jobs::Ctx { root: &project_root, settings: &s, job_id: "selftest" };
         let mut maps = vec![];
         for id in &ids {
@@ -225,7 +225,7 @@ pub fn run(args: &[String]) -> i32 {
         let t = Instant::now();
         let res = loop {
             q.tick();
-            let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+            let cur = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
             if ["succeeded", "failed"].contains(&cur.status.as_str()) {
                 break cur;
             }
@@ -251,13 +251,13 @@ pub fn run(args: &[String]) -> i32 {
         if cfg.budget_usd.is_some() || cfg.billing != "subscription" {
             return Err("subscription mode must not carry a USD cap".into());
         }
-        let next = ap::allocate_episode(&dbh.lock().unwrap(), &project_root)?;
+        let next = ap::allocate_episode(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &project_root)?;
         let per_ok = ap::pron_error("一個七十億參數的模型", "一個70億參數的模型");
         let per_bad = ap::pron_error("放上工作桌", "放上公主");
         if per_ok > ap::MAX_PER || per_bad <= ap::MAX_PER {
             return Err(format!("pronunciation metric wrong: {per_ok} / {per_bad}"));
         }
-        let tables: i64 = dbh.lock().unwrap().query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('productions','production_events')", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+        let tables: i64 = dbh.lock().unwrap_or_else(|e| e.into_inner()).query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('productions','production_events')", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         if tables != 2 {
             return Err("productions tables missing".into());
         }
@@ -304,16 +304,16 @@ pub fn run(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--claude-job") {
         step(&mut results, "claude.headless_worktree_run", || {
             claude::ensure_excluded(&project_root)?;
-            let _ = db::settings_merge(&dbh.lock().unwrap(), &json!({"claudeMaxTurns": 4}));
+            let _ = db::settings_merge(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &json!({"claudeMaxTurns": 4}));
             let wid = format!("st{}", &uuid::Uuid::new_v4().to_string()[..6]);
             let prompt = "Studio selftest. Read src/data/narration.json and answer in ONE line: how many scenes does sequence ep01 have? Do not edit any file.";
             let j = q.enqueue(Some(&project_id), "claude", &json!({"prompt": prompt, "allowEdits": false, "worktreeId": wid, "title": "selftest"}), &project_root)?;
             let t = Instant::now();
             loop {
                 q.tick();
-                let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+                let cur = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
                 if ["succeeded", "failed", "canceled"].contains(&cur.status.as_str()) {
-                    let ev = db::events_list(&dbh.lock().unwrap(), &j.id, 0, 100_000)?;
+                    let ev = db::events_list(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id, 0, 100_000)?;
                     let lines: Vec<String> = ev.iter().map(|e| e.line.chars().take(300).collect()).collect();
                     let wts = claude::list(&project_root, |_| None);
                     let mine = wts.iter().find(|w| w["id"] == wid.as_str()).cloned();
@@ -343,7 +343,7 @@ pub fn run(args: &[String]) -> i32 {
             loop {
                 q.tick();
                 q.heartbeat();
-                let cur = db::job_get(&dbh.lock().unwrap(), &j.id)?;
+                let cur = db::job_get(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id)?;
                 if cur.status == "waiting_resource" && t.elapsed() > Duration::from_secs(20) {
                     q.cancel(&j.id)?;
                     return Err(format!("GPU lock not granted: {}", cur.wait_reason.unwrap_or_default()));
@@ -355,7 +355,7 @@ pub fn run(args: &[String]) -> i32 {
                     }
                 }
                 if ["succeeded", "failed", "canceled"].contains(&cur.status.as_str()) {
-                    let ev = db::events_list(&dbh.lock().unwrap(), &j.id, 0, 100_000)?;
+                    let ev = db::events_list(&dbh.lock().unwrap_or_else(|e| e.into_inner()), &j.id, 0, 100_000)?;
                     let tail: Vec<String> = ev.iter().rev().take(12).rev().map(|e| format!("[{}] {}", e.stream, e.line)).collect();
                     let out_path = project_root.join(out_name);
                     let probe = project::ffprobe(&out_path);

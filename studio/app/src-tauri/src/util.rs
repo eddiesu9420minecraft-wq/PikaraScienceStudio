@@ -149,10 +149,23 @@ pub fn run_env_rm(
 }
 
 /// Kill a whole process tree (render.mjs → node → chrome-headless-shell, python → python).
+/// Bounded to 15 s: taskkill itself must never block the caller (the scheduler / a cancel) forever — e.g. when the
+/// target is stuck inside a GPU driver call during a driver reset.
 pub fn kill_tree(pid: u32) -> String {
-    match run_raw("taskkill", &["/T", "/F", "/PID", &pid.to_string()]) {
-        Ok(o) => o.combined(),
-        Err(e) => e,
+    let mut c = cmd("taskkill");
+    c.args(["/T", "/F", "/PID", &pid.to_string()]).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let child = match c.spawn() {
+        Ok(ch) => ch,
+        Err(e) => return format!("cannot start taskkill: {e}"),
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(Duration::from_secs(15)) {
+        Ok(Ok(o)) => to_runout(o).combined(),
+        Ok(Err(e)) => e.to_string(),
+        Err(_) => format!("taskkill /T /F /PID {pid} did not finish within 15 s"),
     }
 }
 
@@ -235,7 +248,7 @@ pub fn tool(name: &str) -> Option<String> {
     }
     static CACHE: once_cell::sync::Lazy<std::sync::Mutex<std::collections::HashMap<String, String>>> =
         once_cell::sync::Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-    if let Some(p) = CACHE.lock().unwrap().get(name) {
+    if let Some(p) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(name) {
         return Some(p.clone());
     }
     let exe = format!("{name}.exe");
@@ -259,6 +272,6 @@ pub fn tool(name: &str) -> Option<String> {
         }
         None
     })?;
-    CACHE.lock().unwrap().insert(name.to_string(), found.clone());
+    CACHE.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), found.clone());
     Some(found)
 }

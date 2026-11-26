@@ -121,10 +121,12 @@ def synth_bgm(duration: float, path: Path) -> None:
 def speech_spans(tl: dict) -> list[tuple[float, float]]:
     spans: list[tuple[float, float]] = []
     for line in [x for x in tl["lines"] if not x.get("estimated")]:
-        meta = json.loads((PUBLIC / Path(line["audio"]).with_suffix(".json")).read_text(encoding="utf-8"))
+        # 調速後的音檔（_tempo/）沒有逐字資料：讀原始檔的 .json，時間 ÷ 倍率
+        meta = json.loads((PUBLIC / Path(line.get("sourceAudio") or line["audio"]).with_suffix(".json")).read_text(encoding="utf-8"))
+        k = float(line.get("tempo") or 1.0)
         words = [b for b in meta.get("boundaries", []) if b["type"] == "WordBoundary"]
         if words:
-            spans += [(line["start"] + w["start"], line["start"] + w["end"]) for w in words]
+            spans += [(line["start"] + w["start"] / k, line["start"] + w["end"] / k) for w in words]
         else:
             spans.append((line["start"], line["end"]))
     spans.sort()

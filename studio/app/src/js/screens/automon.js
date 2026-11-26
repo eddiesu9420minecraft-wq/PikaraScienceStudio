@@ -102,7 +102,7 @@ export class LiveMonitor {
     const frac = r.totalFrames ? r.doneFrames / r.totalFrames : null;
     const kv = (k, v) => [h('dt', t(k)), h('dd', v == null || v === '' ? '—' : v)];
     return h('div.col', { style: { gap: '10px' } },
-      h('div.row', h('span.headline.grow', `${r.comp}`), h('span.caption.muted', r.phase === 'encode' ? t('NVENC 編碼中') : r.phase === 'done' ? t('完成') : t('渲染中'))),
+      h('div.row', h('span.headline.grow', `${r.comp}`), h('span.caption.muted', r.phase === 'encode' ? t('影片編碼中') : r.phase === 'done' ? t('完成') : t('渲染中'))),
       progress(r.phase === 'render' ? frac : r.phase === 'done' ? 1 : null),
       h('dl.kv', ...kv('已完成幀數', `${fmtNum(r.doneFrames)} / ${fmtNum(r.totalFrames)}（${fmtNum(frac * 100, 1)}%）`),
         ...kv('沿用快取的幀', fmtNum(r.cachedFrames)),

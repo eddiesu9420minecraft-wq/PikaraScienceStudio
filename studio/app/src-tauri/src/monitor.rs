@@ -53,7 +53,7 @@ impl Monitor {
 
     /// CPU% is measured between consecutive calls; the first call waits the minimum interval.
     pub fn cpu_ram(&self) -> (CpuInfo, RamInfo) {
-        let mut sys = self.sys.lock().unwrap();
+        let mut sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
         sys.refresh_cpu_usage();
         if sys.global_cpu_usage() == 0.0 {
             std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
@@ -68,7 +68,7 @@ impl Monitor {
 
     pub fn sample(&self, external: impl FnOnce(Option<&GpuSample>) -> ExternalGpu) -> MonitorSample {
         let (cpu, ram) = self.cpu_ram();
-        let g = gpu::query();
+        let g = gpu::latest(std::time::Duration::from_secs(10));
         let ext = external(g.as_ref());
         MonitorSample { ts: crate::util::now_ms(), cpu, ram, gpu: g, external: ext }
     }

@@ -73,15 +73,89 @@ const MIGRATIONS: &[&str] = &[
     "#,
     // 2: Autonomous Production Mode
     crate::autopilot::MIGRATION,
+    // 3: v0.3 stage fingerprints + asset versions (additive only: v0.2.x builds keep working on a v3 database)
+    crate::pipeline::MIGRATION,
 ];
+
+pub fn schema_version() -> i64 {
+    MIGRATIONS.len() as i64
+}
 
 pub fn open(path: &Path) -> Result<Connection, String> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute_batch("PRAGMA busy_timeout=5000;").map_err(|e| e.to_string())?;
+    // Back up before any schema change (consistent snapshot incl. WAL via VACUUM INTO), verify the copy, log it.
+    let v = user_version(&conn);
+    if v > 0 && v < schema_version() {
+        backup_verified(&conn, path, v, "before-migration")?;
+    }
     init(&conn)?;
     Ok(conn)
+}
+
+/// `<data>/backups/studio.db.v<old>-<reason>-<timestamp>.bak`, verified with integrity_check + user_version.
+pub fn backup_verified(conn: &Connection, db_path: &Path, version: i64, reason: &str) -> Result<std::path::PathBuf, String> {
+    let dir = db_path.parent().unwrap_or(Path::new(".")).join("backups");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let bak = dir.join(format!("studio.db.v{version}-{reason}-{ts}.bak"));
+    conn.execute("VACUUM INTO ?1", params![bak.to_string_lossy()]).map_err(|e| format!("資料庫備份失敗（未進行遷移）：{e}"))?;
+    let check = Connection::open_with_flags(&bak, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| e.to_string())?;
+    let ok: String = check.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    let bv = user_version(&check);
+    let jobs: i64 = check.query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0)).unwrap_or(-1);
+    drop(check);
+    if ok != "ok" || bv != version {
+        return Err(format!("資料庫備份驗證失敗（integrity={ok}, version={bv}），未進行遷移"));
+    }
+    let line = format!("{} backup {} v{} jobs={} reason={}\n", now_iso(), bak.display(), version, jobs, reason);
+    let _ = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("MIGRATIONS.log")).and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+    Ok(bak)
+}
+
+/// List backups (newest first).
+pub fn backups(db_path: &Path) -> Vec<Value> {
+    let dir = db_path.parent().unwrap_or(Path::new(".")).join("backups");
+    let mut v: Vec<Value> = std::fs::read_dir(&dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.file_name().to_string_lossy().ends_with(".bak"))
+                .map(|e| json!({"path": e.path(), "name": e.file_name().to_string_lossy(), "bytes": e.metadata().map(|m| m.len()).unwrap_or(0)}))
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort_by(|a, b| b["name"].as_str().cmp(&a["name"].as_str()));
+    v
+}
+
+/// Restore a backup over the database (Studio must not be running). The current database is kept as
+/// `studio.db.before-restore-<ts>` first; the restored copy is integrity-checked before it replaces anything.
+pub fn restore(db_path: &Path, backup: &Path) -> Result<Value, String> {
+    let check = Connection::open_with_flags(backup, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| e.to_string())?;
+    let ok: String = check.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    let bv = user_version(&check);
+    drop(check);
+    if ok != "ok" {
+        return Err(format!("備份檔損壞（{ok}），不還原"));
+    }
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let keep = db_path.with_file_name(format!("studio.db.before-restore-{ts}"));
+    if db_path.exists() {
+        // checkpoint the WAL into the main file so the kept copy is complete
+        if let Ok(c) = Connection::open(db_path) {
+            let _ = c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+        }
+        std::fs::copy(db_path, &keep).map_err(|e| format!("保留目前資料庫失敗：{e}"))?;
+    }
+    for ext in ["-wal", "-shm"] {
+        let p = db_path.with_file_name(format!("{}{ext}", db_path.file_name().unwrap().to_string_lossy()));
+        let _ = std::fs::remove_file(p);
+    }
+    std::fs::copy(backup, db_path).map_err(|e| format!("還原失敗：{e}"))?;
+    Ok(json!({"restored": backup, "schemaVersion": bv, "previousKeptAs": keep}))
 }
 
 pub fn open_memory() -> Result<Connection, String> {
@@ -124,6 +198,17 @@ pub struct Settings {
     pub claude_max_budget_usd: Option<f64>,
     pub node_dir: String,
     pub cosy_python: Option<String>,
+    /// Render performance mode: "eco" | "balanced" (default) | "performance". Only the *starting point* and the limits
+    /// of render.mjs's measured, dynamic concurrency (VRAM / GPU / CPU / RAM / fps per segment) — not a tuned optimum.
+    pub perf_mode: String,
+    /// Initial number of parallel Remotion tabs (render.mjs adjusts it per segment from measurements). 0 = mode default.
+    pub render_start_concurrency: u32,
+    /// Narration pace preset (0.90 slow / 1.00 normal / 1.10 / 1.20), relative to the language's normal pace
+    /// (zh-CN ≈ 4.4 chars/s, zh-TW = CosyVoice's natural pace). Applied by build_timeline.py as a pitch-preserving
+    /// time stretch of a *copy* of each line (voice_tempo.py); the generated voice files are never modified.
+    pub voice_tempo: f64,
+    /// Hardware assignment preferences (UI / render GPU, AI device, encoder, VRAM ceiling); see hardware::selector.
+    pub hw: crate::hardware::selector::HwPrefs,
 }
 
 impl Default for Settings {
@@ -139,6 +224,10 @@ impl Default for Settings {
             claude_max_budget_usd: None,
             node_dir: r"C:\Program Files\nodejs".into(),
             cosy_python: None,
+            perf_mode: "balanced".into(),
+            render_start_concurrency: 2,
+            voice_tempo: 1.0,
+            hw: Default::default(),
         }
     }
 }
@@ -539,6 +628,55 @@ pub fn metric_add(conn: &Connection, s: &Value) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A v0.2.x database (schema v2, with a job and a project) is backed up and verified before the v0.3 migration;
+    /// all rows survive; the backup restores the v2 database exactly; a v0.2 build can still open the v3 file.
+    #[test]
+    fn v02_database_migrates_with_verified_backup_and_restores() {
+        let dir = std::env::temp_dir().join(format!("pss-db 遷移 {}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("studio.db");
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            for (i, sql) in MIGRATIONS.iter().take(2).enumerate() {
+                c.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;", i + 1)).unwrap();
+            }
+            c.execute("INSERT INTO projects (id,name,root_path,created_at) VALUES ('p1','舊專案','D:\\x','2026-11-01')", []).unwrap();
+            c.execute("INSERT INTO jobs (id,project_id,kind,label,created_at,status) VALUES ('j1','p1','render','舊工作','2026-11-01','succeeded')", []).unwrap();
+            assert_eq!(user_version(&c), 2);
+        }
+        let c = open(&path).unwrap();
+        assert_eq!(user_version(&c), schema_version());
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM jobs WHERE id='j1' AND label='舊工作'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "old rows survive the migration");
+        c.execute("SELECT * FROM stage_records LIMIT 0", []).ok();
+        let baks = backups(&path);
+        assert_eq!(baks.len(), 1, "exactly one backup before migrating: {baks:?}");
+        let bak = std::path::PathBuf::from(baks[0]["path"].as_str().unwrap());
+        assert!(bak.file_name().unwrap().to_string_lossy().starts_with("studio.db.v2-before-migration-"));
+        let log = std::fs::read_to_string(dir.join("backups").join("MIGRATIONS.log")).unwrap();
+        assert!(log.contains("v2 jobs=1"), "{log}");
+        drop(c);
+        // opening again does not create another backup (nothing to migrate)
+        drop(open(&path).unwrap());
+        assert_eq!(backups(&path).len(), 1);
+        // restore the v2 backup: database is v2 again, data intact, the v3 file kept aside
+        let r = restore(&path, &bak).unwrap();
+        assert_eq!(r["schemaVersion"], 2);
+        let kept = std::path::PathBuf::from(r["previousKeptAs"].as_str().unwrap());
+        assert!(kept.exists());
+        let c2 = Connection::open(&path).unwrap();
+        assert_eq!(user_version(&c2), 2);
+        let n: i64 = c2.query_row("SELECT COUNT(*) FROM jobs WHERE id='j1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+        let has_v3: i64 = c2.query_row("SELECT COUNT(*) FROM sqlite_master WHERE name='stage_records'", [], |r| r.get(0)).unwrap();
+        assert_eq!(has_v3, 0, "restored file is the pre-migration database");
+        // a v0.2 build opening a v3 database: its migrate() only runs migrations past user_version, so nothing happens
+        let kc = Connection::open(&kept).unwrap();
+        assert_eq!(user_version(&kc), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn migrate_once_and_roundtrip() {

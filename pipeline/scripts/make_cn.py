@@ -42,6 +42,11 @@ PRE = [
     ("演算法", "算法"), ("平行", "並行"), ("離線", "離線"), ("載入", "加載"), ("開源", "開源"), ("雲端", "雲端"),
 ]
 CC = opencc.OpenCC("tw2sp")
+# 簡體主稿（Studio「僅簡體中文」：src 的這一集本來就是簡體）只做 t2s：把殘留的繁體字轉成簡體，其餘逐字保留。
+# 不可再跑 tw2sp——它把簡體輸入當成台灣繁體：「么」→「幺」（什么→什幺，TTS 念成「什邀」）、程序→进程、核心→内核、文字→文本、抬→擡。
+SIMP = opencc.OpenCC("t2s")
+# 轉換後絕不能出現的寫法（TTS 會照字念錯）
+BROKEN = re.compile(r"(什|怎|这|那|多|要|為什|为什)幺")
 # OpenCC 之後的修正（tw2sp 會把部分詞轉成不符本片語境的大陸用語）
 POST = [("文档", "文件"), ("脱机", "离线"), ("回答品质", "回答质量"), ("品质", "质量"), ("矢量", "向量"), ("中文本", "中文字"),
         ("英文单字", "英文单词"), ("单字", "单词"), ("几率", "概率"), ("变回了文本", "变回了文字"), ("文本冒出来", "文字冒出来"),
@@ -52,6 +57,8 @@ CJK = re.compile(r"[　-〿㐀-鿿＀-￯「」『』]+")
 def conv(text: str) -> str:
     for a, b in PRE:
         text = text.replace(a, b)
+    # 繁體稿裡夾雜的簡體「么」：tw2sp 會把它當成「幺」；先改回「麼」再轉換
+    text = text.replace("么", "麼")
     text = CC.convert(text)
     for a, b in POST:
         text = text.replace(a, b)
@@ -82,8 +89,37 @@ def write_retry(p: Path, data: bytes) -> None:
 EPISODE = re.compile(r"^(ep\d{2,3}|test\d{3})$")
 
 
-def convert_seq(ep: dict) -> dict:
+def seq_texts(ep: dict) -> list[str]:
+    out = [ep.get("title", "")]
+    for sc in ep.get("scenes", []):
+        out.append(sc.get("title", ""))
+        for line in sc.get("lines", []):
+            out += [line.get("subtitle", ""), line.get("speak") or ""]
+    return out
+
+
+def is_simplified_master(ep: dict) -> bool:
+    """這一集在 src 裡本來就是簡體（Studio「僅簡體中文」）：明確標記 lang=zh-CN，或全文經 t2s 後不變且含中文。"""
+    if ep.get("lang") == "zh-CN":
+        return True
+    text = "".join(seq_texts(ep))
+    # 多數決：只在簡體出現的字（s2t 會改）多於只在繁體出現的字（t2s 會改）＝簡體稿（容許少數殘留繁體字）
+    s2t = opencc.OpenCC("s2t").convert(text)
+    t2s = SIMP.convert(text)
+    simp_only = sum(1 for a, b in zip(text, s2t) if a != b)
+    trad_only = sum(1 for a, b in zip(text, t2s) if a != b)
+    return simp_only > 0 and simp_only > 3 * trad_only
+
+
+def convert_seq(ep: dict, simplified: bool = False) -> dict:
     ep = json.loads(json.dumps(ep, ensure_ascii=False))
+    if simplified:
+        global conv
+        saved, conv = conv, SIMP.convert  # 簡體主稿：逐字保留，只轉殘留繁體字
+        try:
+            return convert_seq(ep, False)
+        finally:
+            conv = saved
     ep["title"] = conv(ep.get("title", ""))
     ep["voiceEngine"] = "cosyvoice"
     if isinstance(ep.get("thumbnail"), dict):  # 封面文字（GenericThumbnail）
@@ -140,11 +176,17 @@ def main() -> int:
     if stage.exists():
         shutil.rmtree(stage)
     shutil.copytree(SRC, stage, ignore=shutil.ignore_patterns("timeline.generated.json"))
+    # 簡體主稿的集數：旁白與該集的動畫程式（src/acts/<ep>/）都只做 t2s
+    simp_eps = {k for k, v in src_seqs.items() if EPISODE.match(k) and is_simplified_master(v)}
     n = 0
     for p in stage.rglob("*"):
         if p.suffix in (".ts", ".tsx") and p.is_file():
             s = p.read_text(encoding="utf-8")
-            t = conv_code(s)
+            rel = p.relative_to(stage).parts
+            if len(rel) > 2 and rel[0] == "acts" and rel[1] in simp_eps:
+                t = CJK.sub(lambda m: SIMP.convert(m.group(0)), s)
+            else:
+                t = conv_code(s)
             if t != s:
                 write_retry(p, t.encode("utf-8"))
                 n += 1
@@ -160,8 +202,20 @@ def main() -> int:
         if k in out["sequences"] and not reconvert:
             kept.append(k)
             continue
-        out["sequences"][k] = convert_seq(src_seqs[k])
+        out["sequences"][k] = convert_seq(src_seqs[k], k in simp_eps)
         made.append(k)
+    # 防呆：轉換結果不可出現會讓 TTS 念錯的寫法（什幺、怎幺…）
+    bad = []
+    for k in made:
+        for sc in out["sequences"][k]["scenes"]:
+            for line in sc["lines"]:
+                for f in ("subtitle", "speak"):
+                    if line.get(f) and BROKEN.search(line[f]):
+                        bad.append(f"{line['id']} {f}：{line[f]}")
+    if bad:
+        print("[錯誤] 轉換結果出現錯誤寫法（「幺」不是「么」，TTS 會念成 yāo），沒有寫入 src_cn：\n  " + "\n  ".join(bad[:20]))
+        shutil.rmtree(stage, ignore_errors=True)
+        return 1
     if made or nar_keep is None:
         write_retry(stage / "data" / "narration.json", json.dumps(out, ensure_ascii=False, indent=2).encode("utf-8"))
     else:
@@ -177,6 +231,8 @@ def main() -> int:
     retry(lambda: stage.rename(DST))
     shutil.rmtree(old, ignore_errors=True)
     n_lines = sum(len(sc["lines"]) for k in made for sc in out["sequences"][k]["scenes"])
+    if simp_eps & set(made):
+        print(f"簡體主稿（逐字沿用，只轉殘留繁體字）：{'、'.join(sorted(simp_eps & set(made)))}")
     print(f"src_cn 已產生：轉換 {n} 個程式檔；旁白新轉換 {len(made)} 集（{'、'.join(made) or '無'}，{n_lines} 句），"
           f"保留簡體既有 {len(kept)} 集（{'、'.join(kept) or '無'}）")
     return 0

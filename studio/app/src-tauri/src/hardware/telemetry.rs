@@ -1,4 +1,5 @@
-//! NVIDIA GPU sampling (nvidia-smi) and detection of external GPU jobs
+//! NVIDIA telemetry (nvidia-smi: utilization, VRAM, temperature, NVENC load — only NVIDIA drivers ship it; other
+//! vendors simply return None and every caller treats that as "no telemetry") and detection of external GPU jobs
 //! (render / TTS processes not started by Studio, or high VRAM use).
 
 use crate::util::run;
@@ -61,6 +62,44 @@ pub fn parse_query(csv: &str) -> Option<GpuSample> {
         thermal_hw: active(f[9]),
         thermal_sw: active(f[10]),
     })
+}
+
+/// Latest nvidia-smi sample from the sampler thread ([`spawn_sampler`]). Callers on the scheduler / monitor / autopilot
+/// threads read this instead of starting nvidia-smi themselves: during a GPU driver reset nvidia-smi can hang, and a
+/// blocked scheduler is exactly what froze the queue for 106 minutes on 2026-11-23 (see watchdog.rs).
+static LATEST: once_cell::sync::Lazy<std::sync::Mutex<(i64, Option<GpuSample>)>> = once_cell::sync::Lazy::new(|| std::sync::Mutex::new((0, None)));
+static SAMPLER_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Cached sample if the sampler is running and the sample is at most `max_age` old; otherwise None (= "no telemetry",
+/// which every caller already handles). Without a sampler (CLI one-shots, tests) this queries directly.
+pub fn latest(max_age: Duration) -> Option<GpuSample> {
+    if !SAMPLER_ON.load(std::sync::atomic::Ordering::Relaxed) {
+        return query();
+    }
+    let g = LATEST.lock().unwrap_or_else(|e| e.into_inner());
+    if crate::util::now_ms() - g.0 <= max_age.as_millis() as i64 { g.1.clone() } else { None }
+}
+
+/// Age of the cached sample in seconds (None if the sampler never produced one).
+pub fn latest_age_secs() -> Option<i64> {
+    let g = LATEST.lock().unwrap_or_else(|e| e.into_inner());
+    (g.0 > 0).then(|| (crate::util::now_ms() - g.0) / 1000)
+}
+
+/// One thread owns nvidia-smi: every 2 s, bounded by run()'s 8 s timeout. If it ever blocks, only this thread stops
+/// (the watchdog logs it) and everyone else sees "no telemetry" after the sample goes stale.
+pub fn spawn_sampler() {
+    if SAMPLER_ON.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let _ = std::thread::Builder::new().name("studio-gpu-sampler".into()).spawn(|| loop {
+        crate::watchdog::run_loop("gpu-sampler", || {
+            crate::watchdog::beat("gpu-sampler", "nvidia-smi --query-gpu");
+            let s = query();
+            *LATEST.lock().unwrap_or_else(|e| e.into_inner()) = (crate::util::now_ms(), s);
+        });
+        std::thread::sleep(Duration::from_secs(2));
+    });
 }
 
 pub fn query() -> Option<GpuSample> {
@@ -128,8 +167,8 @@ pub fn classify(name: &str, cmd: &str) -> Option<&'static str> {
             }
         }
     }
-    if n.starts_with("ffmpeg") && (c.contains("nvenc") || c.contains("cuda")) {
-        return Some("ffmpeg NVENC 編碼");
+    if n.starts_with("ffmpeg") && ["nvenc", "cuda", "_amf", "_qsv", "videotoolbox", "vaapi", "_mf "].iter().any(|k| c.contains(k)) {
+        return Some("ffmpeg 硬體編碼");
     }
     None
 }
@@ -215,8 +254,8 @@ pub fn external_from(snap: &ProcSnap, own_roots: &HashSet<u32>, vram_busy_mib: u
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = include_str!("../tests/fixtures/nvidia_smi_query.csv");
-    const APPS: &str = include_str!("../tests/fixtures/nvidia_smi_apps.csv");
+    const FIXTURE: &str = include_str!("../../tests/fixtures/nvidia_smi_query.csv");
+    const APPS: &str = include_str!("../../tests/fixtures/nvidia_smi_apps.csv");
 
     #[test]
     fn parses_real_nvidia_smi_output() {
@@ -252,6 +291,8 @@ mod tests {
         assert!(classify("python.exe", r"D:\x\.venv\Scripts\python.exe -u scripts/generate_voiceover_cosy.py --seq ep01").is_some());
         assert!(classify("node.exe", r#""C:\Program Files\nodejs\node.exe" scripts\render.mjs gpu --comp EP01-30fps"#).is_some());
         assert!(classify("node.exe", "node server.js").is_none());
+        assert!(classify("ffmpeg.exe", "ffmpeg -i f%06d.jpeg -c:v h264_amf out.mp4").is_some());
+        assert!(classify("ffmpeg.exe", "ffmpeg -i a.wav b.mp3").is_none());
         assert!(classify("python.exe", "py -3.11 scripts/qa_video.py").is_none());
     }
 
