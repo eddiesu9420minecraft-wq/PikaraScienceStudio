@@ -58,7 +58,8 @@ impl Autopilot {
             }
             "check_script" => {
                 let wt = wt.ok_or(Check::Hard("沒有工作樹".into()))?;
-                let c = &p.config;
+                let cfg = p.config.clone();
+                let c = &cfg;
                 let script_mode = content::mode(c) == "script";
                 let target = c.minutes * 60.0 * content::rate(c);
                 let r = check_script(&wt, &p.episode, &ScriptRules { target_units: target, words: content::is_en(c), check_length: !script_mode, min_sources: c.min_sources() }).map_err(Check::Fail)?;
@@ -67,6 +68,12 @@ impl Autopilot {
                 if script_mode {
                     content::fidelity(&c.script_text, &seq, content::is_en(c)).map_err(Check::Fail)?;
                 }
+                // structured report (pass / warn / fail with expected vs actual) for the UI, the fix prompt and the
+                // no-progress detection; also written into the worktree for the agent and for people
+                let rep = content::requirements_report(c, &seq);
+                let _ = std::fs::create_dir_all(wt.join("out/auto"));
+                let _ = std::fs::write(wt.join("out/auto/REQUIREMENTS_CHECK.json"), serde_json::to_string_pretty(&rep).unwrap_or_default());
+                p.data["requirements"] = serde_json::to_value(&rep).unwrap_or(Value::Null);
                 let notes = content::check_requirements(c, &seq).map_err(Check::Fail)?;
                 self.log(p, "info", &format!("{r}{}{}", if script_mode { "；字幕與使用者腳本逐字相符" } else { "" }, if notes.is_empty() { String::new() } else { format!("；{}", notes.join("；")) }));
                 Ok(())

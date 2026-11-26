@@ -144,7 +144,7 @@ class Auto {
       h('div.grid2', field(t('自訂影片章節（選填）'), chapters),
         h('div.col', { style: { gap: '8px' } }, field(t('必須介紹的內容（每行一項；短關鍵詞會自動檢查）'), area('mustInclude', 2, t('例如：IP 位址、DNS、TCP'))), field(t('禁止出現的內容（每行一項；會自動檢查）'), area('mustAvoid', 2, t('例如：政治議題、未經證實的數據'))))),
       h('div.grid2', field(t('開場'), text('opening', t('例如：用「你按下 Enter 後的 0.1 秒」開場'))), field(t('片尾'), text('ending', t('例如：總結三個重點，邀請訂閱')))),
-      h('div.grid3', field(t('配音語氣'), text('voiceTone', t('例如：輕鬆、像朋友聊天'))), field(t('動畫風格'), text('animationStyle', t('例如：2D 圖解＋3D 地球、霓虹科技感'))), field(t('節奏'), text('pacing', t('例如：前 30 秒快節奏，之後穩定')))),
+      h('div.grid3', field(t('配音語氣'), text('voiceTone', t('例如：輕鬆、像朋友聊天'))), field(t('動畫風格（選填）'), text('animationStyle', t('留空＝以 EP01 為標準（2D 圖解＋3D 場景）'))), field(t('節奏'), text('pacing', t('例如：前 30 秒快節奏，之後穩定')))),
       h('div.field', h('label', t('素材（TXT、Markdown、PDF、圖片、影片、操作錄影、背景音樂、自訂腳本、參考文件）')), h('div.row', pick, h('div.grow', pathIn)), this.assetEl,
         h('div.caption.muted', t('素材會複製到這部影片的資料夾（projects/EPxx/assets），原檔不動。AI 會讀取素材清單：圖片與錄影會直接用在畫面中（不虛構介面），文字與 PDF 作為內容依據，背景音樂會取代自動配樂。'))),
       h('div.grid2', { style: { alignItems: 'end' } },
@@ -374,6 +374,7 @@ class Auto {
         h('div.row', h('span.headline.grow', `${cur ? cur.label : x.stage}${x.attempt > 1 ? `・${t('第 {n} 次', { n: x.attempt })}` : ''}${x.mode === 'fix' ? `・${t('Claude 修正中')}` : ''}`), h('span.caption.muted.job-text', job ? (job.progressText || job.label) : '')),
         progress(job && job.status === 'running' ? job.progress : null)) : null,
       x.warnings && x.warnings.length ? h('div.banner.warn', icon('alert'), h('div.grow', h('div', { style: { fontWeight: 600 } }, t('{n} 項警告', { n: x.warnings.length })), x.warnings.map((w) => h('div.caption', w)))) : null,
+      requirementsView(x.data && x.data.requirements),
       out.length ? h('div.col', { style: { gap: '6px' } }, h('span.headline', t('成品（在專案資料夾）')),
         h('div.row.wrap', out.map((f) => btn(f, { small: true, icon: /\.mp4$/.test(f) ? 'play' : 'external', onClick: () => call('open_path', { projectId: this.p.id, path: f, reveal: false }).catch((e) => toastError(e, t('開啟'))) }))),
         h('div.caption.muted', t('發布請自行到各平台手動上傳；上架文字在 {f}。', { f: `${x.episode.toUpperCase()}_PUBLISH_METADATA.md` }))) : null,
@@ -479,4 +480,28 @@ function mdToHtml(src) {
   }
   if (list) out.push(`</${list}>`);
   return out.join('');
+}
+
+// 製作要求檢查（資料研究與劇本階段）：每一項的狀態、預期與實際內容、原因。資料來自後端的結構化報告
+// （content::requirements_report，已比對繁簡字、兩岸用語、同義詞、大小寫與標點）。
+const REQ_STATUS = { pass: ['通過', 'ok'], warn: ['警告', 'warn'], fail: ['失敗', 'fail'] };
+function requirementsView(r) {
+  if (!r || !Array.isArray(r.items) || !r.items.length) return null;
+  const order = { fail: 0, warn: 1, pass: 2 };
+  const items = [...r.items].sort((a, b) => order[a.status] - order[b.status]);
+  const shown = items.filter((i) => i.status !== 'pass');
+  const passed = items.filter((i) => i.status === 'pass');
+  const row = (i) => h('div.check-row', { dataset: { req: i.key } },
+    h('span', { class: `dot ${REQ_STATUS[i.status][1]}` }),
+    h('div', h('div.name', `${t(i.requirement)}`),
+      h('div.detail', `${t('預期')}：${i.expected}`),
+      h('div.detail', `${t('實際')}：${i.actual == null ? t('（沒有找到）') : i.actual}`),
+      h('div.detail', `${t('原因')}：${t(i.reason)}`)),
+    tag(t(REQ_STATUS[i.status][0]), REQ_STATUS[i.status][1]));
+  return h('details.panel', { open: r.failed > 0 || r.warned > 0 ? true : null },
+    h('summary.panel-head', h('span.headline.grow', t('製作要求檢查')),
+      tag(`${t('通過')} ${r.passed}`, 'ok'), r.warned ? tag(`${t('警告')} ${r.warned}`, 'warn') : null, r.failed ? tag(`${t('失敗')} ${r.failed}`, 'fail') : null),
+    h('div', shown.map(row),
+      passed.length ? h('details', h('summary.caption.muted', { style: { padding: '8px 16px' } }, t('{n} 項已通過（點開查看比對方式）', { n: passed.length })), passed.map(row)) : null,
+      (r.notes || []).length ? h('div.caption.muted', { style: { padding: '8px 16px' } }, r.notes.join('；')) : null));
 }

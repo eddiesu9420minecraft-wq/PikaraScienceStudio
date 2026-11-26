@@ -168,6 +168,19 @@ impl Autopilot {
         Ok(p)
     }
 
+    /// The worktree already holds this episode's script (scenes with lines) and, when sources are required,
+    /// its <EP>_SOURCES.md, e.g. a production that failed only the requirement check before
+    /// `data.requirements` existed.
+    fn script_written(&self, p: &Production) -> bool {
+        let (Ok(root), Some(w)) = (self.root(p), p.worktree.as_deref()) else { return false };
+        let wt = worktree_dir(&root, w);
+        let has_scenes = crate::narration::read(&wt, "zh-TW")
+            .ok()
+            .and_then(|r| r["doc"]["sequences"][&p.episode]["scenes"].as_array().map(|s| s.iter().any(|x| x["lines"].as_array().is_some_and(|l| !l.is_empty()))))
+            .unwrap_or(false);
+        has_scenes && (p.config.min_sources() == 0 || wt.join(format!("{}_SOURCES.md", ep_upper(&p.episode))).exists())
+    }
+
     /// Stop at an AI step for an external agent: write the task file into the worktree and wait.
     fn wait_for_agent(&self, mut p: Production, title: &str, prompt: &str) {
         let file = match (self.root(&p), p.worktree.clone()) {
@@ -252,6 +265,18 @@ impl Autopilot {
                 p.mode = "main".into();
                 p.action = 0;
                 p.job_id = None;
+                if let Some(m) = p.data.as_object_mut() {
+                    m.remove("prevFailKeys");
+                    m.remove("resumeAt");
+                }
+                // research + script already written and only the requirement check failed: check the existing work
+                // again (with the current checker) instead of researching and writing from scratch
+                if p.stage == "script" && (p.data["requirements"].is_object() || self.script_written(&p)) {
+                    if let Some(i) = actions(&p).iter().position(|a| matches!(a, Action::Inline(n) if *n == "check_script")) {
+                        p.action = i;
+                        self.log(&p, "info", "沿用工作樹中已完成的研究與劇本，重新檢查製作要求（不重新研究）");
+                    }
+                }
             }
             "needs_merge" => return self.retry_deliver(p),
             s => return Err(format!("目前狀態「{s}」不能繼續")),
@@ -385,10 +410,20 @@ impl Autopilot {
                     self.account_claude(&mut p, &job);
                     p.data["lastJob"] = json!(jid);
                     if p.mode == "fix" {
-                        self.log(&p, "info", "修正完成，重新執行這個階段");
                         p.mode = "main".into();
-                        p.action = 0;
-                        p.data["fresh"] = json!(true);
+                        // a check failed on text the fix edits directly (script): re-run only that check, not the
+                        // whole stage — research and the script job are not repeated
+                        match p.data.as_object_mut().and_then(|m| m.remove("resumeAt")).and_then(|v| v.as_u64()) {
+                            Some(at) => {
+                                self.log(&p, "info", "修正完成，只重新檢查不合格的項目（不重新研究、不重寫劇本）");
+                                p.action = at as usize;
+                            }
+                            None => {
+                                self.log(&p, "info", "修正完成，重新執行這個階段");
+                                p.action = 0;
+                                p.data["fresh"] = json!(true);
+                            }
+                        }
                     } else {
                         p.action += 1;
                     }
@@ -552,7 +587,7 @@ impl Autopilot {
                 p.mode = "main".into();
                 p.data["fresh"] = json!(false);
                 p.data["transient"] = json!(0);
-                p.data.as_object_mut().map(|m| m.remove("voiceOnly"));
+                p.data.as_object_mut().map(|m| { m.remove("voiceOnly"); m.remove("prevFailKeys"); m.remove("resumeAt"); });
                 self.store(&p);
             }
             None => self.finish(p, true),
@@ -560,11 +595,36 @@ impl Autopilot {
     }
 
     /// A stage failed: fix job (when the stage has a fixer and `fixable`), else re-run; give up after max attempts.
-    fn stage_failed(&self, p: Production, err: &str, fixable: bool, from_check: bool) {
+    fn stage_failed(&self, mut p: Production, err: &str, fixable: bool, from_check: bool) {
         self.log(&p, "error", &format!("✗ {}（第 {}/{} 次）：{}", stage_label(&p.stage), p.attempt, p.config.max_attempts, first_line(err)));
-        let detail: String = err.lines().skip(1).filter(|l| !l.trim().is_empty()).take(24).collect::<Vec<_>>().join("\n");
+        let detail: String = err.lines().skip(1).filter(|l| !l.trim().is_empty()).take(40).collect::<Vec<_>>().join("\n");
         if !detail.is_empty() {
-            self.log(&p, "info", &detail.chars().take(2000).collect::<String>());
+            self.log(&p, "info", &detail.chars().take(3000).collect::<String>());
+        }
+        if from_check {
+            // what failed now (requirement keys for the script check, else the error text itself)
+            let now: Vec<String> = if p.stage == "script" && p.data["requirements"].is_object() {
+                p.data["requirements"]["items"].as_array().map(|a| a.iter().filter(|i| i["status"] == "fail").filter_map(|i| i["key"].as_str().map(String::from)).collect()).unwrap_or_default()
+            } else {
+                vec![crate::narration::norm(&first_line(err))]
+            };
+            let prev: Vec<String> = p.data["prevFailKeys"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+            // a fix ran and not a single failing item improved → stop calling the AI again, explain instead
+            if !prev.is_empty() && !now.is_empty() && prev.iter().all(|k| now.contains(k)) {
+                let shown: Vec<String> = now.iter().take(8).cloned().collect();
+                let msg = format!(
+                    "「{}」修正後同樣的 {} 項仍未通過，已停止重複呼叫 {}（避免浪費額度）。未通過：{}。\n可能原因：要求與影片語言或用語不一致、要求無法只靠旁白滿足、或檢查規則需要調整。\
+                     每一項的預期與實際內容見製作頁「製作要求檢查」與工作樹 out/auto/REQUIREMENTS_CHECK.json；調整製作要求或手動修改劇本後按「繼續」，已完成的研究與劇本都會保留。",
+                    stage_label(&p.stage), now.len(), agent_name(&p.config.agent), shown.join("、")
+                );
+                p.data.as_object_mut().map(|m| m.remove("prevFailKeys"));
+                return self.fail(p, &msg);
+            }
+            p.data["prevFailKeys"] = json!(now);
+            // script check: the fix edits narration / sources directly, so only the check needs to run again
+            if p.stage == "script" {
+                p.data["resumeAt"] = json!(p.action);
+            }
         }
         self.retry_or_give_up(p, err, fixable, from_check)
     }

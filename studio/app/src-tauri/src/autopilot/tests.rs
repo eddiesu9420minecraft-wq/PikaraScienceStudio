@@ -236,3 +236,36 @@ fn written_form_counts_as_correct_reading() {
     assert!(pron_error("開發者能用 C plus plus 或 Python 來寫，", asr) > 0.12);
     assert!(pron_error("開發者能用 C++ 或 Python 來寫，", asr) <= 0.12);
 }
+
+/// v0.3 EP07 fix: a failing script check stores what failed, marks the check as the place to resume (no new research),
+/// continues while fixes make progress, and stops calling the AI when a fix does not improve a single item.
+#[test]
+fn script_check_retries_are_targeted_and_stop_without_progress() {
+    use std::sync::{Arc, Mutex};
+    let db: crate::db::Db = Arc::new(Mutex::new(crate::db::open_memory().unwrap()));
+    let q = crate::queue::Queue::new(db.clone(), Arc::new(|_, _| {}));
+    let ap = Autopilot::new(db.clone(), q, Arc::new(|_, _| {}), Arc::new(|_, _| {}));
+    let req = |keys: &[&str]| json!({"items": keys.iter().map(|k| json!({"key": k, "status": "fail"})).collect::<Vec<_>>()});
+    let c = AutoConfig { topic: "t".into(), max_attempts: 6, ..Default::default() };
+    let p = Production { id: "prod-test-1".into(), episode: "ep07".into(), stage: "script".into(), status: "running".into(), attempt: 1, action: 3, mode: "main".into(),
+                         config: c, data: json!({"requirements": req(&["include:A", "include:B"])}), ..Default::default() };
+    ap.stage_failed(p, "沒有符合使用者的製作要求", false, true);
+    let s = get(&ap.conn(), "prod-test-1").unwrap();
+    assert_eq!(s.data["resumeAt"], 3, "after the fix only the check runs again");
+    assert_eq!(s.data["prevFailKeys"].as_array().unwrap().len(), 2);
+    assert_ne!(s.status, "failed");
+    // the fix repaired A → progress → keep going
+    let mut p2 = s.clone();
+    p2.data["requirements"] = req(&["include:B"]);
+    ap.stage_failed(p2, "沒有符合使用者的製作要求", false, true);
+    let s2 = get(&ap.conn(), "prod-test-1").unwrap();
+    assert_ne!(s2.status, "failed");
+    // the next fix changed nothing → stop with a diagnosis instead of another AI call
+    let mut p3 = s2.clone();
+    p3.data["requirements"] = req(&["include:B"]);
+    ap.stage_failed(p3, "沒有符合使用者的製作要求", false, true);
+    let s3 = get(&ap.conn(), "prod-test-1").unwrap();
+    assert_eq!(s3.status, "failed");
+    let m = s3.message.unwrap_or_default();
+    assert!(m.contains("停止重複呼叫") && m.contains("include:B") && m.contains("REQUIREMENTS_CHECK.json"), "{m}");
+}

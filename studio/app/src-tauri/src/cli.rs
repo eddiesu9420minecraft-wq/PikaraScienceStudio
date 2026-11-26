@@ -200,6 +200,16 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
                 out(&json!({"ok": true, "usage": crate::hardware::selector::usage(ms, root)}));
             }
             "gpu-lease" => out(&json!({"ok": true, "lease": crate::gpulock::status()})),
+            "auto-check" => {
+                // read-only: check a production's current narration against its requirements with the current checker
+                let p = crate::autopilot::get(&conn(), &arg(args, "--id").ok_or("缺少 --id")?)?;
+                let pr = db::project_get(&conn(), p.project_id.as_deref().unwrap_or(""))?;
+                let wt = crate::jobs::worktree_dir(Path::new(&pr.root_path), p.worktree.as_deref().ok_or("沒有工作樹")?);
+                let doc = narration::read(&wt, "zh-TW")?;
+                let seq = doc["doc"]["sequences"][&p.episode].clone();
+                let rep = crate::content::requirements_report(&p.config, &seq);
+                out(&json!({"ok": rep.failed == 0, "episode": p.episode, "worktree": crate::util::clean_path(&wt), "report": rep}));
+            }
             "settings-set" => {
                 // merge a JSON patch into the settings (same as the Settings page), e.g. {"hw":{"uiGpu":"discrete",…}}
                 let patch: Value = serde_json::from_str(&arg(args, "--json").ok_or("缺少 --json")?).map_err(|e| format!("--json：{e}"))?;

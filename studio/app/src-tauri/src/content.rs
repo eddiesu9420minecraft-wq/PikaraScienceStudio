@@ -16,6 +16,8 @@
 
 use crate::autopilot::AutoConfig;
 use crate::narration::norm;
+
+pub mod matcher;
 use serde_json::{json, Value};
 
 pub const MODES: [&str; 3] = ["auto", "guided", "script"];
@@ -339,54 +341,139 @@ pub fn fidelity(user_script: &str, seq: &Value, en: bool) -> Result<(), String> 
     ))
 }
 
-/// Mechanical checks of the brief against the written narration. Ok(notes) lists what was verified and what can
-/// only be judged by a person (long must-include items).
-pub fn check_requirements(c: &AutoConfig, seq: &Value) -> Result<Vec<String>, String> {
+/// One checked requirement. `status` is "pass" | "warn" | "fail"; `key` identifies the requirement across retries.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReqItem {
+    pub key: String,
+    pub kind: String,
+    pub requirement: String,
+    pub expected: String,
+    pub actual: Option<String>,
+    pub status: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReqReport {
+    pub items: Vec<ReqItem>,
+    pub passed: usize,
+    pub warned: usize,
+    pub failed: usize,
+    /// what could not be checked mechanically (long free-text requirements) — left to the AI and a human
+    pub notes: Vec<String>,
+}
+
+impl ReqReport {
+    pub fn fail_keys(&self) -> Vec<String> {
+        self.items.iter().filter(|i| i.status == "fail").map(|i| i.key.clone()).collect()
+    }
+    /// Text for the log and for the fix prompt: only the items that need work, each with expected vs actual.
+    pub fn problems_text(&self) -> String {
+        self.items
+            .iter()
+            .filter(|i| i.status != "pass")
+            .map(|i| format!("【{}】{}：{}\n    預期：{}\n    實際：{}\n    原因：{}", if i.status == "fail" { "失敗" } else { "警告" }, i.requirement, i.key, i.expected, i.actual.clone().unwrap_or_else(|| "（沒有找到）".into()), i.reason))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+fn item(key: String, kind: &str, requirement: &str, expected: &str, actual: Option<String>, status: &str, reason: String) -> ReqItem {
+    ReqItem { key, kind: kind.into(), requirement: requirement.into(), expected: expected.into(), actual, status: status.into(), reason }
+}
+
+/// Mechanical checks of the brief against the written narration, tolerant of Traditional / Simplified script,
+/// Taiwan / Mainland vocabulary, synonyms, case, punctuation and spacing (content/matcher.rs). Each requirement is
+/// pass / warn / fail with the expected and the actual text.
+pub fn requirements_report(c: &AutoConfig, seq: &Value) -> ReqReport {
+    use matcher::{find, same_title, title_similarity, traditional_chars, Found};
+    let mut items = vec![];
     let mut notes = vec![];
-    let mut errs = vec![];
     let scenes = seq["scenes"].as_array().cloned().unwrap_or_default();
     let ch: Vec<String> = c.chapters.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
     if !ch.is_empty() && mode(c) != "auto" {
         if scenes.len() != ch.len() {
-            errs.push(format!("指定了 {} 個章節，但旁白有 {} 個場景。每個指定章節必須是一個 scene，依序排列。", ch.len(), scenes.len()));
-        } else {
-            for (i, (want, sc)) in ch.iter().zip(scenes.iter()).enumerate() {
-                let got = sc["title"].as_str().unwrap_or("");
-                let (a, b) = (norm(want), norm(got));
-                if !(a == b || b.contains(&a) || a.contains(&b) && !b.is_empty()) {
-                    errs.push(format!("第 {} 個場景的標題應為「{want}」，目前是「{got}」。", i + 1));
+            items.push(item("chapters:count".into(), "chapters", "指定章節數", &format!("{} 個場景，依序對應指定章節", ch.len()), Some(format!("{} 個場景", scenes.len())), "fail",
+                "每個指定章節必須是一個 scene，依序排列".into()));
+        }
+        for (i, want) in ch.iter().enumerate() {
+            let got = scenes.get(i).and_then(|s| s["title"].as_str()).unwrap_or("").to_string();
+            let key = format!("chapter:{}", i + 1);
+            let req = format!("第 {} 個章節標題", i + 1);
+            match same_title(want, &got) {
+                Some(how) => items.push(item(key, "chapter", &req, want, Some(got), "pass", how.label().into())),
+                None if !got.is_empty() && title_similarity(want, &got) >= 0.5 => {
+                    items.push(item(key, "chapter", &req, want, Some(got), "warn", "標題與指定章節相近但用字不同（已比對繁簡與兩岸用語）".into()))
                 }
-            }
-            if errs.is_empty() {
-                notes.push(format!("章節 {} 個，名稱與順序相符", ch.len()));
+                None => items.push(item(key, "chapter", &req, want, Some(got).filter(|g| !g.is_empty()), "fail", "標題與指定章節不同（已比對繁簡與兩岸用語）".into())),
             }
         }
     }
     let spoken = format!("{}\n{}\n{}", seq_text(seq, false), seq_text(seq, true), seq["title"].as_str().unwrap_or(""));
-    let ns = norm(&spoken);
+    // must avoid: any match (also via script / vocabulary / synonym) is a failure
     let avoid = split_list(&c.must_avoid);
-    let short_avoid: Vec<&String> = avoid.iter().filter(|t| t.chars().count() <= 16).collect();
-    let hits: Vec<&String> = short_avoid.iter().copied().filter(|t| !norm(t).is_empty() && ns.contains(&norm(t))).collect();
-    if !hits.is_empty() {
-        errs.push(format!("旁白／字幕出現了禁止的內容：{}。請改寫這些句子，避免提及。", hits.iter().map(|s| format!("「{s}」")).collect::<Vec<_>>().join("、")));
-    } else if !short_avoid.is_empty() {
-        notes.push(format!("禁止詞 {} 個都沒有出現", short_avoid.len()));
+    for t in avoid.iter().filter(|t| t.chars().count() <= 16) {
+        if let Found::Yes { how, used } = find(t, &spoken) {
+            items.push(item(format!("avoid:{t}"), "avoid", "禁止出現", t, Some(used), "fail", format!("旁白／字幕出現了禁止的內容（{}）；請改寫這些句子", how.label())));
+        } else {
+            items.push(item(format!("avoid:{t}"), "avoid", "禁止出現", t, None, "pass", "沒有出現".into()));
+        }
     }
-    if avoid.len() > short_avoid.len() {
-        notes.push(format!("{} 項較長的禁止事項無法自動比對，已交給 AI 遵守、請人工確認", avoid.len() - short_avoid.len()));
+    let long_avoid = avoid.iter().filter(|t| t.chars().count() > 16).count();
+    if long_avoid > 0 {
+        notes.push(format!("{long_avoid} 項較長的禁止事項無法自動比對，已交給 AI 遵守、請人工確認"));
     }
+    // must include: present → pass (with how), partly present → warning, missing → failure (guided / script modes)
     let include = split_list(&c.must_include);
-    let kw: Vec<&String> = include.iter().filter(|t| t.chars().count() <= 12).collect();
-    let missing: Vec<&String> = kw.iter().copied().filter(|t| !ns.contains(&norm(t))).collect();
-    if mode(c) != "auto" && !missing.is_empty() {
-        errs.push(format!("必須介紹的關鍵詞沒有出現在旁白中：{}。", missing.iter().map(|s| format!("「{s}」")).collect::<Vec<_>>().join("、")));
-    } else if !kw.is_empty() {
-        notes.push(format!("必須介紹的關鍵詞 {}/{} 出現", kw.len() - missing.len(), kw.len()));
+    for t in include.iter().filter(|t| t.chars().count() <= 12) {
+        let key = format!("include:{t}");
+        match find(t, &spoken) {
+            Found::Yes { how, used } => items.push(item(key, "include", "必須介紹", t, Some(used), "pass", how.label().into())),
+            Found::Partial { score, used } => items.push(item(key, "include", "必須介紹", t, Some(used), "warn", format!("只找到部分（{:.0}%）；請人工確認是否已介紹", score * 100.0))),
+            Found::No => items.push(item(key, "include", "必須介紹", t, None, if mode(c) == "auto" { "warn" } else { "fail" },
+                "旁白中沒有找到（已比對繁簡、兩岸用語與同義詞）".into())),
+        }
     }
-    if include.len() > kw.len() {
-        notes.push(format!("{} 項較長的必須介紹內容無法自動比對，請人工確認", include.len() - kw.len()));
+    let long_include = include.iter().filter(|t| t.chars().count() > 12).count();
+    if long_include > 0 {
+        notes.push(format!("{long_include} 項較長的必須介紹內容無法自動比對，請人工確認"));
     }
-    if errs.is_empty() { Ok(notes) } else { Err(format!("沒有符合使用者的製作要求：\n- {}", errs.join("\n- "))) }
+    // Simplified-only videos: no Traditional characters on screen (titles always, subtitles from 2 distinct characters)
+    if cn_only(c) {
+        for (i, s) in scenes.iter().enumerate() {
+            let title = s["title"].as_str().unwrap_or("");
+            let tc = traditional_chars(title);
+            let key = format!("simplified:title:{}", i + 1);
+            if tc.is_empty() {
+                items.push(item(key, "script", "簡體版用字", "簡體字", Some(title.into()), "pass", "沒有繁體字".into()));
+            } else {
+                items.push(item(key, "script", "簡體版用字", &format!("簡體字（{}）", matcher::t2s(title)), Some(title.into()), "fail",
+                    format!("第 {} 個場景標題有繁體字：{}", i + 1, tc.iter().collect::<String>())));
+            }
+            for l in s["lines"].as_array().cloned().unwrap_or_default() {
+                let sub = l["subtitle"].as_str().unwrap_or("");
+                let tc = traditional_chars(sub);
+                if !tc.is_empty() {
+                    let id = l["id"].as_str().unwrap_or("?");
+                    items.push(item(format!("simplified:{id}"), "script", "簡體版用字", &matcher::t2s(sub), Some(sub.into()), if tc.len() >= 2 { "fail" } else { "warn" },
+                        format!("字幕 {id} 有繁體字：{}", tc.iter().collect::<String>())));
+                }
+            }
+        }
+    }
+    let count = |s: &str| items.iter().filter(|i| i.status == s).count();
+    ReqReport { passed: count("pass"), warned: count("warn"), failed: count("fail"), items, notes }
+}
+
+/// Compatibility wrapper: Ok(notes) when nothing failed (warnings are listed in the notes), Err(text) otherwise.
+pub fn check_requirements(c: &AutoConfig, seq: &Value) -> Result<Vec<String>, String> {
+    let r = requirements_report(c, seq);
+    let mut notes = vec![format!("製作要求：{} 項通過、{} 項警告、{} 項失敗", r.passed, r.warned, r.failed)];
+    notes.extend(r.items.iter().filter(|i| i.status == "warn").map(|i| format!("警告：{} {}（{}）", i.requirement, i.expected, i.reason)));
+    notes.extend(r.notes.iter().cloned());
+    if r.failed == 0 { Ok(notes) } else { Err(format!("沒有符合使用者的製作要求（{} 項失敗、{} 項警告）：\n{}", r.failed, r.warned, r.problems_text())) }
 }
 
 #[cfg(test)]
@@ -451,13 +538,44 @@ mod tests {
             {"id": "s01", "title": "什麼是封包", "lines": [{"id": "a", "subtitle": "資料被切成封包，每個都有 IP 位址。"}]},
             {"id": "s02", "title": "路由器", "lines": [{"id": "b", "subtitle": "TCP 確保不遺失。"}]}]});
         let notes = check_requirements(&c, &seq).unwrap();
-        assert!(notes.iter().any(|n| n.contains("章節 2 個")), "{notes:?}");
+        assert!(notes[0].contains("6 項通過、0 項警告、0 項失敗"), "{notes:?}");
         let mut bad = seq.clone();
         bad["scenes"][1]["lines"][0]["subtitle"] = json!("就像比特幣一樣。");
         bad["scenes"][1]["title"] = json!("交換器");
         let e = check_requirements(&c, &bad).unwrap_err();
         assert!(e.contains("比特幣") && e.contains("路由器") && e.contains("TCP"), "{e}");
         assert_eq!(split_list("- 一\n- 二、三, 四"), vec!["一", "二", "三", "四"]);
+    }
+
+    /// EP07 regression: Simplified-only video, requirements written in Traditional. The old exact-match checker failed
+    /// all 8 titles and 3 keywords three times although the script contained them in Simplified / Mainland wording.
+    #[test]
+    fn ep07_simplified_video_with_traditional_requirements() {
+        let mut c = cfg();
+        c.mode = "guided".into();
+        c.language = "zh-CN".into();
+        c.chapters = vec!["序章：個人電腦革命之前".into(), "1985：Windows誕生與32位元時代".into(), "1986～1987：IBM相容電腦的崛起".into()];
+        c.must_include = "IBM相容電腦、圖形使用者介面、個人電腦革命、Commodore 64".into();
+        let mut seq = json!({"title": "个人电脑革命的十年", "scenes": [
+            {"id": "s01", "title": "序章：个人电脑革命之前", "lines": [{"id": "ep07-s01-01", "subtitle": "八十年代被称为个人电脑革命的十年。"}]},
+            {"id": "s02", "title": "1985：Windows诞生与32位时代", "lines": [{"id": "ep07-s02-01", "subtitle": "苹果把图形用户界面带进家庭。"}]},
+            {"id": "s03", "title": "1986～1987：IBM兼容电脑的崛起", "lines": [{"id": "ep07-s03-01", "subtitle": "IBM兼容电脑遍地开花。"}]}]});
+        let r = requirements_report(&c, &seq);
+        let st = |k: &str| r.items.iter().find(|i| i.key == k).map(|i| i.status.clone()).unwrap_or_default();
+        assert_eq!((st("chapter:1"), st("chapter:2"), st("chapter:3")), ("pass".into(), "pass".into(), "pass".into()), "{r:#?}");
+        assert_eq!((st("include:IBM相容電腦"), st("include:圖形使用者介面"), st("include:個人電腦革命")), ("pass".into(), "pass".into(), "pass".into()));
+        // a requirement that is really missing still fails — the checker did not become lenient
+        assert_eq!(st("include:Commodore 64"), "fail");
+        assert_eq!(r.failed, 1);
+        let e = check_requirements(&c, &seq).unwrap_err();
+        assert!(e.contains("Commodore 64") && e.contains("預期") && e.contains("實際") && !e.contains("IBM相容電腦"), "{e}");
+        // the old checker's side effect: titles turned into Traditional inside a Simplified video → now a failure
+        seq["scenes"][0]["title"] = json!("序章：個人電腦革命之前");
+        let r2 = requirements_report(&c, &seq);
+        let t = r2.items.iter().find(|i| i.key == "simplified:title:1").unwrap();
+        assert_eq!(t.status, "fail");
+        assert_eq!(t.expected, "簡體字（序章：个人电脑革命之前）");
+        assert_eq!(r2.fail_keys().iter().filter(|k| k.starts_with("chapter")).count(), 0, "title still matches the chapter requirement");
     }
 
     #[test]

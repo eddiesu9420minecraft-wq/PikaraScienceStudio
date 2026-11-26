@@ -160,7 +160,14 @@ pub(crate) fn prompt_fix(p: &Production, fixer: Fixer, err: &str) -> String {
     let script_mode = content::mode(&p.config) == "script";
     let keep = if script_mode { "（自訂腳本模式：subtitle 是使用者腳本原文，絕對不能改；只能調整 speak、anchors。）" } else { "" };
     let what = match fixer {
-        Fixer::Script => format!("旁白（src/data/narration.json 的 sequences.{ep}）或 {}_SOURCES.md 沒有通過檢查。依錯誤修正，保持其他內容不變。{keep}", ep_upper(ep)),
+        Fixer::Script => format!(
+            "旁白（src/data/narration.json 的 sequences.{ep}）或 {}_SOURCES.md 沒有通過檢查。**只修正下面標示「失敗」的項目**（「警告」可視情況處理）：\
+             不要重新做研究、不要刪除或重寫 {}_SOURCES.md、不要改寫已通過的句子與場景，只做讓失敗項目通過的最小修改。\
+             檢查已比對繁簡字、兩岸用語、同義詞、大小寫與標點，所以只要實際內容表達了要求就會通過，不需要逐字照抄要求的寫法。{}{keep}",
+            ep_upper(ep),
+            ep_upper(ep),
+            if content::cn_only(&p.config) { "這是僅簡體中文的影片：標題與字幕一律使用簡體字與中國大陸用語（例如「兼容」「用户界面」「位」），使用者用繁體寫的要求代表同樣的內容，**不要把標題或句子改成繁體字**。" } else { "" }
+        ),
         Fixer::Code => format!("{ep} 的動畫程式（src/acts/{ep}/、src/episode/registry.ts 的 CUSTOM_ACTS）沒有通過檢查。修正到 `node node_modules/typescript/bin/tsc --noEmit --pretty false`（在目前目錄直接執行這一行，不要加 cd 或 &&） 沒有錯誤。"),
         Fixer::Pronunciation => format!(
             "CosyVoice 合成後，Whisper 聽到的讀音與朗讀文字不符（已排除數字寫法與同音字的差異），代表可能念錯或吞字。下面列出每句「應念」與「聽到」。只修正念法：在 src/data/narration.json 的 sequences.{ep} 對這些句子設定或調整 speak 欄位（{}），例如把英文縮寫、數字、符號改寫成念法，或把容易念錯的多音字換成同音字。不要增減或改寫句子的內容；{}錨點詞仍必須出現在 speak 中（必要時一併調整 anchors 的詞）。",
