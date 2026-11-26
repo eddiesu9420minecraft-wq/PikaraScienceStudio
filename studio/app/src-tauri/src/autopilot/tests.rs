@@ -239,6 +239,106 @@ fn written_form_counts_as_correct_reading() {
 
 /// v0.3 EP07 fix: a failing script check stores what failed, marks the check as the place to resume (no new research),
 /// continues while fixes make progress, and stops calling the AI when a fix does not improve a single item.
+fn test_autopilot() -> std::sync::Arc<Autopilot> {
+    use std::sync::{Arc, Mutex};
+    let db: crate::db::Db = Arc::new(Mutex::new(crate::db::open_memory().unwrap()));
+    let q = crate::queue::Queue::new(db.clone(), Arc::new(|_, _| {}));
+    Autopilot::new(db, q, Arc::new(|_, _| {}), Arc::new(|_, _| {}))
+}
+
+fn animate_production(id: &str) -> Production {
+    let c = AutoConfig { topic: "t".into(), max_attempts: 6, max_minutes: 600, ..Default::default() };
+    Production { id: id.into(), episode: "ep07".into(), stage: "animate".into(), status: "running".into(), attempt: 1, action: 2, mode: "main".into(), config: c, data: json!({}), ..Default::default() }
+}
+
+fn running_job(ap: &Autopilot) -> crate::db::Job {
+    let c = ap.conn();
+    let j = crate::db::job_insert(&c, None, "claude_in", "EP07 動畫程式", &json!({}), "cpu", &[]).unwrap();
+    crate::db::job_mark_started(&c, &j.id, "x.log").unwrap();
+    crate::db::job_get(&c, &j.id).unwrap()
+}
+
+#[test]
+fn stalled_step_is_recovered_in_place_then_falls_back_to_normal_handling() {
+    let ap = test_autopilot();
+    ap.store(&animate_production("prod-stall"));
+    // 1st and 2nd stall: same stage, same step, continuation note for the AI, nothing reset
+    for n in 1..=2u64 {
+        let p = get(&ap.conn(), "prod-stall").unwrap();
+        ap.recover_step(p, "停滯：1200 秒沒有任何輸出");
+        let s = get(&ap.conn(), "prod-stall").unwrap();
+        assert_eq!((s.stage.as_str(), s.action, s.status.as_str(), s.attempt), ("animate", 2, "running", 1));
+        assert_eq!(s.data["stepRecoveries"]["animate"], n);
+        assert!(s.data["resumeNote"].as_str().unwrap().contains("停滯"));
+        assert!(s.job_id.is_none());
+    }
+    // 3rd stall: the normal failure handling decides (counts as an attempt)
+    let p = get(&ap.conn(), "prod-stall").unwrap();
+    ap.recover_step(p, "停滯：1200 秒沒有任何輸出");
+    let s = get(&ap.conn(), "prod-stall").unwrap();
+    assert_eq!(s.data["stepRecoveries"]["animate"], 2);
+    assert_eq!(s.attempt, 2);
+}
+
+#[test]
+fn interrupted_job_that_is_never_requeued_does_not_hang_the_production() {
+    let ap = test_autopilot();
+    let j = running_job(&ap);
+    ap.conn().execute("UPDATE jobs SET status='interrupted' WHERE id=?1", [&j.id]).unwrap();
+    let j = crate::db::job_get(&ap.conn(), &j.id).unwrap();
+    let mut p = animate_production("prod-int");
+    p.job_id = Some(j.id.clone());
+    // just interrupted: Studio's startup recovery may still re-queue it → wait
+    let mut p = ap.watch(p, &j).expect("waits during the grace period");
+    assert!(p.job_id.is_some());
+    // still interrupted after the grace period → recover the step
+    p.data["watch"]["interruptedAt"] = json!(now_ms() - INTERRUPTED_GRACE_MS - 1000);
+    assert!(ap.watch(p, &j).is_none());
+    let s = get(&ap.conn(), "prod-int").unwrap();
+    assert!(s.job_id.is_none() && s.status == "running" && s.action == 2);
+    assert!(s.data["resumeNote"].as_str().unwrap().contains("中斷"));
+}
+
+#[test]
+fn quiet_running_job_is_stopped_by_the_watchdog_and_its_step_recovered() {
+    let ap = test_autopilot();
+    let j = running_job(&ap);
+    let mut p = animate_production("prod-wd");
+    p.job_id = Some(j.id.clone());
+    // recent activity → nothing happens
+    p.data["watch"] = json!({"job": j.id, "since": now_ms() - 60_000});
+    let mut p = ap.watch(p, &j).expect("active job is left alone");
+    // nothing at all for longer than the watchdog limit (no output, no worktree) → stop the job
+    p.data["watch"] = json!({"job": j.id, "since": now_ms() - (watchdog_secs() as i64 + 60) * 1000});
+    ap.store(&p);
+    assert!(ap.watch(p, &j).is_none());
+    assert_eq!(crate::db::job_get(&ap.conn(), &j.id).unwrap().status, "canceled");
+    let s = get(&ap.conn(), "prod-wd").unwrap();
+    assert_eq!(s.data["watchdogCancel"], json!(j.id));
+    // the next tick sees the cancel it caused → recovers the step instead of ending the production
+    ap.advance(s);
+    let s = get(&ap.conn(), "prod-wd").unwrap();
+    assert_eq!((s.status.as_str(), s.action, s.job_id.is_none()), ("running", 2, true));
+    assert!(s.data["resumeNote"].as_str().unwrap().contains("沒有任何輸出"));
+    assert!(s.data.get("watchdogCancel").is_none());
+}
+
+#[test]
+fn manual_recover_keeps_the_stage_and_step() {
+    let ap = test_autopilot();
+    let mut p = animate_production("prod-man");
+    p.status = "failed".into();
+    p.attempt = 3;
+    ap.store(&p);
+    let r = ap.recover("prod-man").unwrap();
+    assert_eq!((r.stage.as_str(), r.action, r.status.as_str(), r.attempt), ("animate", 2, "running", 1));
+    assert!(r.data["resumeNote"].as_str().unwrap().contains("手動"));
+    let mut done = animate_production("prod-done");
+    done.status = "succeeded".into();
+    ap.store(&done);
+    assert!(ap.recover("prod-done").is_err());
+}
+
 #[test]
 fn script_check_retries_are_targeted_and_stop_without_progress() {
     use std::sync::{Arc, Mutex};

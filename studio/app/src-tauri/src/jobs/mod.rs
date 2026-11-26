@@ -29,6 +29,9 @@ pub struct Step {
     /// Kill the step if it prints nothing (stdout or stderr) for this long. The TTS script prints a heartbeat every
     /// 30 s even during model load / long lines, so silence here means the whole process is frozen, not slow.
     pub stall_secs: Option<u64>,
+    /// With `stall_secs`: a file changing under this folder also counts as activity (an AI agent running a long,
+    /// quiet command that still writes files is working, not stalled).
+    pub activity_dir: Option<std::path::PathBuf>,
 }
 
 /// No-output limit for a step kind; `PIKARA_STALL_<KIND>_SECS` overrides (0 disables).

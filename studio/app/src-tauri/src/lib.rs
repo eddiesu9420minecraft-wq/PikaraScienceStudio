@@ -1,5 +1,6 @@
 //! Pikara Science Studio — Rust core. Tauri commands are listed in studio/app/API.md.
 
+pub mod activity;
 pub mod agents;
 pub mod assets;
 pub mod autopilot;
@@ -632,6 +633,7 @@ async fn auto_control(st: State<'_, AppState>, id: String, action: String) -> R<
         let p = match action.as_str() {
             "pause" => ap.pause(&id)?,
             "resume" => ap.resume(&id)?,
+            "recover" => ap.recover(&id)?,
             "stop" => ap.stop(&id)?,
             "discard" => ap.discard(&id)?,
             "remove" => {

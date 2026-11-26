@@ -70,6 +70,7 @@ impl Ctx<'_> {
             stdin_text: None,
             env_remove: vec![],
             stall_secs: None,
+            activity_dir: None,
         }
     }
     fn py(&self, label: &str, args: &[&str]) -> Step {
@@ -348,6 +349,17 @@ pub fn job_root(project_root: &Path, params: &Value) -> Result<PathBuf, String> 
     }
 }
 
+/// Default no-activity limit for an AI agent run (Claude Code / 豆包 CLI).
+pub const AGENT_STALL_SECS: u64 = 1200;
+
+/// AI agent run: stopped after `PIKARA_STALL_AGENT_SECS` (default 20 min) with neither output nor a file change in
+/// its working folder. Claude Code streams every tool call, so 20 silent minutes with no file written means it is
+/// stuck (hung command, lost connection), not thinking.
+fn agent_guard(s: &mut Step) {
+    s.stall_secs = super::stall_limit("agent", AGENT_STALL_SECS);
+    s.activity_dir = Some(s.cwd.clone());
+}
+
 /// Environment variables that would switch Claude Code from the signed-in subscription to pay-as-you-go API billing.
 pub const API_KEY_VARS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
 
@@ -379,6 +391,7 @@ pub(crate) fn claude_in_steps(p: &Value, ctx: &Ctx) -> Result<Vec<Step>, String>
     if !api {
         run.env_remove = API_KEY_VARS.iter().map(|s| s.to_string()).collect();
     }
+    agent_guard(&mut run);
     Ok(vec![run])
 }
 
@@ -404,6 +417,7 @@ pub(crate) fn agent_cli_steps(p: &Value, ctx: &Ctx) -> Result<Vec<Step>, String>
     args.extend(["-p".into(), "請完整讀取目前目錄下的 out/auto/AGENT_TASK.md，那是這次的完整任務說明，依照說明直接修改檔案完成任務；完成後用一段繁體中文簡短回報做了什麼。".into()]);
     let mut run = ctx.step(&format!("doubao -p（{}）", sp(p, "title", "自動製作")), &exe, &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Parser::Plain);
     run.env_remove = API_KEY_VARS.iter().map(|s| s.to_string()).collect();
+    agent_guard(&mut run);
     Ok(vec![run])
 }
 
@@ -641,6 +655,9 @@ pub(crate) fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result
             }
             let mut s = ctx.step("自訂指令", "cmd", &["/d", "/s", "/c", c], Parser::Plain);
             s.stall_secs = p["stallSecs"].as_u64().filter(|v| *v > 0);
+            if p["watchFiles"].as_bool() == Some(true) {
+                s.activity_dir = Some(s.cwd.clone());
+            }
             vec![s]
         }
         "claude" => {
@@ -664,6 +681,7 @@ pub(crate) fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result
             let mut run = ctx.step("claude -p（headless）", &claude, &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Parser::Claude);
             run.cwd = wt.clone();
             run.stdin_text = Some(sp(p, "prompt", "").to_string());
+            agent_guard(&mut run);
             let msg = format!("Studio: Claude run {wid}");
             let mut commit = ctx.step(
                 "提交 worktree 變更（不合併）",

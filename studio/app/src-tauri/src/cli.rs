@@ -357,12 +357,13 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             out(&serde_json::to_value(crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?).unwrap());
             Ok(0)
         }
-        "auto-pause" | "auto-resume" | "auto-stop" | "auto-discard" => {
+        "auto-pause" | "auto-resume" | "auto-recover" | "auto-stop" | "auto-discard" => {
             let id = arg(args, "--id").ok_or("缺少 --id")?;
             let ap = autopilot(db, q);
             let p = match cmd {
                 "auto-pause" => ap.pause(&id)?,
                 "auto-resume" => ap.resume(&id)?,
+                "auto-recover" => ap.recover(&id)?,
                 "auto-stop" => ap.stop(&id)?,
                 _ => ap.discard(&id)?,
             };
@@ -388,7 +389,9 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                     _ => String::new(),
                 };
                 let job = p.job_id.as_deref().and_then(|j| db::job_get(&db.lock().unwrap_or_else(|e| e.into_inner()), j).ok());
+                let activity = job.as_ref().map(|j| autopilot(db, q).activity(p, j));
                 rows.push(json!({
+                    "activity": activity,
                     "id": p.id, "episode": p.episode, "topic": p.config.topic, "agent": p.config.agent, "status": p.status,
                     "stage": p.stage, "stageLabel": crate::autopilot::STAGES.iter().find(|s| s.0 == p.stage).map(|s| s.1), "attempt": p.attempt,
                     "job": job.map(|j| json!({"id": j.id, "label": j.label, "status": j.status, "progress": j.progress, "text": j.progress_text})),

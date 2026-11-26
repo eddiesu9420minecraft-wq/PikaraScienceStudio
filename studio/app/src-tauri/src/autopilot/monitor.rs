@@ -151,8 +151,11 @@ impl Autopilot {
             .filter(|e| e.level != "info" || e.line.contains("修正") || e.line.contains("🛠") || e.line.starts_with('▶') && e.line.contains("修正"))
             .map(|e| json!({"ts": e.ts, "level": e.level, "stage": e.stage, "line": e.line}))
             .collect();
+        // last activity of the job in flight (output / file changes) and whether it looks stuck
+        let activity = job.as_ref().filter(|j| p.job_id.as_deref() == Some(j.id.as_str())).map(|j| self.activity(&p, j));
         Ok(json!({
             "id": p.id, "status": p.status, "stage": p.stage, "attempt": p.attempt, "mode": p.mode,
+            "activity": activity,
             "worktree": wt.as_ref().map(|w| w.to_string_lossy().to_string()),
             "job": job.map(|j| json!({"id": j.id, "kind": j.kind, "label": j.label, "status": j.status, "progress": j.progress, "progressText": j.progress_text, "step": j.step, "steps": j.steps, "startedAt": j.started_at, "error": j.error})),
             "jobLines": job_lines.iter().map(|e| json!({"ts": e.ts, "stream": e.stream, "level": e.level, "line": e.line})).collect::<Vec<_>>(),

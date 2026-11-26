@@ -332,6 +332,7 @@ class Auto {
     if (['queued', 'running', 'waiting_agent'].includes(x.status)) b.push(act('pause', '暫停', { icon: 'pause' }));
     if (x.status === 'waiting_agent') b.push(btn(t('Agent 已完成'), { small: true, kind: 'primary', icon: 'check', onClick: () => this.agentDone(x) }));
     if (['paused', 'paused_limit', 'failed', 'needs_merge'].includes(x.status)) b.push(act('resume', x.status === 'failed' ? '重試這個階段' : '繼續', { icon: 'play', kind: 'primary' }));
+    if (['running', 'paused', 'failed'].includes(x.status) && x.stage !== 'deliver' && (x.jobId || x.status === 'failed')) b.push(act('recover', '恢復目前階段', { icon: 'refresh' }));
     if (['queued', 'running', 'waiting_agent', 'paused', 'paused_limit', 'needs_merge'].includes(x.status)) b.push(act('stop', '停止', { icon: 'stop', kind: 'destructive' }));
     if (['failed', 'canceled'].includes(x.status) && x.worktree) b.push(act('discard', '捨棄（回復）', { icon: 'trash', kind: 'destructive' }));
     if (['succeeded', 'failed', 'canceled'].includes(x.status) && !x.worktree) b.push(act('remove', '移除紀錄', { icon: 'x' }));
@@ -346,6 +347,7 @@ class Auto {
 
   async control(x, action) {
     if (action === 'stop' && !(await confirmSheet({ title: t('停止製作'), text: t('正在執行的工作會被取消。專案本身不會有任何改變，工作樹會保留供檢視或捨棄。'), confirmLabel: t('停止'), destructive: true }))) return;
+    if (action === 'recover' && !(await confirmSheet({ title: t('恢復目前階段'), text: t('停止目前的工作（如果還在執行），從這個階段目前的步驟重新開始。工作樹與已完成的成果都會保留，不會重新研究或重寫劇本；AI 會先檢查已完成的檔案，只補完未完成的部分。'), confirmLabel: t('恢復') }))) return;
     if (action === 'discard' && !(await confirmSheet({ title: t('捨棄這次製作'), text: t('刪除隔離工作樹與分支（包含這次產生但尚未合併的旁白、程式與中間檔）。專案本身不受影響。'), confirmLabel: t('捨棄'), destructive: true }))) return;
     try {
       const r = await call('auto_control', { id: x.id, action });

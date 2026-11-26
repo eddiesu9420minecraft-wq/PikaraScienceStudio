@@ -45,7 +45,9 @@ mod monitor;
 mod inline;
 mod quality;
 mod worktree;
+mod watchdog;
 pub use config::*;
+pub use watchdog::*;
 pub use plan::*;
 use prompts::*; // crate-internal only
 pub use store::*;
@@ -398,6 +400,8 @@ impl Autopilot {
             };
             match job.status.as_str() {
                 "queued" | "waiting_resource" | "running" | "interrupted" => {
+                    // inactivity / stall detection (stops the job and recovers the step when it took over)
+                    let Some(mut p) = self.watch(p, &job) else { return };
                     // keep the UI's view fresh (active time) at most every 5 s
                     if now - p.data["lastSave"].as_i64().unwrap_or(0) > 5000 {
                         p.data["lastSave"] = json!(now);
@@ -431,6 +435,11 @@ impl Autopilot {
                 }
                 "canceled" => {
                     p.job_id = None;
+                    // stopped by the watchdog because it looked stuck: recover the step, don't end the production
+                    if p.data["watchdogCancel"].as_str() == Some(jid.as_str()) {
+                        let why = p.data["watchdogReason"].as_str().unwrap_or("偵測到卡住").to_string();
+                        return self.recover_step(p, &why);
+                    }
                     return self.fail(p, "工作被取消");
                 }
                 _ => {
@@ -459,6 +468,12 @@ impl Autopilot {
                         }
                         return self.store(&p);
                     }
+                    // stopped by the queue's no-activity guard: run the same step again from where it stopped
+                    // (not a fix: nothing was wrong with the work, it just stopped making progress)
+                    if text.starts_with("停滯：") || job.error.as_deref().is_some_and(|e| e.starts_with("停滯：")) {
+                        p.data.as_object_mut().map(|m| m.remove("watch"));
+                        return self.recover_step(p, &first_line(&text));
+                    }
                     let Some(mut p) = self.try_env_repair(p, &job, &text) else { return };
                     if p.mode == "fix" {
                         p.mode = "main".into();
@@ -480,7 +495,20 @@ impl Autopilot {
         if p.action >= acts.len() {
             return self.next_stage(p);
         }
-        match acts[p.action].clone() {
+        // after a stall / interruption / manual recovery: an AI step continues from the files already written
+        let resume_note = p.data.as_object_mut().and_then(|m| m.remove("resumeNote")).and_then(|v| v.as_str().map(String::from));
+        let mut act = acts[p.action].clone();
+        if let Some(why) = &resume_note {
+            match &mut act {
+                Action::Job { kind, params } if ["claude_in", "agent_cli"].contains(kind) => {
+                    let prompt = format!("{}{}", params["prompt"].as_str().unwrap_or(""), continuation_note(why));
+                    params["prompt"] = json!(prompt);
+                }
+                Action::Agent { prompt, .. } => prompt.push_str(&continuation_note(why)),
+                _ => {}
+            }
+        }
+        match act {
             Action::Job { kind, params } => {
                 let root = match self.root(&p).and_then(|r| crate::jobs::job_root(&r, &params)) {
                     Ok(r) => r,

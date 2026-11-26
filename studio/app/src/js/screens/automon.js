@@ -12,6 +12,29 @@ const TABS = [
   ['script', '腳本'], ['board', '分鏡'], ['voice', '配音試聽'], ['video', '動畫預覽'], ['history', '錯誤與修復'],
 ];
 
+// Last activity of the job in flight (backend: autopilot::watchdog::activity). Output and file changes in the
+// worktree both count, so an AI writing a long file or running a quiet command is not shown as stuck.
+export function activityView(a) {
+  if (!a || a.state === 'waiting') return null;
+  if (a.state === 'interrupted') {
+    return h('div.banner.warn', h('div.grow', t('工作已中斷（Studio 結束或電腦睡眠）。等待自動重新排入佇列；2 分鐘內沒有重新開始，會自動從目前的步驟恢復，已完成的成果都會保留。')));
+  }
+  const quiet = Math.min(a.outputQuietSecs ?? 0, a.filesQuietSecs ?? Infinity);
+  const ago = quiet < 60 ? t('{n} 秒前', { n: quiet }) : t('{d}前', { d: fmtDur(quiet) });
+  const parts = [t('最後活動：{ago}', { ago })];
+  if (a.outputQuietSecs >= 60) parts.push(t('輸出 {d}前', { d: fmtDur(a.outputQuietSecs) }));
+  if (a.filesQuietSecs != null) parts.push(t('檔案變動 {d}前', { d: fmtDur(a.filesQuietSecs) }));
+  const line = parts.join('・');
+  if (a.state === 'active') return h('div.caption.muted', line);
+  if (a.state === 'quiet') return h('div.caption.muted', `${line}・${t('仍在執行（AI 撰寫較長的檔案或執行較久的指令時會暫時沒有輸出）')}`);
+  const limit = a.limitSecs || a.watchdogSecs;
+  const kind = a.state === 'stalled' ? 'fail' : 'warn';
+  const text = a.state === 'stalled'
+    ? t('已超過 {m} 沒有任何輸出或檔案變動，判定為卡住：Studio 會停止這個工作並從目前的步驟恢復（保留工作樹與已完成的成果）。', { m: fmtDur(limit) })
+    : t('已有一段時間沒有任何輸出或檔案變動，可能卡住。超過 {m} 會自動停止並從目前的步驟恢復；也可以按「恢復目前階段」。', { m: fmtDur(limit) });
+  return h(`div.banner.${kind}`, h('div.grow', h('div', { style: { fontWeight: 600 } }, line), h('div.caption', text)));
+}
+
 export class LiveMonitor {
   constructor(prod, projectId) {
     this.prod = prod;
@@ -57,7 +80,7 @@ export class LiveMonitor {
       return b;
     }));
     const body = h('div.automon-body');
-    mount(this.el, h('div.row', { style: { justifyContent: 'space-between', alignItems: 'center', gap: '8px' } }, h('span.headline', t('即時工作監控')), this.summary()), tabs, body);
+    mount(this.el, h('div.row', { style: { justifyContent: 'space-between', alignItems: 'center', gap: '8px' } }, h('span.headline', t('即時工作監控')), this.summary()), activityView(d && d.activity), tabs, body);
     if (this.err) { mount(body, h('div.caption.fail-text', this.err)); return; }
     if (!d) { mount(body, h('div.caption.muted', t('讀取中…'))); return; }
     mount(body, this[`p_${this.tab}`]());

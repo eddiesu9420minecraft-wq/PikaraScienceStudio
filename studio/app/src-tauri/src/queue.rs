@@ -475,6 +475,8 @@ impl Queue {
         let mut last_emit = Instant::now() - Duration::from_secs(1);
         let mut pending_progress: Option<(f64, Option<String>)> = None;
         let mut last_output = Instant::now();
+        let mut last_files_check = Instant::now() - Duration::from_secs(3600);
+        let mut noted_files = false;
         let mut last_line = String::new();
         let mut exited_at: Option<Instant> = None;
         loop {
@@ -518,8 +520,23 @@ impl Queue {
                     }
                     if let Some(lim) = step.stall_secs {
                         let quiet = last_output.elapsed().as_secs();
+                        // no output: a file the step is still writing counts as activity (checked at most once a minute)
+                        if quiet >= lim && last_files_check.elapsed() >= Duration::from_secs((lim / 4).clamp(1, 60)) {
+                            if let Some(dir) = &step.activity_dir {
+                                last_files_check = Instant::now();
+                                if let Some(fq) = crate::activity::files_quiet_secs(dir).filter(|f| *f < lim) {
+                                    last_output = Instant::now() - Duration::from_secs(fq);
+                                    if !noted_files {
+                                        noted_files = true;
+                                        self.event(&job.id, "system", "info", &format!("{quiet} 秒沒有輸出，但工作資料夾的檔案 {fq} 秒前仍有變動：繼續等待"));
+                                    }
+                                }
+                            }
+                        }
+                        let quiet = last_output.elapsed().as_secs();
                         if quiet >= lim {
-                            let msg = format!("停滯：{quiet} 秒沒有任何輸出（上限 {lim} 秒），已結束程序樹。最後一行：{last_line}");
+                            let files = step.activity_dir.as_ref().map(|_| "、工作資料夾也沒有檔案變動").unwrap_or("");
+                            let msg = format!("停滯：{quiet} 秒沒有任何輸出{files}（上限 {lim} 秒），已結束程序樹。最後一行：{last_line}");
                             let k = crate::util::kill_tree(child.id());
                             self.event(&job.id, "system", "error", &format!("{msg}｜taskkill：{}", k.trim()));
                             crate::watchdog::log_line(&format!("job {} {}", &job.id[..8.min(job.id.len())], msg));
@@ -718,6 +735,24 @@ mod tests {
         std::thread::sleep(Duration::from_millis(500));
         let snap = gpu::snapshot();
         assert!(!snap.procs.values().any(|(_, n, c)| n.eq_ignore_ascii_case("PING.EXE") && c.contains("-n 60 127.0.0.1")), "ping tree killed");
+    }
+
+    #[test]
+    fn silent_step_that_keeps_writing_files_is_not_killed() {
+        let (q, pid, dir) = q_with_project();
+        // no output for ~7 s (limit 3 s), but a file in the working folder changes every second
+        let cmd = "for /l %i in (1,1,7) do @(echo %i>>progress.txt & ping -n 2 127.0.0.1 >nul)";
+        let j = q.enqueue(Some(&pid), "custom", &json!({"command": cmd, "stallSecs": 3, "watchFiles": true}), &dir).unwrap();
+        let done = wait_status(&q, &j.id, &["succeeded", "failed"], 40);
+        assert_eq!(done.status, "succeeded", "file activity counts: {:?}", done.error);
+        let evs = db::events_list(&q.conn(), &j.id, 0, 1000).unwrap();
+        assert!(evs.iter().any(|e| e.line.contains("檔案") && e.line.contains("繼續等待")), "noted once");
+        // the same silence without file changes is a stall (wait until the folder has been quiet past the limit)
+        std::thread::sleep(Duration::from_secs(4));
+        let j2 = q.enqueue(Some(&pid), "custom", &json!({"command": "ping -n 8 127.0.0.1 >nul", "stallSecs": 3, "watchFiles": true}), &dir).unwrap();
+        let done2 = wait_status(&q, &j2.id, &["succeeded", "failed"], 40);
+        assert_eq!(done2.status, "failed");
+        assert!(done2.error.unwrap_or_default().contains("工作資料夾也沒有檔案變動"));
     }
 
     #[test]
