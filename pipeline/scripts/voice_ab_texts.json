@@ -1,0 +1,18 @@
+{
+  "_comment": "Fixed A/B test set for comparing TTS backends (docs/MACOS.md §3). Same texts, same reference voice, every candidate. Never edit an id's text after results exist — add a new id instead.",
+  "zh-TW": [
+    {"id": "tw-short", "text": "什麼？"},
+    {"id": "tw-accent", "text": "欸，你有沒有發現，手機用久了會越來越燙？這其實跟晶片裡面的電流有關係喔。"},
+    {"id": "tw-terms", "text": "為什麼 GPU 不能取代 CPU？CUDA 是 NVIDIA 推出的平行運算平台，而 Transformer 模型最吃的就是矩陣乘法。"},
+    {"id": "tw-numbers", "text": "這顆晶片有 160 億個電晶體，時脈 3.5 GHz，功耗大約 15 瓦，比十年前快了 20 倍以上。"},
+    {"id": "tw-math", "text": "一秒鐘做 10 的 12 次方次運算，也就是 1 TFLOPS；如果 x 加 y 等於 7，而 x 減 y 等於 1，那 x 就是 4。"},
+    {"id": "tw-units", "text": "光速大約是每秒 30 萬公里，聲音在空氣中每秒只走 343 公尺，溫度是攝氏 25 度。"},
+    {"id": "tw-mixed", "text": "打開 Settings，選 Performance mode，再按下 Start，整個 pipeline 就會自動跑起來。"},
+    {"id": "tw-long", "text": "1946 年，ENIAC 在美國賓州大學啟用。它重達 27 噸，占地超過 160 平方公尺，用了將近一萬八千支真空管。每當一支真空管燒壞，工程師就得在整排機櫃之間找出是哪一支出了問題。即使如此，它每秒仍然能做五千次加法，比當時最快的人工計算快上幾千倍。今天你口袋裡的手機，運算速度大約是它的一兆倍，卻只需要一顆小小的電池。"}
+  ],
+  "zh-CN": [
+    {"id": "cn-terms", "text": "为什么 GPU 不能取代 CPU？CUDA 是 NVIDIA 推出的并行计算平台，而 Transformer 模型最依赖的就是矩阵乘法。"},
+    {"id": "cn-numbers", "text": "这颗芯片有 160 亿个晶体管，主频 3.5 GHz，功耗大约 15 瓦。"},
+    {"id": "cn-mixed", "text": "打开 Settings，选择 Performance mode，再点击 Start，整个 pipeline 就会自动运行。"}
+  ]
+}

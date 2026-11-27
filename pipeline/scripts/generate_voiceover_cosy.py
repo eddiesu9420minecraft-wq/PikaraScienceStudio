@@ -509,6 +509,16 @@ def _run(a, lines, todo, out, key, voice, ref, ref_text) -> int:
         import torch
         import torchaudio
         from cosyvoice.cli.cosyvoice import AutoModel
+        # Studio 的功率模式預算（hardware::profile）：CPU 執行緒上限只會「降低」，不會比 PyTorch 預設多開
+        _thr = int(os.environ.get("PIKARA_CPU_THREADS", "0") or 0)
+        if _thr > 0 and _thr < torch.get_num_threads():
+            torch.set_num_threads(_thr)
+            print(f"  CPU 執行緒上限 {_thr}（功率模式 {os.environ.get('PIKARA_PERF', 'balanced')}）", flush=True)
+        if os.environ.get("PIKARA_AI_DEVICE") == "apple" and not torch.cuda.is_available():
+            # 官方 CosyVoice 程式只選 CUDA 或 CPU。MPS／MLX 路徑要先在真機 A/B（docs/MACOS.md §3）才會啟用，
+            # 這裡不假裝使用 Apple GPU：明確記錄目前是 CPU fp32。
+            mps = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+            print(f"  Apple Silicon：MPS {'可用' if mps else '不可用'}；CosyVoice 3 目前以 CPU fp32 執行（MPS／MLX 待 A/B 驗證）", flush=True)
         t0 = time.time()
         vram_before = gpu_used_mb()
         WD.set("載入 CosyVoice", "", LOAD_LIMIT)
