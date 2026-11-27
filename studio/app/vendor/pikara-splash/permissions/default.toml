@@ -1,0 +1,13 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Everything the Pikara splash and main windows need: read status, report first paint / main ready, reveal, close, wait for the backend and choose a recovery action."
+permissions = [
+  "allow-status",
+  "allow-shown",
+  "allow-reveal-main",
+  "allow-close",
+  "allow-main-ready",
+  "allow-wait-ready",
+  "allow-action",
+]

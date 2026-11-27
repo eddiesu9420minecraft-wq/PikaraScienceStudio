@@ -23,6 +23,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-notification = "2"
+# shared Pikara splash — vendored from CreateYourWorld/crates/pikara-splash (see ../pikara-splash.vendor.json)
+tauri-plugin-pikara-splash = { path = "../vendor/pikara-splash" }
 pinyin = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

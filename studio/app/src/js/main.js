@@ -9,6 +9,7 @@ import { store, on, refreshProjects, currentProject, wireEvents, monitorHistory 
 import { showWelcome } from './screens/guide.js';
 import { setTheme, getThemePref, onThemeChange } from './v03/theme.js';
 import { runTour } from './v03/tour.js';
+import { createBridge, mountReveal } from '../vendor/pikara-splash/pikara-splash.js';
 
 import dashboard from './screens/dashboard.js';
 import projectsx from './screens/projectsx.js';
@@ -138,7 +139,16 @@ function wireKeys() {
   });
 }
 
+// Shared Pikara splash (vendor/pikara-splash): the backend initializes behind the splash window; this
+// (hidden) window waits for it, renders real data, reports main_ready, then is revealed.
+const splash = hasTauri ? createBridge() : null;
+if (splash) {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-window').trim();
+  mountReveal(document.body, { theme: document.documentElement.dataset.theme, background: bg || undefined });
+}
+
 async function boot() {
+  if (splash) await splash.waitReady().catch(() => {});
   applyStatic(document);
   buildNav();
   wireLang();
@@ -168,7 +178,10 @@ async function boot() {
       if (info && info.schedulerActive === false && !info.uiTour) toast(t('另一個 Studio 程式正在執行佇列，這個視窗不會開始任何工作（只能檢視）。請關閉另一個後重新開啟。'), 'warn');
     } catch {}
   }
-  route();
+  // first screen rendered with real data → hand off from the splash. Capped so one slow screen
+  // can't hold the splash (the screen keeps loading in the visible window).
+  await Promise.race([route(), new Promise((r) => setTimeout(r, 2500))]);
+  if (splash) splash.mainReady().catch(() => {});
   if (info && info.uiTour) { runTour({ go, info, sections: SECTIONS }); return; }
   showWelcome(go);
   if (hasTauri) watchBackend();

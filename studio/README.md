@@ -40,6 +40,10 @@ Windows 桌面工具（Tauri 2），把 Pikara Science 的科普影片製作流�
 - 一般／進階模式、使用教學頁與第一次啟動導覽。
 - 測試紀錄：`app/TEST_REPORT_v0.2.0.md`。
 
+## 啟動畫面（Pikara 統一啟動畫面）
+
+啟動時先顯示與 Create Your World 共用的 Pikara 啟動畫面，列出真實的初始化步驟（資料庫、工作佇列恢復、背景服務、專案、環境檢查）；失敗時提供重試／開啟資料夾／結束等選項，不會卡住。共用套件是 vendored 副本：`app/vendor/pikara-splash`（Rust）與 `app/src/vendor/pikara-splash`（前端），來源與雜湊記錄在 `app/pikara-splash.vendor.json`。**不要直接修改副本**：請在 CreateYourWorld 的 `crates/pikara-splash` 修改後執行 `node <CYW>/crates/pikara-splash/sync.mjs --to studio/app`；`node app/vendor/pikara-splash/sync.mjs --check app` 可檢查副本。實測結果：`app/TEST_REPORT_splash.md`。
+
 ## 從原始碼建置
 
 需求（本機已驗證）：Rust 1.99（MSVC）、VS Build Tools 2022、WebView2、Node 26。

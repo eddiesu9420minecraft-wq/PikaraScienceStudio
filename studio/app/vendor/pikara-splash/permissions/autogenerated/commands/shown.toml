@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-shown"
+description = "Enables the shown command without any pre-configured scope."
+commands.allow = ["shown"]
+
+[[permission]]
+identifier = "deny-shown"
+description = "Denies the shown command without any pre-configured scope."
+commands.deny = ["shown"]

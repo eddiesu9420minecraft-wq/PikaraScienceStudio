@@ -1,0 +1,22 @@
+[package]
+name = "tauri-plugin-pikara-splash"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+description = "Pikara brand splash screen: real startup status, failure recovery and the hand-off to the main window. Shared by all Pikara Tauri apps."
+rust-version = "1.77"
+# Required so the app's tauri-build finds this plugin's permissions.
+links = "tauri-plugin-pikara-splash"
+exclude = ["web/node_modules"]
+
+[lib]
+name = "pikara_splash"
+path = "src/lib.rs"
+
+[dependencies]
+tauri = { version = "2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["sync", "time"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

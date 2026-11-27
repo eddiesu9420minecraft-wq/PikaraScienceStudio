@@ -2791,6 +2791,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-notification",
+ "tauri-plugin-pikara-splash",
  "tauri-plugin-single-instance",
  "uuid",
  "windows 0.62.2",
@@ -3953,6 +3954,16 @@ dependencies = [
  "time",
  "url",
  "zbus 5.19.0",
+]
+
+[[package]]
+name = "tauri-plugin-pikara-splash"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "tokio",
 ]
 
 [[package]]

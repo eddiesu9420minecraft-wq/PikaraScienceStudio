@@ -724,84 +724,236 @@ pub fn open_db() -> R<Db> {
     Ok(Arc::new(Mutex::new(db::open(&p)?)))
 }
 
+/// Settings needed before any WebView exists (UI GPU choice). Read-only: no migration, no file is
+/// created; defaults when the database is missing or unreadable (the splash then shows why).
+fn settings_before_ui() -> db::Settings {
+    let p = util::data_dir().join("studio.db");
+    rusqlite::Connection::open_with_flags(&p, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX)
+        .map(|c| db::settings_get(&c))
+        .unwrap_or_default()
+}
+
+fn open_data_dir() {
+    let d = util::data_dir();
+    let _ = std::fs::create_dir_all(&d);
+    #[cfg(windows)]
+    let _ = std::process::Command::new("explorer.exe").arg(&d).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(&d).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(&d).spawn();
+}
+
+/// Startup steps shown on the shared Pikara splash (vendor/pikara-splash).
+fn splash_config() -> pikara_splash::Config<tauri::Wry> {
+    use pikara_splash::Action;
+    pikara_splash::Config::new()
+        .step("db", "資料庫")
+        .step("recover", "工作佇列")
+        .step("services", "背景服務")
+        .step("projects", "專案")
+        .step("env", "環境檢查")
+        .slow_action_for("db", Action::new("open_data", "開啟資料夾"))
+        .slow_action(Action::quit("結束"))
+        .on_action(|_app, id| {
+            if id == "open_data" {
+                open_data_dir();
+            }
+        })
+}
+
+fn panic_text(p: Box<dyn std::any::Any + Send>) -> String {
+    p.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_else(|| "未知的內部錯誤".into())
+}
+
+/// Real startup work, on its own thread while the splash shows each step. Nothing waits on purpose.
+fn initialize(app: tauri::AppHandle, monitor_init: std::thread::JoinHandle<monitor::Monitor>) {
+    use pikara_splash::{Action, Failure, SplashExt};
+    let s = app.splash();
+
+    // 1. database (schema migration + verified backup happen inside db::open)
+    s.begin("db", "正在開啟資料庫…");
+    let db = loop {
+        let r = match s.injected_failure("db") {
+            Some(e) => Err(e),
+            None => open_db(),
+        };
+        match r {
+            Ok(db) => break db,
+            Err(e) => {
+                let path = util::data_dir().join("studio.db");
+                let detail = format!(
+                    "{}\n{e}\n\nStudio 不會刪除或覆寫這個檔案；升級前的自動備份在同一資料夾的 backups 內。若另一個程式正在使用它，關閉後按「重試」。",
+                    util::clean_path(&path)
+                );
+                s.fail_blocking(
+                    Failure::new("db", "無法開啟 Studio 資料庫", detail)
+                        .action(Action::new("open_data", "開啟資料夾"))
+                        .action(Action::quit("結束"))
+                        .action(Action::primary("retry", "重試")),
+                );
+                // retry (or re-check after the folder was opened)
+            }
+        }
+    };
+    let schema = db::user_version(&db.lock().unwrap_or_else(|e| e.into_inner()));
+    s.done_with("db", format!("結構版本 v{schema}"));
+
+    // 2. job queue: only one process may run the queue / autopilot for a data dir (else every job would run twice)
+    s.begin("recover", "正在恢復中斷的工作…");
+    let handle = app.clone();
+    let emit: queue::Emit = Arc::new(move |name: &str, payload: Value| {
+        let _ = handle.emit(name, payload);
+    });
+    let q = Queue::new(db.clone(), emit.clone());
+    let mut scheduler_on = false;
+    match util::scheduler_lock() {
+        Ok(f) => {
+            std::mem::forget(f); // held for the life of the app
+            scheduler_on = true;
+            loop {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| q.recover())) {
+                    Ok(ids) if ids.is_empty() => {
+                        s.done_with("recover", "沒有中斷的工作");
+                        break;
+                    }
+                    Ok(ids) => {
+                        eprintln!("recovered {} interrupted job(s)", ids.len());
+                        s.done_with("recover", format!("已恢復 {} 個中斷的工作", ids.len()));
+                        break;
+                    }
+                    Err(p) => {
+                        let f = Failure::new("recover", "無法恢復工作佇列", panic_text(p))
+                            .action(Action::new("view_only", "略過，以檢視模式啟動"))
+                            .action(Action::quit("結束"))
+                            .action(Action::primary("retry", "重試"));
+                        if s.fail_blocking(f) == "view_only" {
+                            scheduler_on = false;
+                            s.skip("recover", "檢視模式：這次不執行佇列");
+                            break;
+                        }
+                    }
+                }
+            }
+            if scheduler_on {
+                queue::spawn_scheduler(q.clone());
+            }
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            s.skip("recover", "另一個 Studio 正在執行佇列，這個視窗只能檢視");
+        }
+    }
+    SCHEDULER_ON.store(scheduler_on, std::sync::atomic::Ordering::Relaxed);
+
+    // 3. background services
+    s.begin("services", "正在啟動背景服務…");
+    gpu::spawn_sampler();
+    watchdog::spawn();
+    // started at process start (sysinfo's CPU counters take ~1 s to initialize on Windows); usually done by now
+    let mon = Arc::new(monitor_init.join().unwrap_or_else(|_| monitor::Monitor::new()));
+    // monitor thread: every 2 s → monitor://sample, metrics table every 10 s
+    {
+        let (mon, q, db, emit) = (mon.clone(), q.clone(), db.clone(), emit.clone());
+        std::thread::Builder::new()
+            .name("studio-monitor".into())
+            .spawn(move || {
+                let mut n = 0u64;
+                loop {
+                    watchdog::run_loop("monitor", || {
+                        watchdog::beat("monitor", "sample");
+                        let s = mon.sample(|g| q.check_external(g));
+                        let mut v = serde_json::to_value(&s).unwrap_or(Value::Null);
+                        if n % 5 == 0 {
+                            watchdog::beat("monitor", "metrics → db");
+                            let _ = db::metric_add(&db.lock().unwrap_or_else(|e| e.into_inner()), &v);
+                        }
+                        v["threads"] = watchdog::status();
+                        watchdog::beat("monitor", "emit");
+                        emit("monitor://sample", v);
+                    });
+                    n += 1;
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+            })
+            .ok();
+    }
+    let notify_handle = app.clone();
+    let notify: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(move |title: &str, body: &str| {
+        use tauri_plugin_notification::NotificationExt;
+        let _ = notify_handle.notification().builder().title(title).body(body).show();
+    });
+    let ap = autopilot::Autopilot::new(db.clone(), q.clone(), notify, emit.clone());
+    if scheduler_on {
+        autopilot::spawn(ap.clone());
+    }
+    app.manage(AppState { db: db.clone(), queue: q, monitor: mon, autopilot: ap });
+    s.done_with("services", if scheduler_on { "佇列與自動製作已啟動" } else { "檢視模式" });
+
+    // 4. projects: allow <video src=convertFileSrc(...)> for registered projects, and check their folders
+    s.begin("projects", "正在載入專案…");
+    let projects = db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner())).unwrap_or_default();
+    let mut missing = vec![];
+    for p in &projects {
+        let _ = app.asset_protocol_scope().allow_directory(&p.root_path, true);
+        if !Path::new(&p.root_path).is_dir() {
+            missing.push(p.name.clone());
+        }
+    }
+    if missing.is_empty() {
+        s.done_with("projects", format!("{} 個專案", projects.len()));
+    } else {
+        s.warn("projects", format!("找不到 {} 個專案資料夾：{}", missing.len(), missing.join("、")));
+    }
+
+    // 5. quick environment check (the full check stays in 診斷 → 環境醫生). Also warms util::tool's cache.
+    s.begin("env", "正在檢查環境…");
+    let (ffmpeg, ffprobe, git) = std::thread::scope(|sc| {
+        let a = sc.spawn(|| util::tool("ffmpeg").is_some());
+        let b = sc.spawn(|| util::tool("ffprobe").is_some());
+        let c = sc.spawn(|| util::which("git").is_some());
+        (a.join().unwrap_or(false), b.join().unwrap_or(false), c.join().unwrap_or(false))
+    });
+    let lost: Vec<&str> = [("ffmpeg", ffmpeg), ("ffprobe", ffprobe), ("git", git)].iter().filter(|(_, ok)| !ok).map(|(n, _)| *n).collect();
+    if lost.is_empty() {
+        s.done_with("env", "ffmpeg・ffprobe・git");
+    } else {
+        s.warn("env", format!("找不到 {}，相關工作會失敗；可到「診斷 → 環境醫生」修復", lost.join("、")));
+    }
+
+    s.backend_done();
+}
+
 pub fn run() {
-    let db = open_db().expect("open studio.db");
     // v0.3: choose the UI GPU before WebView2 starts (this process only; nothing system-wide is changed)
-    let _ = hardware::launch::prepare_ui(&db::settings_get(&db.lock().unwrap_or_else(|e| e.into_inner())));
+    let _ = hardware::launch::prepare_ui(&settings_before_ui());
     // full detection (device manager, CUDA) in the background so the window is not delayed
     std::thread::spawn(|| { let _ = std::panic::catch_unwind(hardware::manager::snapshot); });
-    tauri::Builder::default()
+    // CPU/RAM monitor setup is slow (Windows PDH); overlap it with Tauri + WebView2 startup
+    let monitor_init = std::thread::spawn(monitor::Monitor::new);
+    // A separate data dir (PIKARA_STUDIO_DATA, tests) is a separate Studio: own WebView2 profile, no single-instance hand-off.
+    let separate = std::env::var_os("PIKARA_STUDIO_DATA").is_some();
+    if separate && std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
+        std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", util::data_dir().join("EBWebView"));
+    }
+    let mut builder = tauri::Builder::default();
+    if !separate {
         // A second launch focuses the running window instead of failing on the locked WebView2 profile.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
-        }))
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| pikara_splash::focus(app)));
+    }
+    builder
+        .plugin(pikara_splash::init(splash_config()))
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
-            let handle = app.handle().clone();
-            let emit: queue::Emit = Arc::new(move |name: &str, payload: Value| {
-                let _ = handle.emit(name, payload);
-            });
-            let q = Queue::new(db.clone(), emit.clone());
-            // only one process may run the queue / autopilot for a data dir (else every job would run twice)
-            let lock = util::scheduler_lock();
-            let scheduler_on = lock.is_ok();
-            SCHEDULER_ON.store(scheduler_on, std::sync::atomic::Ordering::Relaxed);
-            if let Ok(f) = lock {
-                std::mem::forget(f); // held for the life of the app
-                let recovered = q.recover();
-                if !recovered.is_empty() {
-                    eprintln!("recovered {} interrupted job(s)", recovered.len());
+            let h = app.handle().clone();
+            std::thread::Builder::new().name("studio-init".into()).spawn(move || {
+                let h2 = h.clone();
+                if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || initialize(h2, monitor_init))) {
+                    use pikara_splash::{Action, Failure, SplashExt};
+                    let f = Failure { step: None, title: "啟動時發生內部錯誤".into(), detail: panic_text(p), actions: vec![Action::primary(pikara_splash::ACTION_QUIT, "結束")] };
+                    h.splash().fail_blocking(f);
                 }
-                queue::spawn_scheduler(q.clone());
-            } else if let Err(e) = &lock {
-                eprintln!("{e}");
-            }
-            gpu::spawn_sampler();
-            watchdog::spawn();
-            let mon = Arc::new(monitor::Monitor::new());
-            // monitor thread: every 2 s → monitor://sample, metrics table every 10 s
-            {
-                let (mon, q, db, emit) = (mon.clone(), q.clone(), db.clone(), emit.clone());
-                std::thread::Builder::new()
-                    .name("studio-monitor".into())
-                    .spawn(move || {
-                        let mut n = 0u64;
-                        loop {
-                            watchdog::run_loop("monitor", || {
-                                watchdog::beat("monitor", "sample");
-                                let s = mon.sample(|g| q.check_external(g));
-                                let mut v = serde_json::to_value(&s).unwrap_or(Value::Null);
-                                if n % 5 == 0 {
-                                    watchdog::beat("monitor", "metrics → db");
-                                    let _ = db::metric_add(&db.lock().unwrap_or_else(|e| e.into_inner()), &v);
-                                }
-                                v["threads"] = watchdog::status();
-                                watchdog::beat("monitor", "emit");
-                                emit("monitor://sample", v);
-                            });
-                            n += 1;
-                            std::thread::sleep(std::time::Duration::from_secs(2));
-                        }
-                    })
-                    .ok();
-            }
-            // allow <video src=convertFileSrc(...)> for registered projects
-            for p in db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner())).unwrap_or_default() {
-                let _ = app.asset_protocol_scope().allow_directory(&p.root_path, true);
-            }
-            let notify_handle = app.handle().clone();
-            let notify: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(move |title: &str, body: &str| {
-                use tauri_plugin_notification::NotificationExt;
-                let _ = notify_handle.notification().builder().title(title).body(body).show();
-            });
-            let ap = autopilot::Autopilot::new(db.clone(), q.clone(), notify, emit.clone());
-            if scheduler_on {
-                autopilot::spawn(ap.clone());
-            }
-            app.manage(AppState { db: db.clone(), queue: q, monitor: mon, autopilot: ap });
+            })?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
