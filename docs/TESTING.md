@@ -61,4 +61,8 @@ $env:PIKARA_GPU_LOCK='D:\t\xp-data\gl\gpu.lock'; py -3.11 -c "import sys; sys.pa
 
 | 日期 | 平台 | 結果 |
 |---|---|---|
+| 2026-11-27 | CI #1（GitHub，run 45989906162） | 四平台都**能編譯**；Windows 124／124 通過；macOS arm64 115／124、Linux 116／124、macOS x64 失敗 → 找到真正的 Unix 問題：多處把 `/` 轉成 `\`（narration.json、layout、worktree、scaffold 路徑在 Unix 變成含反斜線的檔名）、`mklink /J` 目錄連結、`cmd copy`、暫停測試的環境變數競賽。已在下一個 commit 修正。macOS arm64／x64 `.app`+`.dmg` 建置成功（5.90／6.28 MiB），Mach-O arm64，bundle 內沒有 .exe/.dll，bundle 內執行 `--cli hardware` 成功 |
+| 2026-11-27 | CI #1 媒體（macos-15 arm64 VM，macOS 15.8.2） | **h264_videotoolbox、hevc_videotoolbox 實際編碼成功**（469／498 ms）；libx264／libx265 也可用。**MLX Metal 矩陣乘成功**（809 GFLOPS，CPU 190）；torch MPS 在 VM 中不可用（built=True，available=False，GitHub VM 的已知限制）。**Remotion 1080p30 實際渲染 90 幀**（3.2 fps，並行 1，3 核 VM），用 h264_videotoolbox 編碼，ffprobe：1920×1080、30 fps、90 幀。WebGL renderer 字串沒有擷取到（連 SwiftShader 也沒有 → log 擷取問題，不是 GPU 問題；已改 gpu-check 並保存完整 log） |
+| 2026-11-27 | CI #1 媒體（macos-15-intel VM，macOS 15.7.9） | VideoToolbox h264／hevc 失敗（-22，VM 沒有硬體編碼）→ 正確退回 libx264／libx265；MPS 不可用 |
+| 2026-11-27 | CI #1 媒體（ubuntu-24.04） | NVENC／QSV／VA-API 全部正確判定不可用 → libx264／libx265 |
 | 2026-11-27 | Windows 11（Ryzen 7 7445HS + RTX 4050 Laptop 6 GB + Radeon 740M，32 GB） | `cargo test` 124 通過／0 失敗；`--cli hardware`：RTX 4050 discrete 5920 MiB、740M integrated、AI=CUDA、渲染=RTX 4050；平衡模式 渲染 2→4、TTS 批次 4；accel_probe：CUDA 5022 GFLOPS、CPU 403 GFLOPS、MPS／MLX 正確回報不可用 |

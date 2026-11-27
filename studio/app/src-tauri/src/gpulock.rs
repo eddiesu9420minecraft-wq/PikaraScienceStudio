@@ -182,9 +182,12 @@ mod tests {
         assert!(try_acquire_job("配音", &["10de:28e1#0".into()]).is_err());
         let c1 = try_acquire_job("CPU 渲染", &[]).unwrap();
         assert!(try_acquire_job("CPU 配音", &[]).is_err());
-        assert_eq!(busy_adapters().len(), 3);
+        // only this test's locks: other tests in the same process (queue GPU jobs) may hold leases concurrently
+        let keys = ["10de:28e1#0", "1002:1901#0", "cpu-heavy"];
+        assert!(keys.iter().all(|k| !is_free(&adapter_lock_path(k))), "all three leases held");
         drop((j1, j2, c1));
-        assert!(busy_adapters().is_empty());
+        // cpu-heavy is shared with concurrently running queue tests: check the two adapter leases
+        assert!(keys[..2].iter().all(|k| is_free(&adapter_lock_path(k))), "adapter leases released");
         let _ = std::fs::remove_dir_all(lock_path().parent().unwrap());
     }
 }

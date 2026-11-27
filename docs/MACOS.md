@@ -19,9 +19,9 @@
 | 防睡眠 | `/usr/bin/caffeinate -i -w <Studio pid>`（Studio 結束時自動釋放） | 已改，待真機 `pmset -g assertions` |
 | 工具搜尋 | PATH + `/opt/homebrew/bin`、`/usr/local/bin`、`/opt/local/bin`（Finder 啟動的 App 的 PATH 很短） | 已改，待真機 |
 | 硬體 | `sysctl`（Apple Silicon／Intel、Rosetta、P/E 核心、記憶體）＋ `system_profiler SPDisplaysDataType -json`（GPU、核心數、Metal 家族；Intel Mac 的 AMD 獨顯 VRAM） | 已改，單元測試＋CI |
-| 加速器 | `scripts/accel_probe.py`：torch MPS、MLX 各做一次真實矩陣乘並比對 CPU 結果 | 已改，CI 實測中 |
-| 編碼 | `h264_videotoolbox`／`hevc_videotoolbox`，`-allow_sw 0`，每次 1 秒 720p60 試編碼＋ffprobe 驗證；失敗退回 libx264/libx265 | 既有設計，CI 實測中 |
-| 渲染 | Remotion + chrome-headless-shell（`mac-arm64`／`mac-x64`），`--gl=angle`（ANGLE → Metal） | 待 CI／真機確認 WebGL renderer 字串與 FPS |
+| 加速器 | `scripts/accel_probe.py`：torch MPS、MLX 各做一次真實矩陣乘並比對 CPU 結果 | 已改；CI arm64 VM：MLX Metal 可用（809 GFLOPS），MPS 在 VM 中不可用 |
+| 編碼 | `h264_videotoolbox`／`hevc_videotoolbox`，`-allow_sw 0`，每次 1 秒 720p60 試編碼＋ffprobe 驗證；失敗退回 libx264/libx265 | **CI（arm64 VM）實測可用**：h264／hevc_videotoolbox 真實編碼通過；Intel VM 不可用並正確退回 libx264；真機待測 |
+| 渲染 | Remotion + chrome-headless-shell（`mac-arm64`／`mac-x64`），`--gl=angle`（ANGLE → Metal） | CI arm64 VM：1080p30 90 幀實際渲染成功（3.2 fps，VM 3 核）；WebGL renderer 字串待下一次 CI；真機 FPS 待測 |
 | 套件 | `.app` + `.dmg`（`tauri.macos.conf.json`，最低 macOS 12），**未簽章、未公證** | CI 建置中 |
 
 ## 3. 語音（TTS）候選與 A/B 測試計畫

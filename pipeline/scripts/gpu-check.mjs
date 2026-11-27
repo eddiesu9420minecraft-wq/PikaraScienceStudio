@@ -19,6 +19,25 @@ const OUT = join(ROOT, 'out', 'gpu-check.json');
 const SOFTWARE = /SwiftShader|Basic Render|WARP|llvmpipe|softpipe|Software Rasterizer/i;
 const GL = process.platform === 'linux' ? 'angle-egl' : 'angle';
 
+/** chrome-headless-shell Remotion downloaded for this OS / CPU (same rule as Studio's platform::remotion_chs). */
+const chsPath = () => {
+  const plat = process.platform === 'win32' ? 'win64' : process.platform === 'darwin' ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64') : 'linux64';
+  return join(ROOT, 'node_modules', '.remotion', 'chrome-headless-shell', plat, `chrome-headless-shell-${plat}`, `chrome-headless-shell${process.platform === 'win32' ? '.exe' : ''}`);
+};
+
+/** Independent WebGL probe: the same browser binary, ANGLE (platform default backend) or SwiftShader. */
+const domProbe = (gl) => {
+  const exe = ensureBrowser() ?? chsPath();
+  if (!existsSync(exe)) return {renderer: null, log: `browser not found: ${exe}`};
+  const page = 'data:text/html,<body></body><script>var c=document.createElement("canvas").getContext("webgl");var e=c&&c.getExtension("WEBGL_debug_renderer_info");'
+    + 'document.body.setAttribute("data-renderer",c?(e?c.getParameter(e.UNMASKED_RENDERER_WEBGL):c.getParameter(c.RENDERER)):"NO_WEBGL")</script>';
+  const flags = ['--headless', '--no-sandbox', '--disable-extensions', '--ignore-gpu-blocklist', '--use-gl=angle', `--use-angle=${gl === 'swangle' ? 'swiftshader' : 'default'}`,
+    ...(gl === 'swangle' ? ['--enable-unsafe-swiftshader'] : []), '--virtual-time-budget=3000', '--dump-dom', page];
+  const r = run(exe, flags, {timeout: 60000});
+  const m = /data-renderer="([^"]*)"/.exec(r.out);
+  return {renderer: m && m[1] !== 'NO_WEBGL' ? m[1].replace(/&amp;/g, '&') : null, log: r.out.slice(-4000)};
+};
+
 const out = {time: new Date().toISOString(), ok: true, problems: [], warnings: []};
 const fail = (msg) => {
   out.ok = false;
@@ -60,7 +79,21 @@ if (!force && prev?.webglSig === sig && prev.webgl_angle?.renderer && Date.now()
     } catch {}
     const line = plain.split(/\r?\n/).find((l) => l.includes('[gpu-probe]') && l.includes('renderer'));
     const m = line?.match(/\\?"renderer\\?"\s*:\s*\\?"((?:[^"\\]|\\.)+?)\\?"/);
-    out[gl === 'swangle' ? 'webgl_swangle' : 'webgl_angle'] = {renderer: m ? m[1] : null, gl, raw: m ? undefined : r.out.slice(-400)};
+    let renderer = m ? m[1] : null;
+    let via = 'remotion-still';
+    if (!renderer) {
+      // Remotion versions that do not forward browser console.log for `still`: ask the same chrome-headless-shell
+      // binary directly (--dump-dom prints the page after its script wrote the WebGL renderer into the DOM)
+      const d = domProbe(gl);
+      if (d.renderer) {
+        renderer = d.renderer;
+        via = 'chrome-dump-dom';
+      }
+      try {
+        writeFileSync(join(ROOT, 'out', `probe-${gl}-dom.log`), d.log ?? '');
+      } catch {}
+    }
+    out[gl === 'swangle' ? 'webgl_swangle' : 'webgl_angle'] = {renderer, gl, via, raw: renderer ? undefined : r.out.slice(-400)};
   }
   out.webglTime = out.time;
 }

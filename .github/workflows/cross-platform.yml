@@ -88,6 +88,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
+          if [ "$RUNNER_OS" = macOS ]; then system_profiler SPDisplaysDataType -json > out/system_profiler-displays.json || true; cat out/system_profiler-displays.json; fi
           node -e "import('./scripts/hwenc.mjs').then(async m => { const r = await m.probe({codec:'h264', all:true, force:true}); console.log(JSON.stringify(r,null,2)); })" | tee out/hwenc-h264.json
           node -e "import('./scripts/hwenc.mjs').then(async m => { const r = await m.probe({codec:'hevc', all:true, force:true}); console.log(JSON.stringify(r,null,2)); })" | tee out/hwenc-hevc.json
       - name: Pipeline dependencies

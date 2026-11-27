@@ -14,10 +14,10 @@
 
 | 項目 | Mac mini M2 | GitHub macos-15（VM，僅供參考） |
 |---|---|---|
-| accel_probe（MPS／MLX／CPU） | 待測 | 見 TESTING.md §7 |
-| VideoToolbox h264／hevc 試編碼 | 待測 | 見 TESTING.md §7 |
-| WebGL renderer | 待測 | 見 TESTING.md §7 |
-| 90 幀渲染 | 待測 | 見 TESTING.md §7 |
+| accel_probe（MPS／MLX／CPU，1024² fp32） | 待測 | MLX 809 GFLOPS；CPU 190 GFLOPS；MPS 不可用（VM） |
+| VideoToolbox h264／hevc 試編碼（1 s 720p60） | 待測 | 469 ms／498 ms（libx264 1272 ms、libx265 5258 ms） |
+| WebGL renderer | 待測 | 未擷取（log 問題，已修，待下一次 CI） |
+| 90 幀 1080p30 渲染（EP01-30fps） | 待測 | 28 s，3.2 fps，並行 1，h264_videotoolbox |
 | 語音 A/B（chars/s、RTF、峰值記憶體、CER） | 待測 | 不適用（VM 7 GB） |
 | ASR | 待測 | — |
 | 1080p30 整集 | 待測 | — |
