@@ -107,15 +107,48 @@ def render_segment(preset: str, duration: float, out: Path, ff) -> None:
     ])
 
 
+def _segment_key(preset: str, duration: float) -> str:
+    import hashlib
+    # 運算式、長度與濾鏡都相同 → 輸出逐位元相同，可以重用（重新配音後只有長度改變的場景要重做）
+    return hashlib.sha256(f"{SEGMENT_VERSION}|{preset}|{PRESETS[preset]()}|{duration:.3f}|{SR}".encode()).hexdigest()[:16]
+
+
+SEGMENT_VERSION = "1"
+
+
 def build_score(segments: list[tuple[str, float]], workdir: Path, out: Path, ff, xfade: float = 2.5) -> None:
-    """segments: [(preset, 秒數)]，相鄰段以 acrossfade 交叉淡化；總長等於各段總和。"""
-    files = []
+    """segments: [(preset, 秒數)]，相鄰段以 acrossfade 交叉淡化；總長等於各段總和。
+
+    每段是獨立的單執行緒 ffmpeg（aevalsrc），平行產生（最多一半的邏輯核心，渲染同時進行也留有餘裕），
+    並以內容雜湊快取：EP16 實測 10 段依序產生 247 秒。"""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    files, todo, reused = [], [], 0
     for i, (preset, dur) in enumerate(segments):
         # 交叉淡化會吃掉重疊長度，除最後一段外每段多產生 xfade 秒
         extra = xfade if i < len(segments) - 1 else 0.0
         f = workdir / f"music_{i:02d}_{preset}.wav"
-        render_segment(preset, dur + extra, f, ff)
+        key = _segment_key(preset, dur + extra)
+        stamp = f.with_suffix(".key")
+        if f.exists() and stamp.exists() and stamp.read_text(encoding="utf-8").strip() == key:
+            reused += 1
+        else:
+            stamp.unlink(missing_ok=True)
+            todo.append((preset, dur + extra, f, stamp, key))
         files.append(f)
+
+    def one(job):
+        preset, d, f, stamp, key = job
+        render_segment(preset, d, f, ff)
+        stamp.write_text(key, encoding="utf-8")
+
+    cap = int(os.environ.get("PIKARA_MIX_WORKERS") or 0) or (os.cpu_count() or 2) // 2
+    workers = max(1, min(len(todo), cap))
+    if todo:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(one, todo))  # 任何一段失敗都會在這裡拋出
+    print(f"   配樂分段：產生 {len(todo)} 段（並行 {workers if todo else 0}），重用 {reused} 段", flush=True)
     if len(files) == 1:
         total = segments[0][1]
         ff(["-i", str(files[0]), "-af", f"afade=t=out:st={max(0, total - 3):.3f}:d=3,atrim=end={total:.3f}", "-c:a", "pcm_s24le", str(out)])
