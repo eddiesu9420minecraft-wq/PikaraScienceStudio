@@ -56,8 +56,11 @@ fn main() {
     let commit = std::env::var("GITHUB_SHA").ok().filter(|s| !s.is_empty()).or_else(|| git(&["rev-parse", "HEAD"])).unwrap_or_else(|| "unknown".into());
     let dirty = std::env::var("GITHUB_SHA").is_err() && git(&["status", "--porcelain", "--untracked-files=no"]).is_some_and(|s| !s.is_empty());
     println!("cargo:rustc-env=PIKARA_GIT_COMMIT={}{}", commit, if dirty { "-dirty" } else { "" });
-    if let Some(head) = git(&["rev-parse", "--git-path", "HEAD"]) {
-        println!("cargo:rerun-if-changed={}", repo.join(head).display());
+    // HEAD only names the branch; the reflog changes on every commit, checkout and reset
+    for f in ["HEAD", "logs/HEAD"] {
+        if let Some(p) = git(&["rev-parse", "--git-path", f]) {
+            println!("cargo:rerun-if-changed={}", repo.join(p).display());
+        }
     }
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     tauri_build::build()
