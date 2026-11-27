@@ -43,6 +43,7 @@ GENERATOR_VERSION = "pikara-cosy-v1"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pronunciation import PronunciationEngine, lang_for  # noqa: E402  英文術語 → TTS 朗讀文字（不改字幕）
 from audio_integrity import analyze as audio_check  # noqa: E402  每句輸出的完整性檢查
+from asr_norm import norm_cer  # noqa: E402  繁簡字形與數字寫法不算念錯
 from tts_watchdog import GpuLogger, Watchdog, env_secs  # noqa: E402  心跳、階段上限、不留子程序的 GPU 記錄
 
 # 心跳＋階段上限（見 tts_watchdog.py）。上限都可用環境變數調整；設 0 關閉該項上限。
@@ -323,11 +324,14 @@ def align(speak: str, words: list[tuple[str, float, float]]) -> tuple[list[dict]
         for j, cb in enumerate(hyp, 1):
             cur = min(d[j] + 1, d[j - 1] + 1, prev + (ca != cb))
             prev, d[j] = d[j], cur
-    cer = d[len(hyp)] / max(1, len(target))
+    cer_raw = d[len(hyp)] / max(1, len(target))
+    # 讀音相關的錯誤率：繁簡字形（旁白簡體、ASR 轉成繁體，或反過來）與數字寫法（一九四六 ↔ 1946）不算錯。
+    # 重試與 Studio 的發音檢查都用這個值；只看原始 CER 會把念對的句子重新合成（實測 1066 句：116 句 → 19 句）
+    cer = min(cer_raw, norm_cer(target, hyp))
     bnd = [{"type": "WordBoundary", "text": target[i], "start": round(t[0], 3), "end": round(t[1], 3)}
            for i, t in enumerate(times) if t is not None]
     # build_timeline 以 norm(text) 尋找，需用原字（保留大小寫無妨，norm 會轉小寫）
-    stats = {"matched": sum(t is not None for t in times), "total": len(target), "cer": round(cer, 4), "asr": hyp}
+    stats = {"matched": sum(t is not None for t in times), "total": len(target), "cer": round(cer, 4), "cerRaw": round(cer_raw, 4), "asr": hyp}
     return bnd, stats
 
 

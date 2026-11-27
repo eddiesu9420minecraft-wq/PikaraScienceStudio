@@ -32,6 +32,7 @@ macro_rules! embedded {
 /// Pipeline files this Studio build manages. Tests, benchmarks and experiments are not shipped.
 /// `embedded_list_matches_pipeline_dir` (test) fails when a script is added to pipeline/scripts but not here.
 pub const FILES: &[(&str, &[u8])] = embedded![
+    "asr_norm.py",
     "audio_integrity.py",
     "benchmark.mjs",
     "build_timeline.py",
