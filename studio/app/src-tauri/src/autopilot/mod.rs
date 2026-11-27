@@ -25,7 +25,7 @@ use crate::db::{self, Db};
 use crate::gitops::{self, git};
 use crate::jobs::worktree_dir;
 use crate::queue::Queue;
-use crate::util::{clean_path, now_iso, now_ms, run};
+use crate::util::{clean_path, now_iso, now_ms};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::{params, OptionalExtension};

@@ -82,7 +82,7 @@ fn steps_map_to_real_pipeline_commands() {
     assert_eq!(b[5].parser, Parser::Render);
     assert!(b[6].args.contains(&"EP01_Bilibili_zh-CN.mp4".to_string()));
     let y = build_steps("youtube_15x", &json!({}), &ctx).unwrap();
-    assert_eq!(y[0].args, vec!["-3.11", "-u", "scripts/scale_srt.py", "EP01.srt", "EP01_YouTube_zh-TW.srt", "1.5"]);
+    assert_eq!(y[0].args, pyargs(&["-u", "scripts/scale_srt.py", "EP01.srt", "EP01_YouTube_zh-TW.srt", "1.5"]));
     assert!(y[1].args.contains(&"EP01-YT15".to_string()));
     let r = build_steps("render", &json!({"comp": "EP01-30fps", "out": "X.mp4", "src": "src_cn", "frames": "0-99"}), &ctx).unwrap();
     assert_eq!(r[0].args, vec!["scripts/render.mjs", "gpu", "--comp", "EP01-30fps", "--out", "X.mp4", "--src", "src_cn", "--frames", "0-99"]);
@@ -110,26 +110,26 @@ fn episode_parameter_drives_commands_and_output_names() {
     let r = build_steps("render", &json!({"episode": "ep02", "chunk": 120}), &ctx).unwrap();
     assert_eq!(r[0].args, vec!["scripts/render.mjs", "gpu", "--comp", "EP02-30fps", "--out", "EP02_Final.mp4", "--chunk", "120"]);
     let q = build_steps("qa", &json!({"episode": "ep03"}), &ctx).unwrap();
-    assert_eq!(q[0].args, vec!["-3.11", "-u", "scripts/qa_video.py", "EP03_Final.mp4", "--seq", "ep03"]);
+    assert_eq!(q[0].args, pyargs(&["-u", "scripts/qa_video.py", "EP03_Final.mp4", "--seq", "ep03"]));
     let v = build_steps("voiceover_cn", &json!({"episode": "ep02"}), &ctx).unwrap();
     assert!(v[0].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
     let b = build_steps("bilibili", &json!({"episode": "ep02"}), &ctx).unwrap();
-    assert_eq!(b[0].args, vec!["-3.11", "-u", "scripts/make_cn.py", "--seq", "ep02"]);
+    assert_eq!(b[0].args, pyargs(&["-u", "scripts/make_cn.py", "--seq", "ep02"]));
     assert!(b[2].args.windows(2).any(|w| w[0] == "--srt-name" && w[1] == "ep02_cn"));
-    assert!(b[3].args.contains(&r"out\subtitles\ep02_cn.srt".to_string()) && b[3].args.contains(&"EP02_Bilibili_zh-CN.srt".to_string()));
+    assert!(b[3].args.contains(&crate::platform::native("out/subtitles/ep02_cn.srt")) && b[3].args.contains(&"EP02_Bilibili_zh-CN.srt".to_string()));
     assert!(b[4].args.windows(2).any(|w| w[0] == "--mix-name" && w[1] == "ep02_cn"));
     assert!(b[5].args.windows(2).any(|w| w[0] == "--comp" && w[1] == "EP02-30fps") && b[5].args.contains(&"EP02_Bilibili_zh-CN.mp4".to_string()));
     assert!(b[6].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
     let y = build_steps("youtube_15x", &json!({"episode": "ep02"}), &ctx).unwrap();
-    assert_eq!(y[0].args, vec!["-3.11", "-u", "scripts/scale_srt.py", "EP02.srt", "EP02_YouTube_zh-TW.srt", "1.5"]);
+    assert_eq!(y[0].args, pyargs(&["-u", "scripts/scale_srt.py", "EP02.srt", "EP02_YouTube_zh-TW.srt", "1.5"]));
     assert!(y[1].args.contains(&"EP02-YT15".to_string()) && y[1].args.contains(&"EP02_YouTube_zh-TW.mp4".to_string()));
     let f = build_steps("final_tw", &json!({"episode": "ep02"}), &ctx).unwrap();
     let fl: Vec<&str> = f.iter().map(|x| x.label.as_str()).collect();
     assert_eq!(fl, vec!["時間軸 EP02", "複製字幕", "混音 EP02", "渲染 EP02-30fps", "品質檢查 EP02"]);
-    assert!(f[1].args.contains(&r"out\subtitles\ep02.srt".to_string()) && f[1].args.contains(&"EP02.srt".to_string()));
+    assert!(f[1].args.contains(&crate::platform::native("out/subtitles/ep02.srt")) && f[1].args.contains(&"EP02.srt".to_string()));
     let m = build_steps("make_cn", &json!({"episode": "ep02", "reconvert": true}), &ctx).unwrap();
-    assert_eq!(m[0].args, vec!["-3.11", "-u", "scripts/make_cn.py", "--seq", "ep02", "--reconvert"]);
-    assert_eq!(build_steps("make_cn", &json!({}), &ctx).unwrap()[0].args, vec!["-3.11", "-u", "scripts/make_cn.py"]);
+    assert_eq!(m[0].args, pyargs(&["-u", "scripts/make_cn.py", "--seq", "ep02", "--reconvert"]));
+    assert_eq!(build_steps("make_cn", &json!({}), &ctx).unwrap()[0].args, pyargs(&["-u", "scripts/make_cn.py"]));
     // v1 `seq` still accepted; bad ids refused with a zh-TW message
     let t = build_steps("timeline", &json!({"seq": "ep02"}), &ctx).unwrap();
     assert!(t[0].args.windows(2).any(|w| w[0] == "--seq" && w[1] == "ep02"));
@@ -181,4 +181,11 @@ fn preflight_gives_friendly_messages() {
     assert!(preflight_with("render", &json!({"episode": "ep02", "src": "src_cn"}), &d, &s, &all).unwrap_err().contains("src_cn"));
     assert!(preflight_with("custom", &json!({"command": "echo"}), &d, &s, &no_probe).is_ok());
     let _ = std::fs::remove_dir_all(&d);
+}
+
+/// Expected argv of a `py` step on this platform (`py -3.11 …` on Windows, `python3.11 …` elsewhere).
+fn pyargs(rest: &[&str]) -> Vec<String> {
+    let mut v = crate::platform::python311().1;
+    v.extend(rest.iter().map(|s| s.to_string()));
+    v
 }

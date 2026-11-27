@@ -28,6 +28,14 @@ pub const OS: &str = if cfg!(windows) {
 
 pub const ARCH: &str = std::env::consts::ARCH;
 
+/// Path separator as a string (`\\` on Windows, `/` elsewhere) — for turning `a/b/c` relative paths into native ones.
+pub const SEP: &str = std::path::MAIN_SEPARATOR_STR;
+
+/// A `/`-separated relative path in native form (Windows keeps the exact backslash strings v0.3 used).
+pub fn native(rel: &str) -> String {
+    rel.replace('/', SEP)
+}
+
 /// Node's `process.platform` name for this OS (the key used by scripts/hw_encoders.json).
 pub const NODE_PLATFORM: &str = if cfg!(windows) {
     "win32"
@@ -195,6 +203,31 @@ pub fn open_exclusive(p: &Path) -> std::io::Result<std::fs::File> {
             Err(std::fs::TryLockError::WouldBlock) => Err(std::io::Error::new(std::io::ErrorKind::WouldBlock, "locked by another process")),
             Err(std::fs::TryLockError::Error(e)) => Err(e),
         }
+    }
+}
+
+/// Directory link `link` → `target` without admin rights: an NTFS junction on Windows (`mklink /J`, as since v0.1),
+/// a symbolic link elsewhere. Returns the tool output on Windows (shown in reports).
+pub fn link_dir(link: &Path, target: &Path) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        // chcp 65001 first: otherwise mklink prints the (Chinese) paths in the console code page
+        let (l, t) = (crate::util::clean_path(link), crate::util::clean_path(target));
+        let o = crate::util::run("cmd", &["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &l, &t], None, std::time::Duration::from_secs(30))?;
+        if o.ok() { Ok(o.combined()) } else { Err(o.combined()) }
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link).map(|_| format!("{} -> {}", link.display(), target.display())).map_err(|e| e.to_string())
+    }
+}
+
+/// Remove a directory link created by [`link_dir`] — only the link, never the target's contents.
+pub fn unlink_dir(link: &Path) -> std::io::Result<()> {
+    if cfg!(windows) {
+        std::fs::remove_dir(link) // RemoveDirectoryW on a junction removes the link itself
+    } else {
+        std::fs::remove_file(link) // a symlink is a file entry on Unix
     }
 }
 

@@ -304,7 +304,7 @@ let lockedMax = MAX_CONC;
 console.log(`效能模式 ${PERF}：起始並行 ${concurrency}、上限 ${MAX_CONC}${fixedConc ? '（--concurrency 固定）' : ''}；VRAM 上限 ${VRAM_CAP} MiB${base ? '' : '（無 VRAM 遙測）'}、CPU ≤ ${P.cpuMax}%、RAM 至少留 ${P.ramMinMiB} MiB`);
 const chunks = [];
 for (let a = rangeA; a <= rangeB; a += CHUNK) chunks.push([a, Math.min(rangeB, a + CHUNK - 1)]);
-console.log(`渲染 ${comp}：${rangeB - rangeA + 1} 幀，${chunks.length} 段（每段 ${CHUNK} 幀），${useGpu ? 'GPU：ANGLE / D3D11' : 'CPU：SwiftShader'}；VRAM 基準 ${baselineVram} MiB，上限 ${VRAM_CAP} MiB`);
+console.log(`渲染 ${comp}：${rangeB - rangeA + 1} 幀，${chunks.length} 段（每段 ${CHUNK} 幀），${useGpu ? `GPU：ANGLE / ${process.platform === 'win32' ? 'D3D11' : process.platform === 'darwin' ? 'Metal' : 'EGL'}` : 'CPU：SwiftShader'}；VRAM 基準 ${baselineVram} MiB，上限 ${VRAM_CAP} MiB`);
 
 const chunkLog = [];
 const tr = Date.now();

@@ -52,8 +52,14 @@ if (!force && prev?.webglSig === sig && prev.webgl_angle?.renderer && Date.now()
 } else {
   for (const gl of [GL, 'swangle']) {
     const r = remotion(['still', 'src/index.ts', 'GpuProbe', `out/probe-${gl}.png`, `--gl=${gl}`, '--log=verbose', ...(gl === 'swangle' ? [] : chromiumFlagsArg())]);
-    const line = r.out.split(/\r?\n/).find((l) => l.includes('[gpu-probe]'));
-    const m = line?.match(/"renderer":"([^"]+)"/);
+    // strip ANSI colours (CI terminals) and keep the whole log for diagnosis
+    const plain = r.out.replace(/\u001b\[[0-9;]*m/g, '');
+    try {
+      mkdirSync(join(ROOT, 'out'), {recursive: true});
+      writeFileSync(join(ROOT, 'out', `probe-${gl}.log`), plain);
+    } catch {}
+    const line = plain.split(/\r?\n/).find((l) => l.includes('[gpu-probe]') && l.includes('renderer'));
+    const m = line?.match(/\\?"renderer\\?"\s*:\s*\\?"((?:[^"\\]|\\.)+?)\\?"/);
     out[gl === 'swangle' ? 'webgl_swangle' : 'webgl_angle'] = {renderer: m ? m[1] : null, gl, raw: m ? undefined : r.out.slice(-400)};
   }
   out.webglTime = out.time;

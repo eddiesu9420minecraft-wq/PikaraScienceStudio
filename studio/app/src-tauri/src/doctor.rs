@@ -194,7 +194,7 @@ fn read_json(p: &Path) -> Option<Value> {
 }
 
 fn check_npm_deps(root: &Path) -> Check {
-    let installed = read_json(&root.join(r"node_modules\remotion\package.json")).and_then(|j| j["version"].as_str().map(String::from));
+    let installed = read_json(&root.join(crate::platform::native("node_modules/remotion/package.json"))).and_then(|j| j["version"].as_str().map(String::from));
     let locked = read_json(&root.join("package-lock.json")).and_then(|j| j["packages"]["node_modules/remotion"]["version"].as_str().map(String::from));
     match (installed, locked) {
         (Some(i), Some(l)) if i == l => c("npm.deps", "專案 node_modules（Remotion）", "ok", format!("remotion {i}（與 package-lock 一致）"), Some(i), None),
@@ -343,7 +343,7 @@ fn check_cosy(root: &Path, s: &Settings) -> Vec<Check> {
             Err(e) => out.push(venv_broken(&py, e)),
         }
     }
-    let md = root.join(r"tools\CosyVoice\pretrained_models\Fun-CosyVoice3-0.5B");
+    let md = root.join(crate::platform::native("tools/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B"));
     let need = ["cosyvoice3.yaml", "llm.pt", "flow.pt", "hift.pt", "campplus.onnx", "speech_tokenizer_v3.onnx"];
     let missing: Vec<&str> = need.iter().copied().filter(|f| !md.join(f).exists()).collect();
     let size: u64 = std::fs::read_dir(&md).map(|rd| rd.flatten().filter_map(|e| e.metadata().ok()).filter(|m| m.is_file()).map(|m| m.len()).sum()).unwrap_or(0);
@@ -352,7 +352,7 @@ fn check_cosy(root: &Path, s: &Settings) -> Vec<Check> {
     } else {
         c("cosy.model", "CosyVoice3 模型", "error", format!("缺少：{}", missing.join(", ")), None, instr("cosy_setup", "下載模型說明（約 9 GB，Apache-2.0）"))
     });
-    let wm = root.join(r"tools\CosyVoice\pretrained_models\whisper\large-v3-turbo\model.bin");
+    let wm = root.join(crate::platform::native("tools/CosyVoice/pretrained_models/whisper/large-v3-turbo/model.bin"));
     out.push(match std::fs::metadata(&wm) {
         Ok(m) => c("whisper.model", "Whisper large-v3-turbo", "ok", format!("model.bin {:.2} GB", m.len() as f64 / 1e9), Some(clean_path(&wm)), None),
         Err(_) => c("whisper.model", "Whisper large-v3-turbo", "warn", "沒有本機 Whisper 模型；第一次對齊時 generate_voiceover_cosy.py 會自動下載（約 1.6 GB）", None, None),
@@ -405,10 +405,10 @@ fn check_claude() -> Check {
     }
 }
 
-pub const PROJECT_FOLDERS: &[&str] = &[r"out", r"out\qa", r"out\reports", r"out\subtitles", r"out\frames", r"public\assets\audio\mix", r".studio\worktrees"];
+pub const PROJECT_FOLDERS: &[&str] = &["out", "out/qa", "out/reports", "out/subtitles", "out/frames", "public/assets/audio/mix", ".studio/worktrees"];
 
 fn check_folders(root: &Path) -> Check {
-    let missing: Vec<&str> = PROJECT_FOLDERS.iter().copied().filter(|f| !root.join(f).is_dir()).collect();
+    let missing: Vec<&str> = PROJECT_FOLDERS.iter().copied().filter(|f| !root.join(crate::platform::native(f)).is_dir()).collect();
     if missing.is_empty() {
         c("project.folders", "專案輸出資料夾", "ok", "out/、out/qa、out/reports、out/subtitles、out/frames、mix、.studio 皆存在", None, None)
     } else {

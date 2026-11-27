@@ -39,14 +39,14 @@ pub fn detect() -> Value {
     }
 }
 
-pub const SKILL_REL: &str = r".claude\skills\pikara-video\SKILL.md";
+pub const SKILL_REL: &str = ".claude/skills/pikara-video/SKILL.md";
 
 pub fn skill_text() -> &'static str {
     include_str!("../resources/pikara-video-SKILL.md")
 }
 
 pub fn install_skill(root: &Path, overwrite: bool) -> Result<Value, String> {
-    let p = root.join(SKILL_REL);
+    let p = root.join(crate::platform::native(SKILL_REL));
     let existed = p.exists();
     if existed && !overwrite {
         return Ok(json!({"path": clean_path(&p), "written": false, "existed": true}));

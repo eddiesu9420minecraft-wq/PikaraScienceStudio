@@ -256,11 +256,7 @@ pub fn link(base: &Path, ep: &str, assets_dir: &Path) -> Result<bool, String> {
         return Ok(false);
     }
     std::fs::create_dir_all(l.parent().unwrap()).map_err(|e| e.to_string())?;
-    let (ls, ts) = (l.to_string_lossy().to_string(), assets_dir.to_string_lossy().to_string());
-    let o = run("cmd", &["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &ls, &ts], None, Duration::from_secs(30))?;
-    if !o.ok() {
-        return Err(format!("無法建立素材連結 {}：{}", clean_path(&l), o.combined()));
-    }
+    crate::platform::link_dir(&l, assets_dir).map_err(|e| format!("無法建立素材連結 {}：{e}", clean_path(&l)))?;
     Ok(true)
 }
 
@@ -269,7 +265,7 @@ pub fn unlink_all(base: &Path) {
     if let Ok(rd) = std::fs::read_dir(base.join("public").join("user")) {
         for e in rd.flatten() {
             if std::fs::symlink_metadata(e.path()).map(|m| m.file_type().is_symlink() || is_junction(&e.path())).unwrap_or(false) {
-                let _ = std::fs::remove_dir(e.path());
+                let _ = crate::platform::unlink_dir(&e.path());
             }
         }
     }

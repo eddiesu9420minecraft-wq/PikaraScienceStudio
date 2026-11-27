@@ -116,6 +116,7 @@ jobs:
             pipeline/out/*.json
             pipeline/out/ci-render.mp4
             pipeline/out/render-report*.json
+            pipeline/out/probe-*.log
           if-no-files-found: ignore
 
   macos-bundle:

@@ -146,6 +146,8 @@ pub fn suspend_tree(pid: u32) -> usize {
     }
     #[cfg(unix)]
     {
+        // the whole process group (children started by configure()), then every descendant found in the table
+        let _ = Command::new("kill").args(["-STOP", "--", &format!("-{pid}")]).stderr(std::process::Stdio::null()).status();
         signal_all(&members, "STOP")
     }
 }
@@ -161,7 +163,9 @@ pub fn resume_tree(pid: u32) -> usize {
     }
     #[cfg(unix)]
     {
-        signal_all(&members, "CONT")
+        let n = signal_all(&members, "CONT");
+        let _ = Command::new("kill").args(["-CONT", "--", &format!("-{pid}")]).stderr(std::process::Stdio::null()).status();
+        n
     }
 }
 

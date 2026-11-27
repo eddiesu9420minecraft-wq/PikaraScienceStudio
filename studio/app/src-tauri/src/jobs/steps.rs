@@ -113,6 +113,16 @@ impl Ctx<'_> {
     }
 }
 
+/// Copy a file inside the project (subtitles): `cmd /c copy /Y` on Windows (as since v0.1), `cp -f` elsewhere.
+fn copy_step(ctx: &Ctx, from_rel: &str, to: &str) -> Step {
+    let from = crate::platform::native(from_rel);
+    if cfg!(windows) {
+        ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &from, to], Parser::Plain)
+    } else {
+        ctx.step("複製字幕", "cp", &["-f", &from, to], Parser::Plain)
+    }
+}
+
 /// Batch id of a re-voice / re-render job: its job id (stable across retries, so an interrupted job resumes into the
 /// same candidate folder and only finishes what is missing).
 fn batch_of(ctx: &Ctx) -> String {
@@ -587,7 +597,7 @@ pub(crate) fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result
             let mx = with_bgm(p, mix_args(&seq, "src"))?;
             vec![
                 ctx.py(&format!("時間軸 {ep}"), &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
-                ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}.srt"), &format!("{ep}.srt")], Parser::Plain),
+                copy_step(ctx, &format!("out/subtitles/{seq}.srt"), &format!("{ep}.srt")),
                 ctx.py(&format!("混音 {ep}"), &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.render(&format!("渲染 {ep}-30fps"), &fresh(p, ["gpu", "--comp", &format!("{ep}-30fps"), "--out", &out].map(String::from).to_vec())),
                 ctx.py(&format!("品質檢查 {ep}"), &["scripts/qa_video.py", &out, "--seq", &seq]),
@@ -622,7 +632,7 @@ pub(crate) fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result
             }
             v.extend([
                 ctx.py("時間軸 zh-CN", &tl.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
-                ctx.step("複製字幕", "cmd", &["/d", "/c", "copy", "/Y", &format!(r"out\subtitles\{seq}_cn.srt"), &srt], Parser::Plain),
+                copy_step(ctx, &format!("out/subtitles/{seq}_cn.srt"), &srt),
                 ctx.py("混音 zh-CN", &mx.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
                 ctx.render(
                     &format!("渲染 {ep}-30fps（src_cn）"),

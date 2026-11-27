@@ -23,7 +23,7 @@ pub fn rel_path(locale: &str) -> Result<&'static str, String> {
 }
 
 pub fn file_path(root: &Path, locale: &str) -> Result<PathBuf, String> {
-    Ok(root.join(rel_path(locale)?.replace('/', "\\")))
+    Ok(root.join(rel_path(locale)?.replace('/', crate::platform::SEP)))
 }
 
 #[derive(Debug, Clone, Serialize)]

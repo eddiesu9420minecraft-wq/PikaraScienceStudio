@@ -218,6 +218,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)] // MSIX AppData redirection exists only on Windows
     fn detects_and_repairs_private_copy() {
         let base = std::env::temp_dir().join(format!("pikara-envfix-{}", uuid::Uuid::new_v4()));
         let appdata = base.join("Roaming");

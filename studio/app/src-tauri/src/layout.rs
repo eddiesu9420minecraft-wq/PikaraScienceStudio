@@ -45,7 +45,7 @@ pub fn video_rel(ep: &str) -> String {
 }
 
 pub fn video_dir(root: &Path, ep: &str) -> PathBuf {
-    root.join(video_rel(ep).replace('/', "\\"))
+    root.join(video_rel(ep).replace('/', crate::platform::SEP))
 }
 
 pub fn ensure_video_dir(root: &Path, ep: &str) -> Result<PathBuf, String> {
@@ -128,7 +128,7 @@ pub fn migrate(root: &Path, apply: bool) -> Result<Value, String> {
         } else {
             format!("projects/{ep}/{}/{name}", subdir_for(&name))
         };
-        let to = root.join(to_rel.replace('/', "\\"));
+        let to = root.join(to_rel.replace('/', crate::platform::SEP));
         let bytes = e.metadata().map(|m| m.len()).unwrap_or(0);
         let action = if to.exists() {
             let same = std::fs::metadata(&to).map(|m| m.len() == bytes).unwrap_or(false);
@@ -149,7 +149,7 @@ pub fn migrate(root: &Path, apply: bool) -> Result<Value, String> {
                 continue;
             }
             let from = root.join(it["from"].as_str().unwrap());
-            let to = root.join(it["to"].as_str().unwrap().replace('/', "\\"));
+            let to = root.join(it["to"].as_str().unwrap().replace('/', crate::platform::SEP));
             if let Some(p) = to.parent() {
                 std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
             }

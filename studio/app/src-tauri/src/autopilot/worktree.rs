@@ -24,7 +24,7 @@ pub(crate) fn studio_commit(dir: &Path, msg: &str) -> Result<crate::util::RunOut
 }
 
 /// Paths inside a worktree that are linked (directory junctions) to the main project instead of copied.
-pub(crate) const LINKS: [&str; 2] = ["node_modules", r"tools\CosyVoice"];
+pub(crate) const LINKS: [&str; 2] = ["node_modules", "tools/CosyVoice"];
 
 pub(crate) fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<String, String> {
     let wt = worktree_dir(root, wid);
@@ -37,26 +37,22 @@ pub(crate) fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<S
         }
     }
     let mut linked = vec![];
-    for rel in LINKS {
-        let target = root.join(rel);
-        let link = wt.join(rel);
+    for rel in LINKS.map(crate::platform::native) {
+        let target = root.join(&rel);
+        let link = wt.join(&rel);
         if target.exists() && !link.exists() {
             if let Some(par) = link.parent() {
                 std::fs::create_dir_all(par).map_err(|e| e.to_string())?;
             }
-            let (l, t) = (link.to_string_lossy().to_string(), target.to_string_lossy().to_string());
-            let o = run("cmd", &["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &l, &t], None, Duration::from_secs(30))?;
-            if !o.ok() {
-                return Err(format!("無法建立目錄連結 {rel}：{}", o.combined()));
-            }
+            crate::platform::link_dir(&link, &target).map_err(|e| format!("無法建立目錄連結 {rel}：{e}"))?;
             linked.push(rel);
         }
     }
     // the project Skill tells Claude how the pipeline works; new projects may not have it committed
-    let skill = wt.join(crate::claude::SKILL_REL);
+    let skill = wt.join(crate::platform::native(crate::claude::SKILL_REL));
     if !skill.exists() {
         crate::claude::install_skill(&wt, false)?;
-        linked.push("（已安裝 pikara-video Skill）");
+        linked.push("（已安裝 pikara-video Skill）".to_string());
     }
     // ignored files the pipeline needs (fonts etc.): copy
     let mut copied = 0;
@@ -85,11 +81,11 @@ pub(crate) fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<S
 pub fn remove_worktree(root: &Path, wid: &str, delete_branch: bool) -> Result<(), String> {
     let wt = worktree_dir(root, wid);
     crate::assets::unlink_all(&wt); // public/user/<ep> material junctions (the material itself stays)
-    for rel in LINKS {
+    for rel in LINKS.map(crate::platform::native) {
         let l = wt.join(rel);
         if std::fs::symlink_metadata(&l).is_ok() {
-            // RemoveDirectoryW on a junction removes the link itself, never the target's contents
-            std::fs::remove_dir(&l).map_err(|e| format!("無法移除目錄連結 {}：{e}", clean_path(&l)))?;
+            // removes the link itself, never the target's contents
+            crate::platform::unlink_dir(&l).map_err(|e| format!("無法移除目錄連結 {}：{e}", clean_path(&l)))?;
         }
     }
     if wt.exists() {
@@ -167,7 +163,7 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
     let re = Regex::new(&format!(r"^{E}(_.*)?\.(mp4|srt|png|md)$")).unwrap();
     let cn_tree = content::wants_cn(&p.config);
     // 1. sort the worktree's outputs into the video folder (inside the worktree)
-    let wv = wt.join(vrel.replace('/', "\\"));
+    let wv = wt.join(vrel.replace('/', crate::platform::SEP));
     for s in crate::layout::SUBDIRS {
         let _ = std::fs::create_dir_all(wv.join(s));
     }
@@ -198,7 +194,7 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
         serde_json::to_string_pretty(&json!({"id": p.id, "episode": p.episode, "topic": p.config.topic, "mode": content::mode(&p.config), "language": content::lang(&p.config), "createdAt": p.created_at, "sandbox": sandbox, "warnings": p.warnings})).unwrap_or_default(),
     );
     // stills / voice: binary, git-ignored — linked straight into the project's video folder below
-    let rv = root.join(vrel.replace('/', "\\"));
+    let rv = root.join(vrel.replace('/', crate::platform::SEP));
     let voice_dirs: Vec<PathBuf> = ["public/assets/audio/voiceover_cosy", "public/assets/audio/voiceover_cosy_cn"].iter().map(|d| wt.join(d).join(&p.episode)).filter(|d| d.exists()).collect();
     let link_binaries = |rv: &Path| {
         let _ = link_files(&wt.join("out/stills"), &rv.join("scenes"), &|n| n.starts_with(&E));
@@ -235,7 +231,7 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
     // earlier delivery, BRIEF.md written at start): identical → remove so the merge can bring them; different → stop
     if let Ok(o) = git(root, &["diff", "--name-only", "--diff-filter=A", &format!("HEAD...{br}"), "--", &vrel]) {
         for f in o.stdout.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-            let (a, b) = (wt.join(f.replace('/', "\\")), root.join(f.replace('/', "\\")));
+            let (a, b) = (wt.join(f.replace('/', crate::platform::SEP)), root.join(f.replace('/', crate::platform::SEP)));
             if b.is_file() {
                 let same = std::fs::read(&a).ok().zip(std::fs::read(&b).ok()).map(|(x, y)| x == y).unwrap_or(false);
                 if same || f.ends_with("BRIEF.md") || f.ends_with("production.json") {
@@ -296,7 +292,7 @@ pub(crate) fn copy_tree(a: &Path, b: &Path) -> Result<usize, String> {
 pub(crate) fn list_outputs(root: &Path, vrel: &str) -> Vec<String> {
     let mut out = vec![];
     for s in ["output", "subtitles", "thumbnail", "docs"] {
-        if let Ok(rd) = std::fs::read_dir(root.join(vrel.replace('/', "\\")).join(s)) {
+        if let Ok(rd) = std::fs::read_dir(root.join(vrel.replace('/', crate::platform::SEP)).join(s)) {
             for e in rd.flatten() {
                 if e.path().is_file() {
                     out.push(format!("{vrel}/{s}/{}", e.file_name().to_string_lossy()));

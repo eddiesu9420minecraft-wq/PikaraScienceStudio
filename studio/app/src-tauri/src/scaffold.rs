@@ -7,10 +7,9 @@
 
 use crate::episodes;
 use crate::gitops;
-use crate::util::{clean_path, now_iso, run};
+use crate::util::{clean_path, now_iso};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 /// Top-level files copied when present.
 const FILES: &[&str] = &["package.json", "package-lock.json", "tsconfig.json", "remotion.config.ts", ".gitignore", "LICENSE"];
@@ -135,14 +134,14 @@ pub fn create(req: &NewProject) -> Result<Value, String> {
         }
     }
     for d in DIRS {
-        let s = tpl.join(d.replace('/', "\\"));
+        let s = tpl.join(d.replace('/', crate::platform::SEP));
         if s.is_dir() {
-            copy_tree(&s, &dest.join(d.replace('/', "\\")), &mut n, &mut bytes)?;
+            copy_tree(&s, &dest.join(d.replace('/', crate::platform::SEP)), &mut n, &mut bytes)?;
         }
     }
     reset_content(dest, &tpl, title)?;
     for d in ["out", "public/assets/audio"] {
-        std::fs::create_dir_all(dest.join(d.replace('/', "\\"))).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(dest.join(d.replace('/', crate::platform::SEP))).map_err(|e| e.to_string())?;
     }
     // shared CosyVoice install: a junction (no admin rights needed), ignored by git via .gitignore
     let mut tools = Value::Null;
@@ -150,10 +149,8 @@ pub fn create(req: &NewProject) -> Result<Value, String> {
     if req.link_tools && cosy.is_dir() {
         std::fs::create_dir_all(dest.join("tools")).map_err(|e| e.to_string())?;
         let link = dest.join("tools").join("CosyVoice");
-        // chcp 65001 first: otherwise mklink prints the (Chinese) paths in the console code page
-        let (l, c) = (clean_path(&link), clean_path(&cosy));
-        let o = run("cmd", &["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &l, &c], None, Duration::from_secs(30))?;
-        tools = json!({"junction": clean_path(&link), "target": clean_path(&cosy), "ok": o.ok(), "output": o.combined().trim()});
+        let r = crate::platform::link_dir(&link, &cosy);
+        tools = json!({"junction": clean_path(&link), "target": clean_path(&cosy), "ok": r.is_ok(), "output": r.unwrap_or_else(|e| e).trim()});
     }
     let meta = json!({
         "name": dest.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
@@ -218,11 +215,11 @@ mod tests {
         let keys: Vec<&String> = nar["doc"]["sequences"].as_object().unwrap().keys().collect();
         assert_eq!(keys, vec!["ep01"]);
         assert_eq!(nar["doc"]["sequences"]["ep01"]["title"], "測試 專案");
-        assert_eq!(std::fs::read_to_string(dest.join(r"src\data\timeline.generated.json")).unwrap().trim(), "{}");
-        let reg = std::fs::read_to_string(dest.join(r"src\episode\registry.ts")).unwrap();
+        assert_eq!(std::fs::read_to_string(dest.join(crate::platform::native("src/data/timeline.generated.json"))).unwrap().trim(), "{}");
+        let reg = std::fs::read_to_string(dest.join(crate::platform::native("src/episode/registry.ts"))).unwrap();
         assert!(!reg.contains("ep01: EP01_ACTS"), "custom acts cleared");
-        assert!(dest.join(r"scripts\render.mjs").is_file() && !dest.join(r"scripts\export_release.py").exists());
-        assert!(dest.join(r"public\fonts\NotoSansTC-VF.ttf").is_file());
+        assert!(dest.join(crate::platform::native("scripts/render.mjs")).is_file() && !dest.join(crate::platform::native("scripts/export_release.py")).exists());
+        assert!(dest.join(crate::platform::native("public/fonts/NotoSansTC-VF.ttf")).is_file());
         assert!(!dest.join("node_modules").exists() && !dest.join("src_cn").exists());
         // not empty → refused
         assert!(create(&NewProject { dest: &dest, title: "x", template: &tpl, link_tools: false }).unwrap_err().contains("不是空的"));

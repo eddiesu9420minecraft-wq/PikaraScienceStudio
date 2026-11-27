@@ -38,11 +38,16 @@ fn pause_marker(id: &str) -> std::path::PathBuf {
     crate::util::data_dir().join("paused").join(safe)
 }
 
+/// Jobs paused by this process (exact, no file system or environment involved); the marker file adds the
+/// cross-process view.
+static PAUSED_HERE: once_cell::sync::Lazy<Mutex<HashSet<String>>> = once_cell::sync::Lazy::new(|| Mutex::new(HashSet::new()));
+
 pub fn is_paused(id: &str) -> bool {
-    pause_marker(id).exists()
+    PAUSED_HERE.lock().unwrap_or_else(|e| e.into_inner()).contains(id) || pause_marker(id).exists()
 }
 
 fn clear_pause(id: &str) {
+    PAUSED_HERE.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
     let _ = std::fs::remove_file(pause_marker(id));
 }
 
@@ -170,6 +175,7 @@ impl Queue {
         let m = pause_marker(id);
         let _ = std::fs::create_dir_all(m.parent().unwrap());
         std::fs::write(&m, crate::util::now_iso()).map_err(|e| format!("無法寫入暫停標記：{e}"))?;
+        PAUSED_HERE.lock().unwrap_or_else(|e| e.into_inner()).insert(id.to_string());
         let pid = self.running.lock().unwrap_or_else(|e| e.into_inner()).get(id).and_then(|r| *r.pid.lock().unwrap_or_else(|e| e.into_inner())).or(j.pid.map(|p| p as u32));
         let n = pid.map(crate::platform::process::suspend_tree).unwrap_or(0);
         self.event(id, "system", "warn", &format!("已暫停（{n} 個程序；模型與已完成的檔案保留在原處，繼續後從暫停處接著做）"));

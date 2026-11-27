@@ -234,7 +234,7 @@ pub fn run(args: &[String]) -> i32 {
             }
             std::thread::sleep(Duration::from_millis(100));
         };
-        let tl = std::fs::read_to_string(dest.join(r"src\data\timeline.generated.json")).unwrap_or_default();
+        let tl = std::fs::read_to_string(dest.join(crate::platform::native("src/data/timeline.generated.json"))).unwrap_or_default();
         let ok = res.status == "succeeded" && tl.contains("\"ep01\"");
         let _ = std::fs::remove_dir_all(dest.parent().unwrap());
         if !ok {
