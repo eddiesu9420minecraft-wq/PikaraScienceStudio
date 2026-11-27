@@ -175,7 +175,12 @@ mod tests {
         assert!(try_acquire("測試 B").is_err(), "second global holder refused");
         assert!(try_acquire_job("工作", &["10de:28e1#0".into()]).unwrap_err().contains("其他程式"), "no Studio job while a script holds the machine");
         drop(a);
-        assert!(status()["free"].as_bool().unwrap());
+        // is_free() probes by opening the lock exclusively for a moment; concurrent tests in this process probe too
+        let t0 = std::time::Instant::now();
+        while !status()["free"].as_bool().unwrap() {
+            assert!(t0.elapsed() < std::time::Duration::from_secs(5), "global lease released");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         // two jobs on different adapters run together; same adapter waits; CPU-only jobs serialize on cpu-heavy
         let j1 = try_acquire_job("渲染", &["10de:28e1#0".into()]).unwrap();
         let j2 = try_acquire_job("介面測試", &["1002:1901#0".into()]).unwrap();
