@@ -30,12 +30,22 @@ pub(crate) fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<S
     let wt = worktree_dir(root, wid);
     crate::claude::ensure_excluded(root)?;
     let dirty = gitops::status(root).dirty;
-    if !wt.join(".git").exists() {
+    // the production runs the scripts committed in its worktree: bring them up to this build's pipeline first
+    // (main project before branching; an existing worktree that is resumed after a Studio update in place)
+    let synced = if !wt.join(".git").exists() {
+        let s = crate::pipeline_sync::sync(root, true, false, true);
         let o = git(root, &["worktree", "add", "--quiet", &wt.to_string_lossy(), "-b", branch, "HEAD"])?;
         if !o.ok() {
             return Err(format!("建立工作樹失敗：{}", o.combined()));
         }
-    }
+        s
+    } else {
+        crate::pipeline_sync::sync(&wt, true, false, true)
+    };
+    let synced = match synced {
+        Ok(v) => crate::pipeline_sync::summary(&v),
+        Err(e) => format!("管線腳本沒有更新：{e}"),
+    };
     let mut linked = vec![];
     for rel in LINKS {
         let target = root.join(rel);
@@ -74,7 +84,7 @@ pub(crate) fn prepare_worktree(root: &Path, wid: &str, branch: &str) -> Result<S
         }
     }
     Ok(format!(
-        "工作樹 {}（分支 {branch}）；連結 {}；複製 {copied} 個被忽略的資源檔{}",
+        "工作樹 {}（分支 {branch}）；{synced}；連結 {}；複製 {copied} 個被忽略的資源檔{}",
         clean_path(&wt),
         if linked.is_empty() { "無".into() } else { linked.join("、") },
         if dirty.is_empty() { String::new() } else { format!("。注意：專案有 {} 個未提交的修改，自動製作使用最後一次提交的版本", dirty.len()) }

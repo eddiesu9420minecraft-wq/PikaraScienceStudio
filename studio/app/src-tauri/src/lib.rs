@@ -23,6 +23,7 @@ pub mod jobs;
 pub mod monitor;
 pub mod narration;
 pub mod pipeline;
+pub mod pipeline_sync;
 pub mod rerender;
 pub mod project;
 pub mod prompt;
@@ -941,14 +942,25 @@ fn initialize(app: tauri::AppHandle, monitor_init: std::thread::JoinHandle<monit
     s.begin("projects", "正在載入專案…");
     let projects = db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner())).unwrap_or_default();
     let mut missing = vec![];
+    let mut synced = vec![];
     for p in &projects {
         let _ = app.asset_protocol_scope().allow_directory(&p.root_path, true);
         if !Path::new(&p.root_path).is_dir() {
             missing.push(p.name.clone());
+            continue;
+        }
+        // jobs run the project's own scripts/: bring them up to this build's pipeline (skipped while a job runs there)
+        let busy = db::job_list(&db.lock().unwrap_or_else(|e| e.into_inner()), Some(&p.id), Some("running"), 1).map(|j| !j.is_empty()).unwrap_or(true);
+        if !busy {
+            match pipeline_sync::sync(Path::new(&p.root_path), true, false, true) {
+                Ok(v) if v["changed"].as_array().map(|a| !a.is_empty()).unwrap_or(false) => synced.push(format!("{}：{}", p.name, pipeline_sync::summary(&v))),
+                Ok(_) => {}
+                Err(e) => synced.push(format!("{}：管線腳本更新失敗（{e}）", p.name)),
+            }
         }
     }
     if missing.is_empty() {
-        s.done_with("projects", format!("{} 個專案", projects.len()));
+        s.done_with("projects", if synced.is_empty() { format!("{} 個專案", projects.len()) } else { format!("{} 個專案；{}", projects.len(), synced.join("；")) });
     } else {
         s.warn("projects", format!("找不到 {} 個專案資料夾：{}", missing.len(), missing.join("、")));
     }
