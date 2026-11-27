@@ -209,7 +209,9 @@ pub fn open_path(root: &Path, path: &str, reveal: bool) -> Result<(), String> {
     // automated UI tests: resolve and check everything, but don't open an Explorer window on the user's screen
     if let Some(log) = std::env::var_os("PIKARA_OPEN_DRYRUN").filter(|v| !v.is_empty()) {
         use std::io::Write;
-        let _ = std::fs::OpenOptions::new().create(true).append(true).open(log).and_then(|mut f| writeln!(f, "{}\t{p}", if reveal { "reveal" } else { "open" }));
+        // one write per line: concurrent clicks must not interleave
+        let line = format!("{}\t{p}\n", if reveal { "reveal" } else { "open" });
+        let _ = std::fs::OpenOptions::new().create(true).append(true).open(log).and_then(|mut f| f.write_all(line.as_bytes()));
         return Ok(());
     }
     let mut c = std::process::Command::new("explorer.exe");
