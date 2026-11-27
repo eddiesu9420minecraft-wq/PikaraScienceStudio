@@ -76,8 +76,28 @@ pub fn run(args: &[String]) -> i32 {
     // read-only, no database
     if cmd == "build-info" {
         out(&json!({"version": env!("CARGO_PKG_VERSION"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
-                    "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0)}));
+                    "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0),
+                    "pipelineBundle": crate::pipeline_sync::bundle_sha(), "pipelineFiles": crate::pipeline_sync::FILES.len()}));
         return 0;
+    }
+    // pipeline-sync --project <dir> [--check] [--force]: bring a project's scripts/ up to this build (no database)
+    if cmd == "pipeline-sync" {
+        let Some(root) = arg(args, "--project").or_else(|| arg(args, "--root")) else {
+            out(&json!({"ok": false, "command": cmd, "error": "缺少 --project <專案資料夾>"}));
+            return 1;
+        };
+        let check = args.iter().any(|a| a == "--check");
+        return match crate::pipeline_sync::sync(Path::new(&root), !check, args.iter().any(|a| a == "--force"), true) {
+            Ok(v) => {
+                let pending = check && v["changed"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
+                out(&v);
+                i32::from(pending)
+            }
+            Err(e) => {
+                out(&json!({"ok": false, "command": cmd, "error": e}));
+                1
+            }
+        };
     }
     // restore must not open (and migrate) the database it is about to replace
     if cmd == "db-restore" {
