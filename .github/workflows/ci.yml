@@ -32,6 +32,10 @@ jobs:
         working-directory: studio/app
         run: npm ci
 
+      - name: UI routes check (new pages wired in, old page not shipped)
+        working-directory: studio/app
+        run: node scripts/check-ui.mjs
+
       - name: Rust unit tests
         working-directory: studio/app/src-tauri
         run: cargo test --release
@@ -39,6 +43,10 @@ jobs:
       - name: Build exe + NSIS installer
         working-directory: studio/app
         run: npx tauri build
+
+      - name: Built exe embeds this source's frontend
+        working-directory: studio/app
+        run: node scripts/check-ui.mjs --exe src-tauri/target/release/PikaraScienceStudio.exe
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

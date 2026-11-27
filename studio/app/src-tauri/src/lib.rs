@@ -77,6 +77,7 @@ async fn app_info() -> R<Value> {
         "uiTourStepMs": std::env::var("PIKARA_UI_TOUR_STEP_MS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(2500),
         "uiTourEpisode": std::env::var("PIKARA_UI_TOUR_EPISODE").ok(),
         "uiTourLang": std::env::var("PIKARA_UI_TOUR_LANG").ok(),
+        "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
         "uiTourThemes": std::env::var("PIKARA_UI_TOUR_THEMES").ok(),
         "uiTourOnly": std::env::var("PIKARA_UI_TOUR_ONLY").ok(),
         "uiTourActions": std::env::var("PIKARA_UI_TOUR_ACTIONS").ok(),

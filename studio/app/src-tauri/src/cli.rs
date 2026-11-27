@@ -33,6 +33,7 @@
 //!   voice-versions --root <dir> --episode <ep> [--line <id>]    voice-restore --line <id> --version <n>
 //!   output-promote --root <dir> --episode <ep> --file <mp4>      rerender-plan --root … --params <json>
 //!   db-backups     db-backup     db-restore --from <backup>  (Studio must be closed)
+//!   build-info     version + SHA-256 of the embedded frontend (no database)
 //! ```
 //! auto-start config (v0.2.1): mode auto|guided|script, brief (Markdown), chapters [..], mustInclude, mustAvoid,
 //! opening, ending, voiceTone, animationStyle, pacing, scriptText, language zh-TW|zh-CN|both|en, minSources,
@@ -71,6 +72,13 @@ pub fn run(args: &[String]) -> i32 {
         std::env::set_var("PIKARA_STUDIO_DATA", d);
     }
     let cmd = args.iter().position(|a| a == "--cli").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
+    // build-info: which version and which embedded frontend this exe contains (release guard, scripts/check-ui.mjs);
+    // read-only, no database
+    if cmd == "build-info" {
+        out(&json!({"version": env!("CARGO_PKG_VERSION"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
+                    "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0)}));
+        return 0;
+    }
     // restore must not open (and migrate) the database it is about to replace
     if cmd == "db-restore" {
         let r = arg(args, "--from").ok_or_else(|| "缺少 --from <備份檔>".to_string()).and_then(|b| db::restore(&crate::util::data_dir().join("studio.db"), Path::new(&b)));
