@@ -46,10 +46,13 @@ mod inline;
 mod quality;
 mod worktree;
 mod watchdog;
+mod board;
+pub use board::*;
 pub use config::*;
 pub use watchdog::*;
 pub use plan::*;
 use prompts::*; // crate-internal only
+pub use prompts::voice_refs;
 pub use store::*;
 pub use monitor::*;
 use inline::*; // crate-internal only
@@ -96,7 +99,12 @@ impl Autopilot {
     }
 
     /// Create a production (status queued). The episode id is reserved immediately.
-    pub fn start(&self, project_id: &str, mut cfg: AutoConfig) -> Result<Production, String> {
+    pub fn start(&self, project_id: &str, cfg: AutoConfig) -> Result<Production, String> {
+        self.create(project_id, cfg, false)
+    }
+
+    /// Create a production. `hold` = 「建立，稍後開始」：狀態為 draft，排程器不會執行，按「開始製作」才排隊。
+    pub fn create(&self, project_id: &str, mut cfg: AutoConfig, hold: bool) -> Result<Production, String> {
         cfg.validate()?;
         let root = PathBuf::from(db::project_get(&self.conn(), project_id)?.root_path);
         if !root.join(".git").exists() {
@@ -138,7 +146,7 @@ impl Autopilot {
             project_id: Some(project_id.into()),
             episode,
             config: cfg,
-            status: "queued".into(),
+            status: if hold { "draft".into() } else { "queued".into() },
             stage: "prepare".into(),
             action: 0,
             attempt: 1,
@@ -281,6 +289,17 @@ impl Autopilot {
                 }
             }
             "needs_merge" => return self.retry_deliver(p),
+            // 已取消、工作樹還在：從取消時的步驟接續（被取消的那個工作重新執行；配音逐句快取、渲染逐場景快取，
+            // 已完成的句子與場景不會重做）。
+            "canceled" if p.worktree.is_some() && p.stage != "deliver" => {
+                p.job_id = None;
+                p.finished_at = None;
+                if p.mode == "fix" {
+                    p.mode = "main".into();
+                    p.action = 0;
+                }
+                p.data["resumeNote"] = json!("使用者在取消後繼續製作");
+            }
             s => return Err(format!("目前狀態「{s}」不能繼續")),
         }
         let root = self.root(&p)?;
@@ -299,11 +318,13 @@ impl Autopilot {
     /// Stop: cancel the running job; keep the worktree (inspect or discard later). The project is untouched.
     pub fn stop(&self, id: &str) -> Result<Production, String> {
         let mut p = get(&self.conn(), id)?;
-        if !ACTIVE.contains(&p.status.as_str()) && p.status != "needs_merge" {
+        if !ACTIVE.contains(&p.status.as_str()) && p.status != "needs_merge" && p.status != "draft" {
             return Err(format!("目前狀態「{}」不能停止", p.status));
         }
         if let Some(j) = p.job_id.take() {
             let _ = self.queue.cancel(&j);
+            // 製作狀態頁要知道是在哪一個步驟（例：渲染）被取消
+            p.data["lastJob"] = json!(j);
         }
         p.status = "canceled".into();
         p.finished_at = Some(now_iso());

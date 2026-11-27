@@ -23,6 +23,8 @@ impl Autopilot {
                         p.data["baseSha"] = json!(o.stdout.trim());
                     }
                 }
+                // 擬人化角色可選用的參考人聲（劇本提示詞用）
+                p.data["voiceRefs"] = json!(voice_refs(&root));
                 // requirements and material where every agent (Claude, 豆包, external) can read them
                 let _ = std::fs::create_dir_all(wtp.join("out/auto"));
                 let _ = std::fs::write(wtp.join("out/auto/BRIEF.md"), content::brief_markdown(&p.config, &p.episode));

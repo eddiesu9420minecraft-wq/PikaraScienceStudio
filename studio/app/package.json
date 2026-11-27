@@ -1,7 +1,7 @@
 {
   "name": "pikara-science-studio",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Pikara Science Studio — desktop studio that wraps the Pikara Science video pipeline",
   "license": "MIT",
   "scripts": {

@@ -126,7 +126,18 @@ pub fn brief_block(c: &AutoConfig, stage: &str) -> String {
     s.push_str(&opt("開場要求", &c.opening));
     s.push_str(&opt("片尾要求", &c.ending));
     s.push_str(&opt("配音語氣", &c.voice_tone));
-    s.push_str(&opt("動畫風格", &c.animation_style));
+    s.push_str(&format!(
+        "動畫風格：{}\n",
+        if c.animation_style.trim().is_empty() { "EP01 經典黑黃科技風（深色背景、琥珀黃強調色、2D 圖解＋3D 場景；沿用 src/theme/palette.ts）" } else { c.animation_style.trim() }
+    ));
+    s.push_str(&match c.narrative_mode() {
+        "plain" => "敘事方式：一般旁白（不使用擬人化角色）\n".to_string(),
+        "personified" => format!(
+            "敘事方式：擬人化科普{}\n",
+            if c.characters.is_empty() { String::new() } else { format!("（角色：{}）", c.characters.iter().map(|x| if x.name.is_empty() { x.concept.clone() } else { x.name.clone() }).collect::<Vec<_>>().join("、")) }
+        ),
+        _ => "敘事方式：由 AI 依主題判斷是否使用擬人化角色\n".to_string(),
+    });
     s.push_str(&opt("節奏", &c.pacing));
     if m == "script" && stage != "script" {
         s.push_str("旁白就是使用者的腳本：不得改寫 subtitle 的內容。\n");

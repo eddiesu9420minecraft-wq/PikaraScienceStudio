@@ -185,10 +185,11 @@ def gpu_temp() -> int:
         return 0
 
 
-def encode_mp3(wav, sr: int, dst: Path) -> str:
-    """記憶體中的 float32 PCM 直接 pipe 給 ffmpeg 編成 MP3（不寫中間 WAV）。"""
+def encode_mp3(wav, sr: int, dst: Path, af: str | None = None) -> str:
+    """記憶體中的 float32 PCM 直接 pipe 給 ffmpeg 編成 MP3（不寫中間 WAV）。af：角色變調等音訊濾鏡。"""
     pcm = wav.clamp(-1, 1).numpy().astype("float32").tobytes()
-    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0",
+    flt = ["-af", af] if af else []
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", *flt,
                         "-c:a", "libmp3lame", "-b:a", "160k", "-f", "mp3", str(dst)], input=pcm, capture_output=True)
     return "" if r.returncode == 0 else r.stderr.decode("utf-8", "replace")[-300:]
 
@@ -331,10 +332,13 @@ def align(speak: str, words: list[tuple[str, float, float]]) -> tuple[list[dict]
 
 
 # ---------------- 主流程 ----------------
-def make_key(speak: str, voice: dict, speed: float) -> str:
-    """快取鍵；narration.json 的單句 cosySpeed 會覆寫全域 --speed。"""
+def make_key(speak: str, voice: dict, speed: float, speaker: dict | None = None) -> str:
+    """快取鍵；narration.json 的單句 cosySpeed 會覆寫全域 --speed。
+    角色台詞（speaker）多一個欄位：角色的參考人聲與音高；旁白句子的鍵與舊版完全相同（已配音的句子不會重做）。"""
     v = {k: voice[k] for k in ("model", "mode", "reference_sha", "reference_text", "precision")}
     v["speed"] = speed
+    if speaker:
+        v["speaker"] = speaker
     p = json.dumps({"t": speak, "v": v, "g": GENERATOR_VERSION}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(p.encode("utf-8")).hexdigest()[:16]
 
@@ -346,6 +350,44 @@ def sha_file(p: Path) -> str:
 def load_lines(seq: str) -> list[tuple[str, dict]]:
     data = json.loads(NARRATION.read_text(encoding="utf-8"))
     return [(sc["id"], ln) for sc in data["sequences"][seq]["scenes"] for ln in sc["lines"]]
+
+
+# ---------------- 擬人化角色的人聲（v0.3.2）----------------
+# narration.json：sequences.<ep>.characters = [{"id", "name", "voice": "<reference 資料夾中的檔名>", "pitch": 半音}]，
+# 角色說的句子加 "speaker": "<角色 id>"。voice 對應 tools/CosyVoice/reference/<voice>.wav＋.txt（零樣本複製該人聲）；
+# pitch 在合成後以 ffmpeg 變調（不改變長度）。找不到參考人聲時用旁白人聲並提示，不會中止。
+def load_characters(seq: str) -> dict:
+    data = json.loads(NARRATION.read_text(encoding="utf-8"))
+    out = {}
+    for c in data["sequences"][seq].get("characters") or []:
+        if isinstance(c, dict) and c.get("id"):
+            out[str(c["id"])] = c
+    return out
+
+
+def speaker_voice(ln: dict, chars: dict, ref_dir: Path) -> dict | None:
+    """這句的角色人聲：{"id", "ref": 參考音檔名或 None, "pitch": 半音}；旁白或角色不存在時 None。"""
+    sid = ln.get("speaker")
+    if not sid or sid not in chars:
+        return None
+    c = chars[sid]
+    ref = str(c.get("voice") or "").strip()
+    if ref and not ((ref_dir / f"{ref}.wav").exists() and (ref_dir / f"{ref}.txt").exists()):
+        print(f"  ! 角色「{c.get('name', sid)}」的參考人聲 {ref} 不存在（{ref_dir.name}/{ref}.wav＋.txt），改用旁白人聲", flush=True)
+        ref = ""
+    try:
+        pitch = max(-6.0, min(6.0, float(c.get("pitch") or 0)))
+    except (TypeError, ValueError):
+        pitch = 0.0
+    if not ref and abs(pitch) < 1e-6:
+        return {"id": sid, "ref": None, "pitch": 0.0, "same": True}
+    return {"id": sid, "ref": ref or None, "pitch": round(pitch, 2)}
+
+
+def pitch_filter(semitones: float, sr: int) -> str:
+    """變調不變速：改取樣率（音高與速度一起變）→ 重新取樣 → atempo 把速度改回來。"""
+    r = 2 ** (semitones / 12.0)
+    return f"asetrate={int(round(sr * r))},aresample={sr},atempo={1 / r:.6f}"
 
 
 def main() -> int:
@@ -392,6 +434,17 @@ def main() -> int:
              "reference_sha": sha_file(ref), "reference_text": ref_text, "speed": a.speed,
              "precision": "fp32" if a.fp32 else "fp16"}
     lines = load_lines(a.seq)
+    chars = load_characters(a.seq)
+    for _, ln in lines:
+        sv = speaker_voice(ln, chars, ref.parent)
+        if sv and not sv.get("same"):
+            if sv["ref"]:
+                rw = ref.parent / f"{sv['ref']}.wav"
+                sv["reference_sha"] = sha_file(rw)
+            ln["_spk"] = sv
+    n_spk = sum(1 for _, ln in lines if ln.get("_spk"))
+    if n_spk:
+        print(f"擬人化角色：{n_spk} 句使用角色人聲（{'、'.join(sorted({ln['_spk']['id'] for _, ln in lines if ln.get('_spk')}))}）", flush=True)
     # 發音字典只作用在 TTS 文字：ln["_tts"]；字幕（subtitle）與旁白稿（speak）保持原樣，寫進 json 供追蹤
     pron = None if a.no_pron else PronunciationEngine(lang_for(LANG, os.environ.get("PIKARA_ASR_CC")), extra_dicts=a.pron_dict)
     for _, ln in lines:
@@ -412,8 +465,9 @@ def main() -> int:
         out = OUT_DIR / a.out
     out.mkdir(parents=True, exist_ok=True)
 
-    def key(speak: str, speed: float | None = None) -> str:
-        return make_key(speak, voice, a.speed if speed is None else speed)
+    def key(speak: str, speed: float | None = None, spk: dict | None = None) -> str:
+        sk = {k: spk[k] for k in ("ref", "reference_sha", "pitch") if k in spk} if spk else None
+        return make_key(speak, voice, a.speed if speed is None else speed, sk)
 
     def cached(lid: str, k: str) -> bool:
         mp3, mj = out / f"{lid}.mp3", out / f"{lid}.json"
@@ -426,7 +480,7 @@ def main() -> int:
         pr = ffprobe(mp3)
         return meta.get("key") == k and pr is not None and abs(pr["duration"] - meta.get("duration", -1)) < 0.05
 
-    todo = [(sc, ln) for sc, ln in lines if not cached(ln["id"], key(ln["_tts"], ln.get("cosySpeed")))]
+    todo = [(sc, ln) for sc, ln in lines if not cached(ln["id"], key(ln["_tts"], ln.get("cosySpeed"), ln.get("_spk")))]
     print(f"共 {len(lines)} 句，需要產生 {len(todo)} 句 → {out.relative_to(ROOT)}")
 
     cosy = None
@@ -538,6 +592,16 @@ def _run(a, lines, todo, out, key, voice, ref, ref_text) -> int:
         perf_log = ROOT / "out" / "cosy_perf.log"
         perf_log.parent.mkdir(exist_ok=True)
         cosy.add_zero_shot_spk(PROMPT_PREFIX + ref_text, str(ref), "pikara_ref")  # 參考音特徵只算一次
+        spk_ids = {}  # 角色參考人聲 → zero-shot speaker id（同樣只算一次）
+        for _, ln in todo:
+            sv = ln.get("_spk")
+            if sv and sv.get("ref") and sv["ref"] not in spk_ids:
+                rw = ref.parent / f"{sv['ref']}.wav"
+                rt = (ref.parent / f"{sv['ref']}.txt").read_text(encoding="utf-8").strip()
+                sid = f"pikara_{sv['ref']}"
+                cosy.add_zero_shot_spk(PROMPT_PREFIX + rt, str(rw), sid)
+                spk_ids[sv["ref"]] = (sid, PROMPT_PREFIX + rt, str(rw))
+                print(f"角色人聲：{sv['ref']}", flush=True)
         torch.cuda.empty_cache()
         print(f"模型載入 {time.time() - t0:.1f}s，precision={voice['precision']}，VRAM {gpu_used_mb()} MiB", flush=True)
         prompt_text = PROMPT_PREFIX + ref_text
@@ -582,7 +646,8 @@ def _run(a, lines, todo, out, key, voice, ref, ref_text) -> int:
                         try:
                             inject_fault(lid, attempt, torch)
                             with VramSampler() as vs, torch.inference_mode():
-                                chunks = [o["tts_speech"] for o in cosy.inference_zero_shot(tts, prompt_text, str(ref), zero_shot_spk_id="pikara_ref", stream=False, speed=ln.get("cosySpeed", a.speed))]
+                                spk_id, p_text, p_wav = spk_ids.get((ln.get("_spk") or {}).get("ref"), ("pikara_ref", prompt_text, str(ref)))
+                                chunks = [o["tts_speech"] for o in cosy.inference_zero_shot(tts, p_text, p_wav, zero_shot_spk_id=spk_id, stream=False, speed=ln.get("cosySpeed", a.speed))]
                             break
                         except torch.cuda.OutOfMemoryError:
                             _empty_cache()  # 真正的 empty_cache（合成迴圈期間 torch.cuda.empty_cache 被停用）
@@ -603,14 +668,17 @@ def _run(a, lines, todo, out, key, voice, ref, ref_text) -> int:
                 if not chk["ok"]:
                     raise RuntimeError(f"{len(takes)} 次合成都未通過完整性檢查（{'、'.join(chk['problems'])}）；這句不寫檔，重新執行只會重做這句")
                 el = time.time() - t1
-                err = encode_mp3(wav, cosy.sample_rate, part_mp3) if fault_for(lid) != "ffmpeg" else "（測試注入：ffmpeg 失敗）"
+                sv = ln.get("_spk") or {}
+                af = pitch_filter(sv["pitch"], cosy.sample_rate) if abs(sv.get("pitch") or 0) > 1e-6 else None
+                err = encode_mp3(wav, cosy.sample_rate, part_mp3, af) if fault_for(lid) != "ffmpeg" else "（測試注入：ffmpeg 失敗）"
                 pr = ffprobe(part_mp3) if not err else None
                 if pr is None or pr["duration"] < 0.3:
                     raise RuntimeError("ffprobe 驗證失敗 " + err)
                 part_mp3.replace(mp3)
                 replaced = True
                 audio_s = wav.shape[0] / cosy.sample_rate
-                meta = {"id": lid, "scene": sc, "seq": a.seq, "key": key(tts, ln.get("cosySpeed")), "voice": {**voice, "speed": ln.get("cosySpeed", a.speed)}, "subtitle": ln["subtitle"],
+                meta = {"id": lid, "scene": sc, "seq": a.seq, "key": key(tts, ln.get("cosySpeed"), ln.get("_spk")), "voice": {**voice, "speed": ln.get("cosySpeed", a.speed)}, "subtitle": ln["subtitle"],
+                        **({"speaker": {k: v for k, v in sv.items() if k != "same"}} if sv else {}),
                         "speak": speak, "ttsText": tts, "pronunciation": ln["_pron"], "integrity": {**chk, "takes": len(takes)},
                         # 重新配音的候選檔在 .studio/revoice/ 底下（不在 public/），改記相對專案根目錄的路徑
                         "file": (mp3.relative_to(ROOT / "public") if mp3.is_relative_to(ROOT / "public") else mp3.relative_to(ROOT)).as_posix(), "duration": round(pr["duration"], 4),

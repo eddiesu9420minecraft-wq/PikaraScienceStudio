@@ -41,6 +41,7 @@ pub struct Queue {
     pub db: Db,
     emit: Emit,
     running: Mutex<HashMap<String, Running>>,
+    hb_count: std::sync::atomic::AtomicU32,
     external: Mutex<ExternalGpu>,
     keep_awake_on: AtomicBool,
     /// Test hook: pretend an external GPU job is running.
@@ -53,6 +54,7 @@ impl Queue {
             db,
             emit,
             running: Mutex::new(HashMap::new()),
+            hb_count: std::sync::atomic::AtomicU32::new(0),
             external: Mutex::new(ExternalGpu::default()),
             keep_awake_on: AtomicBool::new(false),
             force_external_busy: AtomicBool::new(false),
@@ -193,7 +195,9 @@ impl Queue {
     pub fn recover(&self) -> Vec<String> {
         let c = self.conn();
         let stale: Vec<Job> = db::job_list(&c, None, Some("running"), 1000).unwrap_or_default();
-        let ids = db::recover_stale(&c, STALE_MS, now_ms()).unwrap_or_default();
+        // 自己正在執行的工作不算（心跳偶爾延遲也不會被誤判）；其他 running 但心跳過期的＝上一個 Studio 留下的
+        let own: Vec<String> = self.running.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect();
+        let ids = db::recover_stale(&c, STALE_MS, now_ms(), &own).unwrap_or_default();
         drop(c);
         for id in &ids {
             // kill an orphaned process tree left behind by a crashed Studio, so the requeued job doesn't double-run
@@ -310,9 +314,19 @@ impl Queue {
 
     pub fn heartbeat(&self) {
         let ids: Vec<String> = self.running.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect();
-        let c = self.conn();
-        for id in ids {
-            let _ = db::job_heartbeat(&c, &id);
+        {
+            let c = self.conn();
+            for id in ids {
+                let _ = db::job_heartbeat(&c, &id);
+            }
+        }
+        // 每 30 秒檢查一次孤兒工作：Studio 當機後 20 秒內重新啟動時，啟動當下上一個程序的心跳還沒過期，
+        // 那些工作會一直停在 running（控制驗收 E 發現）。由持有佇列鎖的程序定期復原。
+        if self.hb_count.fetch_add(1, Ordering::Relaxed) % 6 == 5 {
+            let rec = self.recover();
+            if !rec.is_empty() {
+                crate::watchdog::log_line(&format!("recovered {} orphaned job(s) whose heartbeat expired", rec.len()));
+            }
         }
     }
 

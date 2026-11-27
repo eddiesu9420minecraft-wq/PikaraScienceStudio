@@ -36,6 +36,83 @@ pub(crate) fn requirements(p: &Production, stage: &str) -> String {
     format!("{}{}", content::brief_block(&p.config, stage), crate::assets::prompt_block(&p.episode, &p.config.assets))
 }
 
+/// 專案裡可用的參考人聲（tools/CosyVoice/reference/*.wav，需有同名 .txt 逐字稿；reference 是旁白本身）。
+pub fn voice_refs(root: &Path) -> Vec<String> {
+    let dir = root.join("tools").join("CosyVoice").join("reference");
+    let mut v: Vec<String> = std::fs::read_dir(&dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let p = e.path();
+                    let stem = p.file_stem()?.to_str()?.to_string();
+                    (p.extension().is_some_and(|x| x == "wav") && stem != "reference" && p.with_extension("txt").exists()).then_some(stem)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+/// 擬人化科普（敘事與角色）：劇本階段決定要不要用角色、寫角色設定與對白；動畫階段依同一份設定畫角色。
+/// 參考：EP10「GPU 為什麼不能取代 CPU？」用 CPU／GPU／RAM 三個晶片角色的對白與互動解釋分工。
+pub(crate) fn narrative_block(p: &Production, voices: &[String], stage: &str) -> String {
+    let c = &p.config;
+    let ep = &p.episode;
+    let mode = c.narrative_mode();
+    if mode == "plain" {
+        return if stage == "script" { "敘事方式：一般旁白，不使用擬人化角色。\n".into() } else { String::new() };
+    }
+    let given = if c.characters.is_empty() {
+        String::new()
+    } else {
+        let list = c
+            .characters
+            .iter()
+            .map(|x| {
+                format!(
+                    "  - {}（代表：{}）外觀：{}；性格：{}；人聲：{}{}",
+                    if x.name.is_empty() { &x.concept } else { &x.name },
+                    if x.concept.is_empty() { "—" } else { &x.concept },
+                    if x.look.is_empty() { "由你設計" } else { &x.look },
+                    if x.personality.is_empty() { "由你設計" } else { &x.personality },
+                    if x.voice.is_empty() { "旁白人聲" } else { &x.voice },
+                    if x.pitch != 0.0 { format!("，音高 {:+} 半音", x.pitch) } else { String::new() }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("使用者指定的角色（必須沿用名稱與設定，可補充細節）：\n{list}\n")
+    };
+    let voices_txt = if voices.is_empty() { "（專案沒有額外的參考人聲，voice 請留空，用 pitch 區分角色）".to_string() } else { voices.join("、") };
+    match stage {
+        "script" => {
+            let decide = if mode == "personified" {
+                "這一集**必須**使用擬人化角色。".to_string()
+            } else {
+                "先判斷這個主題是否適合擬人化：有兩個以上會「互動、分工、競爭或傳遞東西」的技術概念（例：CPU 與 GPU、客戶端與伺服器、封包與路由器）就適合；純歷史敘事、單一抽象定義、嚴肅安全議題則不適合，用一般旁白即可。適合時才使用角色，並在完成說明寫出你的判斷理由。".to_string()
+            };
+            format!(
+                "## 敘事方式：擬人化科普（參考 EP10「GPU 為什麼不能取代 CPU？」）\n{decide}\n{given}\
+使用角色時：\n\
+- 在 sequences.{ep} 加上 \"characters\": [{{\"id\": \"<英文小寫>\", \"name\": \"<角色名>\", \"concept\": \"<代表的技術概念>\", \"look\": \"<外觀：主色、形狀、配件，動畫依此繪製>\", \"personality\": \"<性格與說話方式>\", \"voice\": \"<參考人聲，可留空>\", \"pitch\": <半音 -6～6>}}]，2–4 個角色。可用的參考人聲：{voices_txt}。不同角色的 voice／pitch 組合必須不同，讓觀眾聽得出是誰在說話（例：沉穩的角色 pitch -2，活潑的角色 +3）。\n\
+- 角色說的台詞用獨立的一句，加上 \"speaker\": \"<角色 id>\"；字幕 subtitle 只寫台詞本身（不要加「CPU：」前綴）。沒有 speaker 的句子是旁白。旁白仍要負責解釋與總結，對白比例約 30–60%。\n\
+- 角色的個性要符合它代表的技術特性（例：CPU 精明、多才多藝但人手少；GPU 人多力大但只會做重複的事），用對白、吐槽、誤會與合作來呈現原理；比喻不能扭曲事實，最後用旁白把比喻對回真實技術。\n\
+- 用 anchors 標出角色的關鍵動作或表情時機（例：\"gpu_jump\": \"一腳踹開\"），動畫會在念到時觸發。\n"
+            )
+        }
+        "animate" => format!(
+            "## 擬人化角色（若 sequences.{ep}.characters 存在）\n\
+- 先在 src/acts/{ep}/parts/characters.tsx 建立共用的角色元件（每個角色一個，依 characters 的 look 繪製：固定主色、輪廓、五官與配件），所有場景都使用同一個元件，確保外觀一致。可參考 src/acts/ep10/parts/common.tsx 的 Mascot、Bubble（若專案中存在）。\n\
+- 角色元件要支援表情（開心、得意、驚訝、生氣、沮喪、思考）與肢體動作（揮手、跳起、指向、搖頭、倒下、互相推擠），用 props 控制，動作以 spring／緩動呈現，不要生硬切換。\n\
+- 角色說話的句子（speaker）要讓說話者有嘴部或身體的說話動畫，並用對話氣泡顯示重點詞（氣泡不可壓到字幕區）；其他角色同時要有反應（點頭、驚訝、吐槽）。\n\
+- 加入符合技術原理的趣味互動（例：GPU 一次搬一大堆箱子、CPU 拿著清單指揮），但互動必須能解釋概念，不是純裝飾。\n\
+- 角色出現時仍要有能「解釋」概念的圖解或 3D 場景，角色是引導觀眾的主角，不是唯一的畫面。\n"
+        ),
+        _ => String::new(),
+    }
+}
+
 pub(crate) fn prompt_script(p: &Production) -> String {
     let c = &p.config;
     let ep = &p.episode;
@@ -44,6 +121,8 @@ pub(crate) fn prompt_script(p: &Production) -> String {
     let target = (c.minutes * 60.0 * content::rate(c)).round() as i64;
     let unit = if en { "words" } else { "字" };
     let req = requirements(p, "script");
+    let voices: Vec<String> = p.data["voiceRefs"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+    let nar = narrative_block(p, &voices, "script");
     let min_src = c.min_sources();
     let sources = if min_src == 0 {
         format!("（本集不強制資料來源。若有核對事實，可建立 {E}_SOURCES.md 列出標題與網址；不得編造網址。）")
@@ -57,7 +136,8 @@ pub(crate) fn prompt_script(p: &Production) -> String {
 1. 為每個場景加 2–6 個 anchors（名稱英文小寫，場景內不重複；詞必須逐字出現在該句的 speak 或 subtitle 中，≤ 8 字），動畫會在念到該詞時觸發。\n\
 2. 只有在 TTS 可能念錯時才加 speak（例：GPU → G P U、4GB → 四 GB）；speak 必須與 subtitle 意思完全相同。\n\
 3. title 若是空的，依腳本內容填一個 12 字內的集名；加上 thumbnail：{{\"lines\": [\"≤8 字\", \"≤8 字\"], \"highlight\": \"≤12 字\", \"tags\": [\"2–5 個短關鍵詞\"]}}。\n\
-4. {sources}\n\n\
+4. {sources}\n\
+5. 擬人化（依下方「敘事方式」）：可以在 sequences.{ep} 加上 characters，並為角色說的句子加上 speaker；不得為此修改 subtitle。\n\n{nar}\n\
 嚴格禁止：修改任何 subtitle 的文字、增刪或合併句子、增刪或重排場景、改寫腳本內容。腳本若有事實錯誤，不要改，在完成說明中指出。\n{lr}\n\n{COMMON_RULES}",
             topic = c.topic,
             lr = lang_rules(p),
@@ -70,7 +150,7 @@ pub(crate) fn prompt_script(p: &Production) -> String {
     };
     format!(
         "任務：為新的一集 {ep} 完成「資料研究＋劇本」。\n\n\
-主題：{topic}\n目標長度：約 {min} 分鐘（旁白約 {target} {unit}；允許 ±15%）\n語氣：{tone}\n觀眾：{aud}\n補充說明：{notes}\n{lr}\n\n{req}\n\
+主題：{topic}\n目標長度：約 {min} 分鐘（旁白約 {target} {unit}；允許 ±15%）\n語氣：{tone}\n觀眾：{aud}\n補充說明：{notes}\n{lr}\n\n{req}\n{nar}\n\
 步驟：\n\
 1. 用網路搜尋與讀取網頁的工具研究主題，優先官方文件、論文、教科書、權威機構；若有使用者提供的文字／PDF／參考文件，先讀它們，內容以它們為準。{sources}\n\
 2. 在 src/data/narration.json 的 sequences 加入 \"{ep}\"（不要修改其他集數）：\n\
@@ -94,8 +174,9 @@ pub(crate) fn prompt_script(p: &Production) -> String {
 pub(crate) fn prompt_animate(p: &Production) -> String {
     let ep = &p.episode;
     let req = requirements(p, "animate");
+    let nar = narrative_block(p, &[], "animate");
     format!(
-        "任務：為 {ep} 撰寫每個場景的動畫元件（React + TypeScript，Remotion）。\n\n{req}\n\
+        "任務：為 {ep} 撰寫每個場景的動畫元件（React + TypeScript，Remotion）。\n\n{req}\n{nar}\
 - 旁白在 src/data/narration.json 的 sequences.{ep}（先讀完）。每個 scene 對應一個元件，建立在 src/acts/{ep}/，檔名用場景 id 的大寫（s01 → S01.tsx；Studio 依檔名做場景級增量渲染），型別是 src/acts/types.ts 的 ActComponent（props：frame 本幕本地影格、anchors 錨點名稱→影格、lines、fps 等）。共用的小元件放 src/acts/{ep}/parts/。\n\
 - 在 src/episode/registry.ts 的 CUSTOM_ACTS 標記區塊內加入 {ep}: [{{id: '<scene id>', component: S01, transitionIn: 'self'}}, {{id: …, transitionIn: 'iris'}} …]（第一幕 'self'，其餘 'iris'），id 必須與 scene id 完全相同，順序一致。\n\
 - 品質標準＝EP01：2D 圖解＋3D 場景（@remotion/three、three）的高品質科普動畫，不是文字簡報。參考 src/acts/Act02.tsx、src/acts/act02/Datacenter3D.tsx、src/acts/act05/BoardWorld.tsx、src/acts/act06/EmbedWorld.tsx（3D）、src/episode/GenericAct.tsx（錨點驅動的最簡寫法）、src/theme/palette.ts、src/theme/fonts.ts、src/lib/anim.ts。沿用相同的配色、字型與質感；每個場景至少一個能「解釋」概念的視覺（示意動畫、流程、比例、結構、3D 模型），文字卡片只能當輔助。\n\

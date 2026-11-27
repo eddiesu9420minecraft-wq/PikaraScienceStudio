@@ -76,6 +76,10 @@ async fn app_info() -> R<Value> {
         "uiTour": std::env::var("PIKARA_UI_TOUR").ok().filter(|v| v == "1").is_some(),
         "uiTourStepMs": std::env::var("PIKARA_UI_TOUR_STEP_MS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(2500),
         "uiTourEpisode": std::env::var("PIKARA_UI_TOUR_EPISODE").ok(),
+        "uiTourLang": std::env::var("PIKARA_UI_TOUR_LANG").ok(),
+        "uiTourThemes": std::env::var("PIKARA_UI_TOUR_THEMES").ok(),
+        "uiTourOnly": std::env::var("PIKARA_UI_TOUR_ONLY").ok(),
+        "uiTourActions": std::env::var("PIKARA_UI_TOUR_ACTIONS").ok(),
     }))
 }
 
@@ -594,21 +598,57 @@ async fn asset_url_allowed(app: tauri::AppHandle, st: State<'_, AppState>, proje
 // ------------------------------------------------------------------ autonomous production
 
 #[tauri::command]
-async fn auto_defaults() -> R<Value> {
+async fn auto_defaults(st: State<'_, AppState>, project_id: Option<String>) -> R<Value> {
+    // 擬人化角色可選的參考人聲（專案 tools/CosyVoice/reference 中實際存在的檔案）
+    let voices = project_id
+        .and_then(|id| db::project_get(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &id).ok())
+        .map(|p| autopilot::voice_refs(std::path::Path::new(&p.root_path)))
+        .unwrap_or_default();
     Ok(json!({
         "config": autopilot::AutoConfig::default(),
         "stages": autopilot::STAGES.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+        "boardSteps": autopilot::BOARD_STEPS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+        "voices": voices,
     }))
 }
 
 #[tauri::command]
-async fn auto_start(st: State<'_, AppState>, project_id: String, config: Value) -> R<autopilot::Production> {
+async fn auto_start(st: State<'_, AppState>, project_id: String, config: Value, hold: Option<bool>) -> R<autopilot::Production> {
     let ap = st.autopilot.clone();
     blocking(move || {
         let cfg: autopilot::AutoConfig = serde_json::from_value(config).map_err(|e| format!("設定格式錯誤：{e}"))?;
-        ap.start(&project_id, cfg)
+        ap.create(&project_id, cfg, hold.unwrap_or(false))
     })
     .await
+}
+
+/// 製作狀態頁：每部影片的 11 個步驟、整體進度、目前工作、最新日誌、錯誤、封面與可用操作（全部來自資料庫與工作樹）。
+#[tauri::command]
+async fn auto_board(app: tauri::AppHandle, st: State<'_, AppState>, project_id: Option<String>, id: Option<String>) -> R<Vec<Value>> {
+    let ap = st.autopilot.clone();
+    let v = blocking(move || match id {
+        Some(id) => {
+            let p = autopilot::get(&ap.db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
+            Ok(vec![ap.board_item(&p)])
+        }
+        None => ap.board(project_id.as_deref(), 200),
+    })
+    .await?;
+    // 封面（工作樹或影片資料夾中的圖片）讓介面可以顯示
+    for x in &v {
+        if let Some(c) = x["cover"].as_str() {
+            if let Some(d) = std::path::Path::new(c).parent() {
+                let _ = app.asset_protocol_scope().allow_directory(d, false);
+            }
+        }
+    }
+    Ok(v)
+}
+
+#[tauri::command]
+async fn auto_update_config(st: State<'_, AppState>, id: String, patch: Value) -> R<autopilot::Production> {
+    let ap = st.autopilot.clone();
+    blocking(move || ap.update_config(&id, patch)).await
 }
 
 #[tauri::command]
@@ -640,6 +680,9 @@ async fn auto_control(st: State<'_, AppState>, id: String, action: String) -> R<
                 ap.remove(&id)?;
                 return Ok(json!({"removed": true}));
             }
+            "start" => ap.start_draft(&id)?,
+            "delete_task" => return ap.delete_task(&id),
+            "delete_files" => return ap.delete_files(&id),
             a => return Err(format!("未知的操作 {a}")),
         };
         Ok(serde_json::to_value(p).unwrap())
@@ -807,7 +850,10 @@ fn initialize(app: tauri::AppHandle, monitor_init: std::thread::JoinHandle<monit
     });
     let q = Queue::new(db.clone(), emit.clone());
     let mut scheduler_on = false;
-    match util::scheduler_lock() {
+    // 介面截圖導覽（PIKARA_UI_TOUR=1）只檢視：不取得佇列鎖，佇列與自動製作都不會啟動，
+    // 即使資料庫裡有中斷或排隊中的工作也不會被接續執行。
+    let ui_tour = std::env::var("PIKARA_UI_TOUR").ok().as_deref() == Some("1");
+    match if ui_tour { Err("介面導覽模式：不執行佇列".to_string()) } else { util::scheduler_lock() } {
         Ok(f) => {
             std::mem::forget(f); // held for the life of the app
             scheduler_on = true;
@@ -932,7 +978,13 @@ pub fn run() {
     // CPU/RAM monitor setup is slow (Windows PDH); overlap it with Tauri + WebView2 startup
     let monitor_init = std::thread::spawn(monitor::Monitor::new);
     // A separate data dir (PIKARA_STUDIO_DATA, tests) is a separate Studio: own WebView2 profile, no single-instance hand-off.
-    let separate = std::env::var_os("PIKARA_STUDIO_DATA").is_some();
+    // 介面截圖導覽（PIKARA_UI_TOUR=1）：與使用者正在使用的 Studio 完全分開——自己的 WebView2 設定檔、不走單一執行個體、
+    // 不執行佇列（見 initialize）。
+    let ui_tour = std::env::var("PIKARA_UI_TOUR").ok().as_deref() == Some("1");
+    if ui_tour && std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
+        std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", util::data_dir().join("webview2-tour"));
+    }
+    let separate = ui_tour || std::env::var_os("PIKARA_STUDIO_DATA").is_some();
     if separate && std::env::var_os("WEBVIEW2_USER_DATA_FOLDER").is_none() {
         std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", util::data_dir().join("EBWebView"));
     }
@@ -967,7 +1019,7 @@ pub fn run() {
             monitor_sample, job_analyse_with_claude,
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
             outputs_list, publish_metadata, open_path, asset_url_allowed,
-            auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, agent_check, agent_done,
+            auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, auto_board, auto_update_config, agent_check, agent_done,
             workspace_get, line_set, revoice_start, voice_versions, voice_restore, voice_reject, rerender_plan, rerender_start, db_info, db_backup, ui_tour_report, hw_info, hw_usage,
             auto_monitor, auto_preview, pick_files, asset_probe, layout_migrate, env_venv
         ])

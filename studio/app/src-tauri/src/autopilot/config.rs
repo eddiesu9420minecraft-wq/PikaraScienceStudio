@@ -87,7 +87,32 @@ pub struct AutoConfig {
     pub assets: Vec<crate::assets::Asset>,
     /// Sandbox test: TEST number, delivered to sandbox/TESTnnn, never merged into the project.
     pub sandbox: bool,
+    // ---------------------------------------------------------- v0.3.2 擬人化科普
+    /// 敘事方式："auto"（預設：AI 依主題判斷哪些技術概念適合擬人化）| "personified"（一定使用擬人化角色）| "plain"（不使用）
+    pub narrative: String,
+    /// 使用者指定的角色（選填）。空白 = 由 AI 決定角色；有填時 AI 必須沿用這些角色的設定。
+    pub characters: Vec<Character>,
 }
+
+/// 擬人化角色。外觀與性格寫進 narration.json 的 `sequences.<ep>.characters`，動畫與配音都依它保持一致。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Character {
+    /// 角色名稱（例：CPU 大廚）
+    pub name: String,
+    /// 代表的技術概念（例：CPU）
+    pub concept: String,
+    /// 外觀（顏色、形狀、配件）
+    pub look: String,
+    /// 性格與說話方式
+    pub personality: String,
+    /// 參考人聲：tools/CosyVoice/reference 下的檔名（不含副檔名，空白 = 旁白人聲）
+    pub voice: String,
+    /// 音高（半音，-6～6；0 = 不變）
+    pub pitch: f64,
+}
+
+pub const NARRATIVES: [&str; 3] = ["auto", "personified", "plain"];
 
 impl Default for AutoConfig {
     fn default() -> Self {
@@ -127,6 +152,8 @@ impl Default for AutoConfig {
             min_sources: None,
             assets: vec![],
             sandbox: false,
+            narrative: "auto".into(),
+            characters: vec![],
         }
     }
 }
@@ -210,7 +237,46 @@ impl AutoConfig {
         if let Some(n) = self.min_sources {
             self.min_sources = Some(n.min(20));
         }
+        if self.narrative.is_empty() {
+            self.narrative = "auto".into();
+        }
+        if !NARRATIVES.contains(&self.narrative.as_str()) {
+            return Err(format!("narrative 必須是 auto、personified 或 plain：{}", self.narrative));
+        }
+        let clip = |s: &str, n: usize| s.trim().chars().take(n).collect::<String>();
+        self.characters = self
+            .characters
+            .iter()
+            .map(|c| Character {
+                name: clip(&c.name, 20),
+                concept: clip(&c.concept, 40),
+                look: clip(&c.look, 300),
+                personality: clip(&c.personality, 300),
+                voice: clip(&c.voice, 40),
+                pitch: if c.pitch.is_finite() { c.pitch.clamp(-6.0, 6.0) } else { 0.0 },
+            })
+            .filter(|c| !c.name.is_empty() || !c.concept.is_empty())
+            .take(6)
+            .collect();
+        for c in &self.characters {
+            if !c.voice.is_empty() && !c.voice.chars().all(|ch| ch.is_ascii_alphanumeric() || "-_".contains(ch)) {
+                return Err(format!("角色「{}」的參考人聲名稱只能使用英數字、- 與 _：{}", c.name, c.voice));
+            }
+        }
+        if self.narrative == "plain" {
+            self.characters.clear();
+        }
         Ok(())
+    }
+
+    /// 這部影片會不會使用擬人化角色：plain 不會；personified 一定會；auto 由 AI 判斷（指定了角色時視為會）。
+    pub fn narrative_mode(&self) -> &str {
+        match self.narrative.as_str() {
+            "plain" => "plain",
+            "personified" => "personified",
+            _ if !self.characters.is_empty() => "personified",
+            _ => "auto",
+        }
     }
 
     /// Script mode needs the script (pasted, or a `script` asset — checked again after import).

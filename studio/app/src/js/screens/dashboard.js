@@ -22,7 +22,7 @@ export default {
     const jobsBox = h('div', loading(4));
     const health = h('div');
     mount(ctx.content, h('div.page',
-      pageHead(p.name, t('影片專案總覽'), btn(t('新影片'), { kind: 'primary', icon: 'plus', onClick: () => ctx.go('projects/auto') })),
+      pageHead(p.name, t('影片專案總覽'), btn(t('新影片'), { kind: 'primary', icon: 'plus', onClick: () => ctx.go('create') })),
       metrics,
       h('div.dash-two', focus, h('div.col', jobsBox, health))));
 
