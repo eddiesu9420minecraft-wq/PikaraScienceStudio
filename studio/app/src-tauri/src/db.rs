@@ -87,13 +87,35 @@ pub fn open(path: &Path) -> Result<Connection, String> {
     }
     let conn = Connection::open(path).map_err(|e| e.to_string())?;
     conn.execute_batch("PRAGMA busy_timeout=5000;").map_err(|e| e.to_string())?;
-    // Back up before any schema change (consistent snapshot incl. WAL via VACUUM INTO), verify the copy, log it.
+    if user_version(&conn) >= schema_version() {
+        init(&conn)?;
+        return Ok(conn);
+    }
+    // A schema change is needed. Only one process may back up + migrate at a time (two Studio instances, the app and
+    // a `--cli` run, CYW starting Studio while it is already open): take a machine-wide lock next to the database,
+    // then re-read the version — another process may have finished the migration while we waited.
+    let _lock = migration_lock(path)?;
     let v = user_version(&conn);
+    // Back up before any schema change (SQLite online backup API: consistent snapshot including committed WAL
+    // frames, safe while other connections read/write), verify the copy, log it.
     if v > 0 && v < schema_version() {
         backup_verified(&conn, path, v, "before-migration")?;
     }
     init(&conn)?;
     Ok(conn)
+}
+
+/// Exclusive lock `<db>.migrate.lock` held while backing up + migrating; waits up to 60 s for another process.
+fn migration_lock(db_path: &Path) -> Result<std::fs::File, String> {
+    let p = db_path.with_file_name(format!("{}.migrate.lock", db_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
+    let t0 = std::time::Instant::now();
+    loop {
+        match crate::platform::open_exclusive(&p) {
+            Ok(f) => return Ok(f),
+            Err(_) if t0.elapsed() < std::time::Duration::from_secs(60) => std::thread::sleep(std::time::Duration::from_millis(100)),
+            Err(e) => return Err(format!("另一個程式正在遷移資料庫超過 60 秒（{}）：{e}。未進行遷移，資料未變更。", p.display())),
+        }
+    }
 }
 
 /// `<data>/backups/studio.db.v<old>-<reason>-<timestamp>.bak`, verified with integrity_check + user_version.
@@ -102,7 +124,15 @@ pub fn backup_verified(conn: &Connection, db_path: &Path, version: i64, reason: 
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let bak = dir.join(format!("studio.db.v{version}-{reason}-{ts}.bak"));
-    conn.execute("VACUUM INTO ?1", params![bak.to_string_lossy()]).map_err(|e| format!("資料庫備份失敗（未進行遷移）：{e}"))?;
+    {
+        // online backup API, 256 pages per step with a short pause so concurrent writers are not starved
+        let mut dst = Connection::open(&bak).map_err(|e| format!("資料庫備份失敗（未進行遷移）：{e}"))?;
+        let b = rusqlite::backup::Backup::new(conn, &mut dst).map_err(|e| format!("資料庫備份失敗（未進行遷移）：{e}"))?;
+        b.run_to_completion(256, std::time::Duration::from_millis(5), None).map_err(|e| format!("資料庫備份失敗（未進行遷移）：{e}"))?;
+        drop(b);
+        // the copy is a standalone file: rollback journal, no -wal / -shm next to it
+        let _ = dst.execute_batch("PRAGMA journal_mode=DELETE;");
+    }
     let check = Connection::open_with_flags(&bak, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| e.to_string())?;
     let ok: String = check.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     let bv = user_version(&check);
@@ -134,6 +164,14 @@ pub fn backups(db_path: &Path) -> Vec<Value> {
 /// Restore a backup over the database (Studio must not be running). The current database is kept as
 /// `studio.db.before-restore-<ts>` first; the restored copy is integrity-checked before it replaces anything.
 pub fn restore(db_path: &Path, backup: &Path) -> Result<Value, String> {
+    // refuse while a Studio (window or --cli queue runner) uses this data dir: replacing the file under an open
+    // connection (and deleting its -wal) would lose or corrupt data
+    if let Some(dir) = db_path.parent() {
+        let lock = dir.join("scheduler.lock");
+        if lock.exists() && crate::platform::open_exclusive(&lock).is_err() {
+            return Err("Pikara Science Studio 仍在使用這個資料庫（佇列執行中）。請先關閉 Studio 再還原；資料庫未變更。".into());
+        }
+    }
     let check = Connection::open_with_flags(backup, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| e.to_string())?;
     let ok: String = check.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     let bv = user_version(&check);
@@ -175,10 +213,22 @@ pub fn user_version(conn: &Connection) -> i64 {
 }
 
 fn migrate(conn: &Connection) -> Result<(), String> {
-    let v = user_version(conn) as usize;
-    for (i, sql) in MIGRATIONS.iter().enumerate().skip(v) {
-        conn.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;", i + 1))
-            .map_err(|e| format!("migration {}: {e}", i + 1))?;
+    for (i, sql) in MIGRATIONS.iter().enumerate() {
+        if (user_version(conn) as usize) > i {
+            continue;
+        }
+        // BEGIN IMMEDIATE takes the write lock first, then the version is checked again inside the transaction:
+        // a migration another connection committed meanwhile is never run twice
+        conn.execute_batch("BEGIN IMMEDIATE;").map_err(|e| format!("migration {}: {e}", i + 1))?;
+        if (user_version(conn) as usize) > i {
+            conn.execute_batch("COMMIT;").map_err(|e| e.to_string())?;
+            continue;
+        }
+        if let Err(e) = conn.execute_batch(&format!("{sql}; PRAGMA user_version = {};", i + 1)) {
+            let _ = conn.execute_batch("ROLLBACK;");
+            return Err(format!("migration {}: {e}", i + 1));
+        }
+        conn.execute_batch("COMMIT;").map_err(|e| format!("migration {}: {e}", i + 1))?;
     }
     Ok(())
 }
@@ -345,6 +395,9 @@ pub struct Job {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub heartbeat_at: Option<String>,
+    /// running but suspended by the user (pause marker file; not a DB status, so the schema does not change)
+    #[serde(default)]
+    pub paused: bool,
 }
 
 const JOB_COLS: &str = "id,project_id,kind,label,params_json,resource,status,progress,progress_text,step,steps_json,attempt,pid,exit_code,error,wait_reason,log_path,created_at,started_at,finished_at,heartbeat_at";
@@ -365,9 +418,12 @@ fn row_job(r: &Row) -> rusqlite::Result<Job> {
     } else {
         None
     };
+    let id: String = r.get(0)?;
+    let status: String = r.get(6)?;
     Ok(Job {
         label_cn,
-        id: r.get(0)?,
+        paused: status == "running" && crate::queue::is_paused(&id),
+        id,
         project_id: r.get(1)?,
         kind: r.get(2)?,
         label: r.get(3)?,
@@ -675,6 +731,64 @@ mod tests {
         // a v0.2 build opening a v3 database: its migrate() only runs migrations past user_version, so nothing happens
         let kc = Connection::open(&kept).unwrap();
         assert_eq!(user_version(&kc), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Several processes (here: threads with their own connections, the same code path) open one old database at
+    /// once: exactly one backup, every opener ends at the latest schema, rows intact, no "table already exists".
+    #[test]
+    fn concurrent_openers_migrate_once_with_one_backup() {
+        let dir = std::env::temp_dir().join(format!("pss-db-race-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("studio.db");
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            for (i, sql) in MIGRATIONS.iter().take(2).enumerate() {
+                c.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;", i + 1)).unwrap();
+            }
+            for k in 0..200 {
+                c.execute("INSERT INTO jobs (id,kind,label,created_at,status) VALUES (?1,'render','x','2026-11-01','succeeded')", params![format!("j{k}")]).unwrap();
+            }
+        }
+        let hs: Vec<_> = (0..6)
+            .map(|_| {
+                let p = path.clone();
+                std::thread::spawn(move || open(&p).map(|c| user_version(&c)))
+            })
+            .collect();
+        for h in hs {
+            assert_eq!(h.join().unwrap().unwrap(), schema_version());
+        }
+        assert_eq!(backups(&path).len(), 1, "one verified backup, not one per opener");
+        let c = open(&path).unwrap();
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 200);
+        // the backup is standalone (no -wal beside it) and intact
+        let bak = std::path::PathBuf::from(backups(&path)[0]["path"].as_str().unwrap().to_string());
+        assert!(!bak.with_file_name(format!("{}-wal", bak.file_name().unwrap().to_string_lossy())).exists());
+        let b = Connection::open(&bak).unwrap();
+        let bn: i64 = b.query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0)).unwrap();
+        assert_eq!((bn, user_version(&b)), (200, 2));
+        drop(b);
+        drop(c);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Restoring while a Studio holds the scheduler lock is refused and changes nothing.
+    #[test]
+    fn restore_refused_while_studio_runs() {
+        let dir = std::env::temp_dir().join(format!("pss-db-rs-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("studio.db");
+        drop(open(&path).unwrap());
+        let c = open(&path).unwrap();
+        let bak = backup_verified(&c, &path, user_version(&c), "manual").unwrap();
+        drop(c);
+        let held = crate::platform::open_exclusive(&dir.join("scheduler.lock")).unwrap();
+        let e = restore(&path, &bak).unwrap_err();
+        assert!(e.contains("仍在使用"), "{e}");
+        drop(held);
+        assert!(restore(&path, &bak).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

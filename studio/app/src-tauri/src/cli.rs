@@ -11,6 +11,7 @@
 //!   run-queue      [--timeout <s>] [--verbose]      run the scheduler until nothing is queued/running
 //!   jobs           [--project <dir>] [--limit n]
 //!   job-retry      --id <job>        job-cancel --id <job>        recover
+//!   job-pause      --id <job>        job-resume --id <job>   suspend / continue the job's whole process tree
 //!   auto-start     --project <dir> --config <json>   (Autonomous Production Mode; topic, minutes, style …)
 //!   auto-run       [--timeout <s>]   run queue + autopilot until no production is active; prints every event
 //!   auto-list      auto-get --id <p>   auto-pause|auto-resume|auto-stop|auto-discard --id <p>
@@ -33,6 +34,7 @@
 //!   voice-versions --root <dir> --episode <ep> [--line <id>]    voice-restore --line <id> --version <n>
 //!   output-promote --root <dir> --episode <ep> --file <mp4>      rerender-plan --root … --params <json>
 //!   db-backups     db-backup     db-restore --from <backup>  (Studio must be closed)
+//!   hardware       read-only machine profile, GPU snapshot, device assignment, power-mode budgets (no DB access)
 //! ```
 //! auto-start config (v0.2.1): mode auto|guided|script, brief (Markdown), chapters [..], mustInclude, mustAvoid,
 //! opening, ending, voiceTone, animationStyle, pacing, scriptText, language zh-TW|zh-CN|both|en, minSources,
@@ -71,6 +73,16 @@ pub fn run(args: &[String]) -> i32 {
         std::env::set_var("PIKARA_STUDIO_DATA", d);
     }
     let cmd = args.iter().position(|a| a == "--cli").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
+    // hardware: read-only report — never opens (or migrates) any database, writes nothing; safe on CI runners
+    if cmd == "hardware" {
+        let snap = crate::hardware::manager::snapshot();
+        let assign = crate::hardware::selector::select(&snap, &db::Settings::default().hw);
+        out(&json!({"ok": true,
+            "platform": {"os": crate::platform::OS, "arch": crate::platform::ARCH, "nodePlatform": crate::platform::NODE_PLATFORM,
+                         "packagedContainer": crate::platform::packaged_container(), "dataDir": crate::util::data_dir(), "cacheDir": crate::util::cache_dir()},
+            "machine": crate::hardware::profile::report(), "snapshot": snap, "assignment": assign}));
+        return 0;
+    }
     // restore must not open (and migrate) the database it is about to replace
     if cmd == "db-restore" {
         let r = arg(args, "--from").ok_or_else(|| "缺少 --from <備份檔>".to_string()).and_then(|b| db::restore(&crate::util::data_dir().join("studio.db"), Path::new(&b)));
@@ -326,6 +338,12 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             let id = arg(args, "--id").ok_or("缺少 --id")?;
             let j = q.cancel(&id)?;
             out(&json!({"ok": true, "id": j.id, "status": j.status}));
+            Ok(0)
+        }
+        "job-pause" | "job-resume" => {
+            let id = arg(args, "--id").ok_or("缺少 --id")?;
+            let r = if cmd == "job-pause" { q.pause(&id)? } else { q.resume(&id)? };
+            out(&json!({"ok": true, "id": id, "result": r}));
             Ok(0)
         }
         "recover" => {

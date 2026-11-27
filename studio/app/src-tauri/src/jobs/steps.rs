@@ -27,19 +27,22 @@ pub struct Ctx<'a> {
 
 impl Ctx<'_> {
     pub fn node(&self) -> String {
-        let n = Path::new(&self.settings.node_dir).join("node.exe");
-        if n.exists() { n.to_string_lossy().into() } else { "node".into() }
+        let n = Path::new(&self.settings.node_dir).join(crate::platform::exe("node"));
+        if n.exists() { n.to_string_lossy().into() } else { crate::platform::node_program(&self.settings.node_dir) }
     }
     pub fn cosy_python(&self) -> String {
         self.settings
             .cosy_python
             .clone()
-            .unwrap_or_else(|| self.root.join(r"tools\CosyVoice\.venv\Scripts\python.exe").to_string_lossy().into())
+            .unwrap_or_else(|| crate::platform::default_cosy_python(self.root).to_string_lossy().into())
     }
     fn env(&self) -> Vec<(String, String)> {
         let mut v = self.base_env();
         // v0.3 DeviceSelector: render GPU / encoder / VRAM cap / AI device for every step (scripts read these)
         v.extend(crate::hardware::selector::job_env(&crate::hardware::selector::current(self.settings)));
+        // power mode → concrete ceilings (render tabs, TTS batch, CPU threads, memory budget); see hardware::profile
+        let mode = if self.settings.perf_mode.is_empty() { "balanced" } else { self.settings.perf_mode.as_str() };
+        v.extend(crate::hardware::profile::budget_env(&crate::hardware::profile::budget(&crate::hardware::profile::cached(), mode, None)));
         v
     }
     fn base_env(&self) -> Vec<(String, String)> {
@@ -74,9 +77,11 @@ impl Ctx<'_> {
         }
     }
     fn py(&self, label: &str, args: &[&str]) -> Step {
-        let mut a = vec!["-3.11", "-u"];
+        let (prog, lead) = crate::platform::python311();
+        let mut a: Vec<&str> = lead.iter().map(|s| s.as_str()).collect();
+        a.push("-u");
         a.extend_from_slice(args);
-        self.step(label, "py", &a, Parser::Plain)
+        self.step(label, &prog, &a, Parser::Plain)
     }
     fn cosy(&self, label: &str, args: &[String], extra_env: &[(&str, &str)]) -> Step {
         let mut a: Vec<&str> = vec!["-u", "scripts/generate_voiceover_cosy.py"];
@@ -653,7 +658,7 @@ pub(crate) fn build_steps_inner(kind: &str, params: &Value, ctx: &Ctx) -> Result
             if c.trim().is_empty() {
                 return Err("command is required".into());
             }
-            let mut s = ctx.step("自訂指令", "cmd", &["/d", "/s", "/c", c], Parser::Plain);
+            let mut s = if cfg!(windows) { ctx.step("自訂指令", "cmd", &["/d", "/s", "/c", c], Parser::Plain) } else { ctx.step("自訂指令", "/bin/sh", &["-c", c], Parser::Plain) };
             s.stall_secs = p["stallSecs"].as_u64().filter(|v| *v > 0);
             if p["watchFiles"].as_bool() == Some(true) {
                 s.activity_dir = Some(s.cwd.clone());

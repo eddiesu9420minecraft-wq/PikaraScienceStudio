@@ -94,7 +94,7 @@ fn env_dir(k: &str) -> PathBuf {
 }
 
 fn python_check(venv: &Path) -> (bool, String) {
-    let py = venv.join("Scripts").join("python.exe");
+    let py = crate::platform::venv_python(venv);
     match run(&py.to_string_lossy(), &["-c", "import sys; print(sys.version.split()[0], sys.base_prefix)"], None, Duration::from_secs(60)) {
         Ok(o) => (o.ok(), o.combined().trim().chars().take(400).collect()),
         Err(e) => (false, e),

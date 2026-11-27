@@ -215,6 +215,23 @@ pub fn parse_pnp(text: &str) -> (Vec<DisabledGpu>, Vec<(String, String)>) {
 }
 
 fn detect_now() -> Snapshot {
+    if cfg!(target_os = "macos") {
+        let (cpu, gpus, error) = super::apple::detect();
+        let src = if cpu.apple_silicon { "sysctl + system_profiler（Apple Silicon，統一記憶體）" } else { "sysctl + system_profiler（Intel Mac）" };
+        return Snapshot {
+            detected_at: now_iso(),
+            source: src.into(),
+            gpus,
+            disabled: vec![],
+            cuda: CudaInfo { error: Some("macOS 沒有 CUDA（Apple GPU 使用 Metal／MPS／MLX）".into()), ..Default::default() },
+            encoders: Value::Null,
+            error,
+        };
+    }
+    if !cfg!(windows) {
+        // Linux: adapters come from /sys/class/drm in hwenc.mjs; DXGI / CUDA driver API detection is Windows-only here
+        return Snapshot { detected_at: now_iso(), source: "Linux（DRM；Studio 偵測僅提供 CPU／編碼器實測）".into(), gpus: vec![], disabled: vec![], cuda: native::cuda(), encoders: Value::Null, error: None };
+    }
     // DXGI / D3D12 / CUDA on a worker thread with a time limit: a hung driver must not block Studio's start
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {

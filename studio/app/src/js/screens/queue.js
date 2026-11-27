@@ -87,6 +87,8 @@ class QueueView {
     const steps = j.steps && j.steps.length > 1 ? t('步驟 {i}/{n}：{s}', { i: Math.min(j.step + 1, j.steps.length), n: j.steps.length, s: j.steps[Math.min(j.step, j.steps.length - 1)] || '' }) : null;
     const recovered = j.status === 'interrupted' || (j.attempt > 0 && ACTIVE.includes(j.status));
     const actions = h('div.row.gap2',
+      j.status === 'running' && !j.paused ? btn(t('暫停'), { small: true, onClick: (e) => { e.stopPropagation(); this.pause(j); } }) : null,
+      j.status === 'running' && j.paused ? btn(t('繼續'), { small: true, kind: 'primary', onClick: (e) => { e.stopPropagation(); this.resume(j); } }) : null,
       ACTIVE.includes(j.status) ? btn(t('取消'), { small: true, kind: 'destructive', onClick: (e) => { e.stopPropagation(); this.cancel(j); } }) : null,
       FAILED.includes(j.status) ? btn(t('重試'), { small: true, icon: 'refresh', onClick: (e) => { e.stopPropagation(); this.retry(j); } }) : null,
       j.status === 'failed' ? btn(t('交給 Claude 分析'), { small: true, onClick: (e) => { e.stopPropagation(); this.analyse(j); } }) : null,
@@ -229,9 +231,15 @@ class QueueView {
 
   // ---------- actions ----------
   async cancel(j) {
-    const ok = await confirmSheet({ title: t('取消工作？'), text: t('會結束「{x}」的整個程序樹（taskkill /T /F）。', { x: j.label || j.kind }), confirmLabel: t('取消工作'), destructive: true });
+    const ok = await confirmSheet({ title: t('取消工作？'), text: t('會結束「{x}」的整個程序樹。已完成並驗證的檔案會保留。', { x: j.label || j.kind }), confirmLabel: t('取消工作'), destructive: true });
     if (!ok) return;
     try { this.onJob(await call('job_cancel', { jobId: j.id })); toast(t('已取消'), 'ok'); } catch (e) { toastError(e, t('取消')); }
+  }
+  async pause(j) {
+    try { await call('job_pause', { jobId: j.id }); this.onJob(await call('job_get', { jobId: j.id })); toast(t('已暫停：程序保留在記憶體中，按「繼續」從暫停處接著做'), 'ok'); } catch (e) { toastError(e, t('暫停')); }
+  }
+  async resume(j) {
+    try { await call('job_resume', { jobId: j.id }); this.onJob(await call('job_get', { jobId: j.id })); toast(t('已繼續'), 'ok'); } catch (e) { toastError(e, t('繼續')); }
   }
   async retry(j) { try { this.onJob(await call('job_retry', { jobId: j.id })); toast(t('已重新排隊'), 'ok'); } catch (e) { toastError(e, t('重試')); } }
   async remove(j) {

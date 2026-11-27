@@ -19,8 +19,8 @@ fn read_json(p: &Path) -> Option<Value> {
 }
 
 fn node(s: &Settings) -> String {
-    let n = Path::new(&s.node_dir).join("node.exe");
-    if n.exists() { n.to_string_lossy().into() } else { "node".into() }
+    let n = Path::new(&s.node_dir).join(crate::platform::exe("node"));
+    if n.exists() { n.to_string_lossy().into() } else { crate::platform::node_program(&s.node_dir) }
 }
 
 /// Timeline of an episode without the fields that do not affect pixels (mix path, warnings, tempo report).
@@ -49,13 +49,16 @@ pub fn plan(c: &Connection, ep: &Ep, p: &Value, s: &Settings) -> Result<Value, S
     let _ = std::fs::create_dir_all(&plan_dir);
     let dry = plan_dir.join(format!("{}-{}.timeline.json", ep.id, ep.locale));
     let tempo = crate::jobs::voice_tempo_preset(s.voice_tempo).to_string();
-    let mut ta: Vec<String> = vec!["-3.11".into(), "-u".into(), "scripts/build_timeline.py".into(), "--seq".into(), ep.id.clone(), "--out".into(), clean_path(&dry)];
+    let (py_prog, py_lead) = crate::platform::python311();
+    let mut ta: Vec<String> = py_lead.clone();
+    ta.extend(["-u".to_string()]);
+    ta.extend(vec![ "scripts/build_timeline.py".into(), "--seq".into(), ep.id.clone(), "--out".into(), clean_path(&dry)]);
     if ep.cn() {
         ta.extend(["--src".into(), "src_cn".into(), "--voice-dir".into(), "public/assets/audio/voiceover_cosy_cn".into()]);
     }
     let tr: Vec<&str> = ta.iter().map(|s| s.as_str()).collect();
     let mut warnings: Vec<String> = vec![];
-    let dry_ok = match run_env("py", &tr, Some(&ep.root), &[("PYTHONUTF8", "1"), ("PIKARA_VOICE_TEMPO", &tempo)], Duration::from_secs(180)) {
+    let dry_ok = match run_env(&py_prog, &tr, Some(&ep.root), &[("PYTHONUTF8", "1"), ("PIKARA_VOICE_TEMPO", &tempo)], Duration::from_secs(180)) {
         Ok(o) if o.ok() => true,
         Ok(o) => {
             warnings.push(format!("試算時間軸失敗：{}", crate::util::tail_lines(&o.combined(), 3)));

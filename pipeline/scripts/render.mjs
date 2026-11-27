@@ -59,7 +59,8 @@ const P = PRESETS[PERF] ?? PRESETS.balanced;
 const CHUNK = Number(opt('chunk', PERF === 'performance' ? 1800 : 900)); // 較小的段＝較多量測點
 const VRAM_CAP_OPT = opt('vram-cap', process.env.PIKARA_VRAM_CAP || null); // Studio: GPU 資源使用上限
 let VRAM_CAP = Number(VRAM_CAP_OPT ?? 5300);
-const MAX_CONC = Math.min(P.max, Math.max(1, Math.floor(os.cpus().length / 2)));
+// Studio's power-mode budget (PIKARA_RENDER_MAX_CONC, from hardware::profile) can only lower the ceiling
+const MAX_CONC = Math.min(P.max, Math.max(1, Math.floor(os.cpus().length / 2)), Number(process.env.PIKARA_RENDER_MAX_CONC) > 0 ? Number(process.env.PIKARA_RENDER_MAX_CONC) : Infinity);
 
 const smi = () => {
   const r = run('nvidia-smi', ['--query-gpu=memory.used,memory.total,temperature.gpu,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.sw_thermal_slowdown', '--format=csv,noheader,nounits']);

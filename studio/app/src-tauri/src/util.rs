@@ -6,9 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub fn now_iso() -> String {
@@ -25,30 +22,31 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// %APPDATA%\PikaraScienceStudio (overridable with PIKARA_STUDIO_DATA for tests).
+/// Windows `%APPDATA%\PikaraScienceStudio`, macOS `~/Library/Application Support/PikaraScienceStudio`,
+/// Linux `$XDG_DATA_HOME/PikaraScienceStudio` (overridable with PIKARA_STUDIO_DATA for tests).
 pub fn data_dir() -> PathBuf {
     if let Ok(p) = std::env::var("PIKARA_STUDIO_DATA") {
         return PathBuf::from(p);
     }
-    let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
-    base.join("PikaraScienceStudio")
+    crate::platform::data_base().join("PikaraScienceStudio")
+}
+
+/// Machine-local cache (downloaded runtimes, browser copies): `%LOCALAPPDATA%` / `~/Library/Caches` / `$XDG_CACHE_HOME`.
+pub fn cache_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("PIKARA_STUDIO_DATA") {
+        return PathBuf::from(p).join("cache");
+    }
+    crate::platform::cache_base().join("PikaraScienceStudio")
 }
 
 /// Exclusive per-data-dir lock for the process that runs the scheduler and the autopilot. Two processes driving the
 /// same database would each start every queued job (duplicate renders, duplicate Claude runs). The returned file
-/// handle must be kept alive; Windows releases the lock when the process exits (also on crash).
+/// handle must be kept alive; the OS releases the lock when the process exits (also on crash).
 pub fn scheduler_lock() -> Result<std::fs::File, String> {
     let dir = data_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let p = dir.join("scheduler.lock");
-    let mut o = std::fs::OpenOptions::new();
-    o.create(true).write(true).truncate(false);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        o.share_mode(0); // no sharing: a second open fails while we hold it
-    }
-    o.open(&p).map_err(|_| {
+    crate::platform::open_exclusive(&p).map_err(|_| {
         format!("另一個 Pikara Science Studio（視窗或 --cli run-queue／auto-run）正在使用同一個資料夾執行佇列：{}。同一時間只能有一個程式執行佇列，請先關閉另一個。", clean_path(&dir))
     })
 }
@@ -60,8 +58,7 @@ pub fn logs_dir() -> PathBuf {
 /// Build a Command that never pops a console window.
 pub fn cmd(program: &str) -> Command {
     let mut c = Command::new(program);
-    #[cfg(windows)]
-    c.creation_flags(CREATE_NO_WINDOW);
+    crate::platform::process::configure(&mut c);
     c.stdin(Stdio::null());
     c
 }
@@ -148,25 +145,9 @@ pub fn run_env_rm(
     }
 }
 
-/// Kill a whole process tree (render.mjs → node → chrome-headless-shell, python → python).
-/// Bounded to 15 s: taskkill itself must never block the caller (the scheduler / a cancel) forever — e.g. when the
-/// target is stuck inside a GPU driver call during a driver reset.
+/// Kill a whole process tree (render.mjs → node → chrome-headless-shell, python → python); see platform::process.
 pub fn kill_tree(pid: u32) -> String {
-    let mut c = cmd("taskkill");
-    c.args(["/T", "/F", "/PID", &pid.to_string()]).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let child = match c.spawn() {
-        Ok(ch) => ch,
-        Err(e) => return format!("cannot start taskkill: {e}"),
-    };
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(child.wait_with_output());
-    });
-    match rx.recv_timeout(Duration::from_secs(15)) {
-        Ok(Ok(o)) => to_runout(o).combined(),
-        Ok(Err(e)) => e.to_string(),
-        Err(_) => format!("taskkill /T /F /PID {pid} did not finish within 15 s"),
-    }
+    crate::platform::process::kill_tree(pid)
 }
 
 fn run_raw(program: &str, args: &[&str]) -> Result<RunOut, String> {
@@ -175,8 +156,11 @@ fn run_raw(program: &str, args: &[&str]) -> Result<RunOut, String> {
     c.output().map(to_runout).map_err(|e| e.to_string())
 }
 
-/// Locate an executable on PATH using where.exe; returns first hit.
+/// Locate an executable on PATH (where.exe on Windows, as since v0.1; in-process PATH search elsewhere).
 pub fn which(name: &str) -> Option<String> {
+    if !cfg!(windows) {
+        return crate::platform::which(name);
+    }
     let o = run_raw("where.exe", &[name]).ok()?;
     if !o.ok() {
         return None;
@@ -200,10 +184,16 @@ pub fn hidden_tools() -> Vec<String> {
 pub fn path_with(dirs: &[&str]) -> String {
     let cur = std::env::var("PATH").unwrap_or_default();
     let hidden = hidden_tools();
-    let keep = |d: &str| !hidden.iter().any(|t| Path::new(d).join(format!("{t}.exe")).exists());
+    let keep = |d: &str| !hidden.iter().any(|t| Path::new(d).join(crate::platform::exe(t)).exists());
     let mut parts: Vec<String> = dirs.iter().filter(|d| !d.is_empty() && keep(d)).map(|d| d.to_string()).collect();
-    parts.extend(cur.split(';').filter(|d| !d.is_empty() && keep(d)).map(String::from));
-    parts.join(";")
+    parts.extend(crate::platform::split_path_list(&cur).into_iter().filter(|d| keep(d)));
+    // macOS GUI apps start with PATH=/usr/bin:/bin:/usr/sbin:/sbin — add the standard Homebrew prefixes at the end
+    for extra in extra_tool_dirs() {
+        if !parts.contains(&extra) && keep(&extra) {
+            parts.push(extra);
+        }
+    }
+    crate::platform::join_path_list(parts)
 }
 
 /// Is `child` inside `root` (after canonicalisation)?
@@ -234,6 +224,18 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     })
 }
 
+/// Tool folders that are not on a GUI app's PATH: macOS Homebrew (Apple Silicon and Intel prefixes), MacPorts.
+/// Studio-managed runtimes are added separately (runtime module). Empty on Windows.
+pub fn extra_tool_dirs() -> Vec<String> {
+    if cfg!(target_os = "macos") {
+        ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"].iter().filter(|d| Path::new(d).is_dir()).map(|d| d.to_string()).collect()
+    } else if cfg!(unix) {
+        ["/usr/local/bin"].iter().filter(|d| Path::new(d).is_dir()).map(|d| d.to_string()).collect()
+    } else {
+        vec![]
+    }
+}
+
 pub fn tail_lines(text: &str, n: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.len().saturating_sub(n);
@@ -251,8 +253,13 @@ pub fn tool(name: &str) -> Option<String> {
     if let Some(p) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(name) {
         return Some(p.clone());
     }
-    let exe = format!("{name}.exe");
+    let exe = crate::platform::exe(name);
     let found = which(name).filter(|p| Path::new(p).exists()).or_else(|| {
+        extra_tool_dirs().into_iter().map(|d| Path::new(&d).join(&exe)).find(|p| p.is_file()).map(|p| p.to_string_lossy().into_owned())
+    }).or_else(|| {
+        if !cfg!(windows) {
+            return None;
+        }
         let la = std::env::var("LOCALAPPDATA").ok()?;
         let links = Path::new(&la).join(r"Microsoft\WinGet\Links").join(&exe);
         if links.exists() {

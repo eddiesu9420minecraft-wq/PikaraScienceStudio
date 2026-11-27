@@ -2,7 +2,7 @@
 //! Auto-fixes only touch the project / Studio folders; system-level fixes are returned as instructions.
 
 use crate::db::Settings;
-use crate::util::{clean_path, run, run_env, which};
+use crate::util::{clean_path, run, run_env};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
@@ -163,8 +163,8 @@ fn check_gpu() -> Check {
 }
 
 pub fn node_exe(s: &Settings) -> String {
-    let p = Path::new(&s.node_dir).join("node.exe");
-    if p.exists() { p.to_string_lossy().into() } else { which("node").unwrap_or_else(|| "node".into()) }
+    let p = Path::new(&s.node_dir).join(crate::platform::exe("node"));
+    if p.exists() { p.to_string_lossy().into() } else { crate::platform::node_program(&s.node_dir) }
 }
 
 fn check_node(s: &Settings) -> Check {
@@ -173,9 +173,9 @@ fn check_node(s: &Settings) -> Check {
         Ok(o) if o.ok() => {
             let v = o.stdout.trim().to_string();
             let major: u32 = v.trim_start_matches('v').split('.').next().and_then(|x| x.parse().ok()).unwrap_or(0);
-            let npm = Path::new(&node).parent().map(|d| d.join("npm.cmd")).filter(|p| p.exists());
+            let npm = Path::new(&node).parent().map(|d| d.join(if cfg!(windows) { "npm.cmd" } else { "npm" })).filter(|p| p.exists());
             let npm_v = npm
-                .and_then(|p| run_env("cmd", &["/d", "/c", &p.to_string_lossy(), "-v"], None, &[], T).ok())
+                .and_then(|p| if cfg!(windows) { run_env("cmd", &["/d", "/c", &p.to_string_lossy(), "-v"], None, &[], T).ok() } else { run(&p.to_string_lossy(), &["-v"], None, T).ok() })
                 .filter(|o| o.ok())
                 .map(|o| o.stdout.trim().to_string());
             let d = format!("Node {v}（{node}），npm {}", npm_v.clone().unwrap_or("未找到".into()));
@@ -205,7 +205,7 @@ fn check_npm_deps(root: &Path) -> Check {
 }
 
 pub fn chs_path(root: &Path) -> PathBuf {
-    root.join(r"node_modules\.remotion\chrome-headless-shell\win64\chrome-headless-shell-win64\chrome-headless-shell.exe")
+    crate::platform::remotion_chs(root)
 }
 
 fn check_chs(root: &Path) -> Check {
@@ -271,7 +271,11 @@ fn check_ffmpeg(root: Option<&Path>, gpu_tests: bool, gpu_free: bool) -> (Check,
 }
 
 fn check_py311() -> Check {
-    match run("py", &["-3.11", "-c", "import sys;print(sys.version.split()[0]);import importlib.util as u;print(','.join(m for m in ['opencc','numpy'] if u.find_spec(m) is None))"], None, T) {
+    let (prog, lead) = crate::platform::python311();
+    let mut a: Vec<&str> = lead.iter().map(|s| s.as_str()).collect();
+    a.push("-c");
+    a.push("import sys;print(sys.version.split()[0]);import importlib.util as u;print(','.join(m for m in ['opencc','numpy'] if u.find_spec(m) is None))");
+    match run(&prog, &a, None, T) {
         Ok(o) if o.ok() => {
             let mut l = o.stdout.lines();
             let v = l.next().unwrap_or("").trim().to_string();
@@ -282,7 +286,7 @@ fn check_py311() -> Check {
                 c("py311", "Python 3.11", "warn", format!("Python {v}，缺少套件：{missing}（make_cn.py 需要 opencc；numpy 為選用）"), Some(v), None)
             }
         }
-        _ => c("py311", "Python 3.11", "error", "`py -3.11` 無法執行", None, instr("install_python311", "安裝 Python 3.11 說明")),
+        _ => c("py311", "Python 3.11", "error", if cfg!(windows) { "`py -3.11` 無法執行".to_string() } else { format!("`{prog}` 無法執行（需要 Python 3.11）") }, None, instr("install_python311", "安裝 Python 3.11 說明")),
     }
 }
 
@@ -291,7 +295,7 @@ const SMALL_PKGS: &[(&str, &str)] = &[("opencc", "opencc"), ("hyperpyyaml", "hyp
 const BIG_PKGS: &[&str] = &["torch", "torchaudio", "faster_whisper", "onnxruntime", "modelscope"];
 
 pub fn cosy_python(root: &Path, s: &Settings) -> PathBuf {
-    s.cosy_python.clone().map(PathBuf::from).unwrap_or_else(|| root.join(r"tools\CosyVoice\.venv\Scripts\python.exe"))
+    s.cosy_python.clone().map(PathBuf::from).unwrap_or_else(|| crate::platform::default_cosy_python(root))
 }
 
 /// The venv exists but its Python does not start: tell an MSIX-redirected interpreter (repairable by copying,

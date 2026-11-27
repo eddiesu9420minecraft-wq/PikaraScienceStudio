@@ -13,13 +13,15 @@ pub fn claude_path() -> Option<String> {
         return Some(p);
     }
     // common install locations (native installer, npm global)
-    let home = std::env::var("USERPROFILE").unwrap_or_default();
+    let home = crate::platform::home_dir().to_string_lossy().into_owned();
     let appdata = std::env::var("APPDATA").unwrap_or_default();
-    for c in [
-        format!(r"{home}\.local\bin\claude.exe"),
-        format!(r"{appdata}\npm\claude.cmd"),
-        format!(r"{appdata}\npm\claude"),
-    ] {
+    let cands: Vec<String> = if cfg!(windows) {
+        vec![format!(r"{home}\.local\bin\claude.exe"), format!(r"{appdata}\npm\claude.cmd"), format!(r"{appdata}\npm\claude")]
+    } else {
+        // native installer, legacy local install, Homebrew (Apple Silicon / Intel), npm global
+        vec![format!("{home}/.local/bin/claude"), format!("{home}/.claude/local/claude"), "/opt/homebrew/bin/claude".into(), "/usr/local/bin/claude".into(), format!("{home}/.npm-global/bin/claude")]
+    };
+    for c in cands {
         if Path::new(&c).exists() {
             return Some(c);
         }

@@ -12,7 +12,8 @@
 //! holder exits or crashes — a dead holder never blocks. The holder writes `<lock>.json` (who, pid, since).
 //! Re-entrancy: a holder exports `PIKARA_GPU_LOCK_OWNER=<pid>`; a child Studio (`--cli run-queue` started by a test
 //! that holds the global lease) runs its jobs without re-acquiring.
-//! Directory: `%ProgramData%\PikaraScience\` (not AppData, which MSIX launchers virtualize); `PIKARA_GPU_LOCK` overrides
+//! Directory: `%ProgramData%\PikaraScience\` on Windows (not AppData, which MSIX launchers virtualize), the per-user
+//! cache on macOS / Linux (see [`machine_lock_dir`]); `PIKARA_GPU_LOCK` overrides
 //! the global lock path (adapter locks live next to it).
 
 use serde_json::{json, Value};
@@ -29,8 +30,18 @@ pub fn lock_path() -> PathBuf {
     }
     #[allow(unreachable_code)]
     {
+        machine_lock_dir().join("gpu.lock")
+    }
+}
+
+/// Windows `%ProgramData%\PikaraScience` (machine-wide, not virtualized by MSIX); macOS / Linux the per-user cache
+/// (`~/Library/Caches/PikaraScience`, `$XDG_CACHE_HOME/PikaraScience`). scripts/gpu_lock.py uses the same rule.
+pub fn machine_lock_dir() -> PathBuf {
+    if cfg!(windows) {
         let base = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into());
-        PathBuf::from(base).join("PikaraScience").join("gpu.lock")
+        PathBuf::from(base).join("PikaraScience")
+    } else {
+        crate::platform::cache_base().join("PikaraScience")
     }
 }
 
@@ -81,17 +92,7 @@ impl Drop for GpuLease {
 }
 
 fn open_exclusive(p: &Path) -> std::io::Result<File> {
-    if let Some(d) = p.parent() {
-        let _ = std::fs::create_dir_all(d);
-    }
-    let mut o = std::fs::OpenOptions::new();
-    o.read(true).write(true).create(true).truncate(false);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        o.share_mode(0);
-    }
-    o.open(p)
+    crate::platform::open_exclusive(p)
 }
 
 fn is_free(p: &Path) -> bool {

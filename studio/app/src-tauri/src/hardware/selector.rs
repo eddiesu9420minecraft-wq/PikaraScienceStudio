@@ -90,10 +90,20 @@ fn best_discrete<'a>(gs: &[&'a Gpu], exclude: Option<&str>) -> Option<&'a Gpu> {
     gs.iter().filter(|g| matches!(g.kind, Kind::Discrete | Kind::External) && Some(g.key.as_str()) != exclude).max_by_key(|g| g.dedicated_vram_mib).copied()
 }
 
+fn apple_gpu<'a>(gs: &[&'a Gpu]) -> Option<&'a Gpu> {
+    gs.iter().find(|g| g.vendor == "Apple").copied()
+}
+
 fn ai_choice(s: &Snapshot, gs: &[&Gpu], pref: &str) -> Choice {
     let cuda: Vec<&Gpu> = gs.iter().filter(|g| g.cuda_index.is_some()).copied().collect();
     let auto = || match cuda.iter().max_by_key(|g| g.dedicated_vram_mib) {
         Some(g) => pick("ai", g, format!("CUDA 裝置 {}（{} MiB）", g.cuda_index.unwrap_or(0), g.dedicated_vram_mib)),
+        // Apple Silicon: the GPU shares unified memory with the CPU; the voice / ASR backend decides MLX vs MPS vs CPU
+        // from its own measured probe (scripts/accel_probe.py) — this only says "an Apple GPU exists"
+        None if apple_gpu(gs).is_some() => {
+            let g = apple_gpu(gs).unwrap();
+            Choice { target: "apple".into(), ..pick("ai", g, "Apple Silicon GPU（Metal，統一記憶體；MLX／MPS 由語音後端實測後選用）") }
+        }
         None => none("ai", "cpu", s.cuda.error.clone().map(|e| format!("沒有可用的 CUDA：{e}；使用 CPU（較慢）")).unwrap_or_else(|| "沒有可用的 CUDA，使用 CPU（較慢）".into())),
     };
     match pref {
@@ -118,6 +128,9 @@ fn render_choice(gs: &[&Gpu], pref: &str, ai: &Choice) -> Choice {
         }
         if let Some(g) = best_discrete(gs, None) {
             return pick("render", g, format!("專用記憶體最多的獨顯（{} MiB）", g.dedicated_vram_mib));
+        }
+        if let Some(g) = apple_gpu(gs) {
+            return pick("render", g, "Apple Silicon GPU（Chromium ANGLE → Metal；WebGL 實際後端由 gpu-check 實測）");
         }
         if let Some(g) = integrated(gs) {
             return pick("render", g, "只有內顯，正式渲染使用內顯（較慢）");
@@ -387,7 +400,10 @@ pub fn current(s: &crate::db::Settings) -> Assignment {
 pub fn job_env(a: &Assignment) -> Vec<(String, String)> {
     let mut v = vec![("PIKARA_RENDER_TARGET".to_string(), a.render.target.clone()), ("PIKARA_AI_DEVICE".into(), a.ai.target.clone())];
     if let (Some(l), Some(n)) = (&a.render.luid, &a.render.gpu_name) {
-        v.push(("PIKARA_RENDER_GPU_LUID".into(), l.clone()));
+        // a DXGI LUID (Chromium --use-adapter-luid) exists only on Windows; macOS keys are "mac:<n>"
+        if cfg!(windows) {
+            v.push(("PIKARA_RENDER_GPU_LUID".into(), l.clone()));
+        }
         v.push(("PIKARA_RENDER_GPU_NAME".into(), n.clone()));
     }
     if let Some(c) = a.render_vram_cap_mib {

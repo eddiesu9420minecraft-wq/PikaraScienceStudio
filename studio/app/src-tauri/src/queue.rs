@@ -14,9 +14,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 pub const HEARTBEAT_SECS: u64 = 5;
@@ -31,6 +28,22 @@ struct Running {
     _gpu_lease: Vec<crate::gpulock::GpuLease>,
     /// adapters this GPU job uses (empty = CPU devices only → "cpu-heavy")
     gpu_keys: Vec<String>,
+}
+
+/// Paused jobs are marked by a file `<data>/paused/<job id>`: the process that runs the job (window or --cli
+/// run-queue) and a controlling process (the window, `--cli job-pause`) see the same state. A paused job keeps its
+/// processes (and loaded models) in memory; the stall watchdog and the next step wait while the marker exists.
+fn pause_marker(id: &str) -> std::path::PathBuf {
+    let safe: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+    crate::util::data_dir().join("paused").join(safe)
+}
+
+pub fn is_paused(id: &str) -> bool {
+    pause_marker(id).exists()
+}
+
+fn clear_pause(id: &str) {
+    let _ = std::fs::remove_file(pause_marker(id));
 }
 
 fn lease_keys(k: &[String]) -> Vec<String> {
@@ -143,6 +156,40 @@ impl Queue {
         Ok(j)
     }
 
+    /// Pause a running job: the whole process tree is suspended (NtSuspendProcess / SIGSTOP). Nothing is killed,
+    /// written or deleted; resume continues exactly where it stopped. Queued jobs cannot be paused (use the queue
+    /// window / cancel); a job between two steps waits before starting the next step.
+    pub fn pause(&self, id: &str) -> Result<Value, String> {
+        let j = db::job_get(&self.conn(), id)?;
+        if j.status != "running" {
+            return Err(format!("只能暫停執行中的工作（目前狀態：{}）", j.status));
+        }
+        if is_paused(id) {
+            return Ok(json!({"paused": true, "already": true}));
+        }
+        let m = pause_marker(id);
+        let _ = std::fs::create_dir_all(m.parent().unwrap());
+        std::fs::write(&m, crate::util::now_iso()).map_err(|e| format!("無法寫入暫停標記：{e}"))?;
+        let pid = self.running.lock().unwrap_or_else(|e| e.into_inner()).get(id).and_then(|r| *r.pid.lock().unwrap_or_else(|e| e.into_inner())).or(j.pid.map(|p| p as u32));
+        let n = pid.map(crate::platform::process::suspend_tree).unwrap_or(0);
+        self.event(id, "system", "warn", &format!("已暫停（{n} 個程序；模型與已完成的檔案保留在原處，繼續後從暫停處接著做）"));
+        let _ = db::job_set_progress(&self.conn(), id, j.progress, Some(&format!("已暫停｜{}", j.progress_text.clone().unwrap_or_default())));
+        self.emit_job(id);
+        Ok(json!({"paused": true, "processes": n}))
+    }
+
+    pub fn resume(&self, id: &str) -> Result<Value, String> {
+        let j = db::job_get(&self.conn(), id)?;
+        let pid = self.running.lock().unwrap_or_else(|e| e.into_inner()).get(id).and_then(|r| *r.pid.lock().unwrap_or_else(|e| e.into_inner())).or(j.pid.map(|p| p as u32));
+        let n = pid.map(crate::platform::process::resume_tree).unwrap_or(0);
+        clear_pause(id);
+        self.event(id, "system", "info", &format!("繼續執行（{n} 個程序）"));
+        let text = j.progress_text.clone().unwrap_or_default();
+        let _ = db::job_set_progress(&self.conn(), id, j.progress, Some(text.strip_prefix("已暫停｜").unwrap_or(&text)));
+        self.emit_job(id);
+        Ok(json!({"paused": false, "processes": n}))
+    }
+
     pub fn cancel(&self, id: &str) -> Result<Job, String> {
         let pid = {
             let r = self.running.lock().unwrap_or_else(|e| e.into_inner());
@@ -154,6 +201,7 @@ impl Queue {
         // 在跑的工作：殺掉程序樹後立刻把狀態寫成 canceled，不等執行緒收尾。否則程序（例如 CLI auto-run 逾時）
         // 在執行緒寫入前就結束時，資料庫留著 running，下次啟動的復原會把已取消的工作重新排入佇列
         // （沙盒 TEST003：製作已因逾時失敗，它的配音工作卻在下一次啟動時被復原並重跑）。
+        clear_pause(id);
         match pid {
             Some(p) => {
                 if let Some(p) = p {
@@ -372,6 +420,7 @@ impl Queue {
                 Err((code, e)) => ("failed", code, Some(e)),
             };
             me.running.lock().unwrap_or_else(|e| e.into_inner()).remove(&job.id);
+            clear_pause(&job.id);
             let _ = db::job_finish(&me.conn(), &job.id, status, code, err.as_deref());
             if status == "succeeded" {
                 // v0.3: remember what the finished stages consumed (input fingerprints). Best effort — never affects the job's state.
@@ -405,6 +454,9 @@ impl Queue {
             self.event(&job.id, "system", "info", &format!("從第 {} 步續跑（前 {first} 步已完成）", first + 1));
         }
         for (i, step) in steps.iter().enumerate().skip(first) {
+            while is_paused(&job.id) && !cancel.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(500));
+            }
             if cancel.load(Ordering::SeqCst) {
                 return Err((None, "canceled".into()));
             }
@@ -449,8 +501,7 @@ impl Queue {
         for k in &step.env_remove {
             c.env_remove(k);
         }
-        #[cfg(windows)]
-        c.creation_flags(crate::util::CREATE_NO_WINDOW);
+        crate::platform::process::configure(&mut c);
         let mut child: Child = c.spawn().map_err(|e| (None, format!("無法啟動 {}：{e}", step.program)))?;
         *pid_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(child.id());
         let _ = db::job_set_pid(&self.conn(), &job.id, Some(child.id()));
@@ -517,6 +568,11 @@ impl Queue {
                     if exited_at.map(|t| t.elapsed() > Duration::from_secs(10)).unwrap_or(false) {
                         self.event(&job.id, "system", "warn", "程序已結束，但輸出管線仍被它啟動的其他程序占用；不再等待");
                         break;
+                    }
+                    if is_paused(&job.id) {
+                        // paused on purpose: silence is expected, restart the stall clock when it resumes
+                        last_output = Instant::now();
+                        continue;
                     }
                     if let Some(lim) = step.stall_secs {
                         let quiet = last_output.elapsed().as_secs();
@@ -598,17 +654,10 @@ pub fn in_window(s: &db::Settings, now: chrono::NaiveTime) -> bool {
     }
 }
 
-/// SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) on the long-lived scheduler thread.
+/// Keep the machine awake while jobs run (Windows: SetThreadExecutionState on the long-lived scheduler thread;
+/// macOS: caffeinate; Linux: systemd-inhibit) — see platform::set_keep_awake.
 pub fn set_keep_awake(on: bool) {
-    #[cfg(windows)]
-    unsafe {
-        use windows_sys::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED};
-        if on {
-            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
-        } else {
-            SetThreadExecutionState(ES_CONTINUOUS);
-        }
-    }
+    crate::platform::set_keep_awake(on);
 }
 
 /// Background threads: scheduler (1 s), heartbeat (5 s), queue status (5 s).
@@ -653,6 +702,16 @@ mod tests {
         std::env::set_var("PIKARA_STUDIO_DATA", dir.join("data"));
         let q = Queue::new(db, Arc::new(|_, _| {}));
         (q, p.id, dir)
+    }
+
+    /// The same test command for cmd.exe (Windows) and /bin/sh (macOS / Linux).
+    fn sh(win: &'static str, unix: &'static str) -> &'static str {
+        if cfg!(windows) { win } else { unix }
+    }
+
+    /// Is a process whose name contains `exe` (case-insensitive) and whose command line contains `arg` still alive?
+    fn alive(exe: &str, arg: &str) -> bool {
+        gpu::snapshot().procs.values().any(|(_, n, c)| n.to_ascii_lowercase().contains(exe) && c.contains(arg))
     }
 
     fn wait_status(q: &Arc<Queue>, id: &str, want: &[&str], secs: u64) -> Job {
@@ -701,7 +760,7 @@ mod tests {
     fn gpu_lock_blocks_when_external_busy_and_one_gpu_job_at_a_time() {
         let (q, pid, dir) = q_with_project();
         q.force_external_busy.store(true, Ordering::Relaxed);
-        let g = q.enqueue(Some(&pid), "custom", &json!({"command": "ping -n 2 127.0.0.1 >nul", "gpu": true}), &dir).unwrap();
+        let g = q.enqueue(Some(&pid), "custom", &json!({"command": sh("ping -n 2 127.0.0.1 >nul", "sleep 1"), "gpu": true}), &dir).unwrap();
         q.tick();
         let j = db::job_get(&q.conn(), &g.id).unwrap();
         assert_eq!(j.status, "waiting_resource");
@@ -712,7 +771,7 @@ mod tests {
             eprintln!("real external GPU job detected; skipping lock-sequencing half of the test");
             return;
         }
-        let g2 = q.enqueue(Some(&pid), "custom", &json!({"command": "ping -n 2 127.0.0.1 >nul", "gpu": true}), &dir).unwrap();
+        let g2 = q.enqueue(Some(&pid), "custom", &json!({"command": sh("ping -n 2 127.0.0.1 >nul", "sleep 1"), "gpu": true}), &dir).unwrap();
         q.tick();
         let a = db::job_get(&q.conn(), &g.id).unwrap();
         let b = db::job_get(&q.conn(), &g2.id).unwrap();
@@ -726,22 +785,21 @@ mod tests {
     fn silent_step_is_killed_as_stalled() {
         let (q, pid, dir) = q_with_project();
         // prints once, then hangs silently (ping to a blackhole address with output discarded)
-        let j = q.enqueue(Some(&pid), "custom", &json!({"command": "echo start & ping -n 60 127.0.0.1 >nul", "stallSecs": 3}), &dir).unwrap();
+        let j = q.enqueue(Some(&pid), "custom", &json!({"command": sh("echo start & ping -n 60 127.0.0.1 >nul", "echo start; sleep 60"), "stallSecs": 3}), &dir).unwrap();
         let t0 = Instant::now();
         let done = wait_status(&q, &j.id, &["failed"], 25);
         assert_eq!(done.status, "failed", "stalled job must fail, not hang");
         assert!(t0.elapsed() < Duration::from_secs(20));
         assert!(done.error.unwrap_or_default().contains("停滯"), "error names the stall");
         std::thread::sleep(Duration::from_millis(500));
-        let snap = gpu::snapshot();
-        assert!(!snap.procs.values().any(|(_, n, c)| n.eq_ignore_ascii_case("PING.EXE") && c.contains("-n 60 127.0.0.1")), "ping tree killed");
+        assert!(!alive(sh("ping.exe", "sleep"), sh("-n 60 127.0.0.1", "60")), "ping / sleep tree killed");
     }
 
     #[test]
     fn silent_step_that_keeps_writing_files_is_not_killed() {
         let (q, pid, dir) = q_with_project();
         // no output for ~7 s (limit 3 s), but a file in the working folder changes every second
-        let cmd = "for /l %i in (1,1,7) do @(echo %i>>progress.txt & ping -n 2 127.0.0.1 >nul)";
+        let cmd = sh("for /l %i in (1,1,7) do @(echo %i>>progress.txt & ping -n 2 127.0.0.1 >nul)", "for i in 1 2 3 4 5 6 7; do echo $i >> progress.txt; sleep 1; done");
         let j = q.enqueue(Some(&pid), "custom", &json!({"command": cmd, "stallSecs": 3, "watchFiles": true}), &dir).unwrap();
         let done = wait_status(&q, &j.id, &["succeeded", "failed"], 40);
         assert_eq!(done.status, "succeeded", "file activity counts: {:?}", done.error);
@@ -749,7 +807,7 @@ mod tests {
         assert!(evs.iter().any(|e| e.line.contains("檔案") && e.line.contains("繼續等待")), "noted once");
         // the same silence without file changes is a stall (wait until the folder has been quiet past the limit)
         std::thread::sleep(Duration::from_secs(4));
-        let j2 = q.enqueue(Some(&pid), "custom", &json!({"command": "ping -n 8 127.0.0.1 >nul", "stallSecs": 3, "watchFiles": true}), &dir).unwrap();
+        let j2 = q.enqueue(Some(&pid), "custom", &json!({"command": sh("ping -n 8 127.0.0.1 >nul", "sleep 7"), "stallSecs": 3, "watchFiles": true}), &dir).unwrap();
         let done2 = wait_status(&q, &j2.id, &["succeeded", "failed"], 40);
         assert_eq!(done2.status, "failed");
         assert!(done2.error.unwrap_or_default().contains("工作資料夾也沒有檔案變動"));
@@ -759,24 +817,53 @@ mod tests {
     fn exited_child_with_orphan_holding_pipes_does_not_hang() {
         let (q, pid, dir) = q_with_project();
         // cmd starts a detached grandchild that inherits stdout, then exits immediately
-        let j = q.enqueue(Some(&pid), "custom", &json!({"command": "start /b ping -n 40 127.0.0.1 & echo parent-done"}), &dir).unwrap();
+        let j = q.enqueue(Some(&pid), "custom", &json!({"command": sh("start /b ping -n 40 127.0.0.1 & echo parent-done", "sleep 40 & echo parent-done")}), &dir).unwrap();
         let t0 = Instant::now();
         let done = wait_status(&q, &j.id, &["succeeded", "failed"], 30);
         assert!(["succeeded", "failed"].contains(&done.status.as_str()), "status {}", done.status);
         assert!(t0.elapsed() < Duration::from_secs(25), "returned after the parent exited, took {:?}", t0.elapsed());
         // clean up the orphan ping
         for (p, (_, n, c)) in gpu::snapshot().procs {
-            if n.eq_ignore_ascii_case("PING.EXE") && c.contains("-n 40 127.0.0.1") {
+            if n.to_ascii_lowercase().contains(sh("ping.exe", "sleep")) && c.contains(sh("-n 40 127.0.0.1", "40")) {
                 crate::util::kill_tree(p);
             }
         }
+    }
+
+    /// Pause suspends the real process tree (no output, not killed as stalled even with a 2 s stall limit), resume
+    /// continues it, and the job then finishes normally.
+    #[test]
+    fn pause_and_resume_a_running_job() {
+        let (q, pid, dir) = q_with_project();
+        let script = if cfg!(windows) {
+            "for /L %i in (1,1,12) do @(echo tick %i & ping -n 2 127.0.0.1 >nul)"
+        } else {
+            "for i in $(seq 1 12); do echo tick $i; sleep 0.5; done"
+        };
+        let j = q.enqueue(Some(&pid), "custom", &json!({"command": script, "stallSecs": 2}), &dir).unwrap();
+
+        wait_status(&q, &j.id, &["running"], 10);
+        std::thread::sleep(Duration::from_millis(1500));
+        q.pause(&j.id).unwrap();
+        assert!(is_paused(&j.id));
+        let evs = |q: &Arc<Queue>| db::events_list(&q.conn(), &j.id, 0, 100000).unwrap().iter().filter(|e| e.line.contains("tick")).count();
+        std::thread::sleep(Duration::from_millis(700));
+        let a = evs(&q);
+        std::thread::sleep(Duration::from_millis(3000)); // longer than the 2 s stall limit
+        assert_eq!(evs(&q), a, "no output while paused");
+        assert_eq!(db::job_get(&q.conn(), &j.id).unwrap().status, "running", "a paused job is not killed as stalled");
+        q.resume(&j.id).unwrap();
+        assert!(!is_paused(&j.id));
+        let done = wait_status(&q, &j.id, &["succeeded", "failed"], 60);
+        assert_eq!(done.status, "succeeded", "{:?}", done.error);
+        assert!(evs(&q) >= 12);
     }
 
     #[test]
     fn cancel_kills_process_tree() {
         let (q, pid, dir) = q_with_project();
         // cmd → ping child; tree-kill must take both down
-        let j = q.enqueue(Some(&pid), "custom", &json!({"command": "ping -n 60 127.0.0.1"}), &dir).unwrap();
+        let j = q.enqueue(Some(&pid), "custom", &json!({"command": sh("ping -n 60 127.0.0.1", "sleep 60; true")}), &dir).unwrap();
         let r = wait_status(&q, &j.id, &["running"], 10);
         assert_eq!(r.status, "running");
         std::thread::sleep(Duration::from_millis(800));

@@ -8,6 +8,7 @@ pub mod content;
 pub mod envfix;
 pub mod layout;
 pub mod picker;
+pub mod platform;
 pub mod claude;
 pub mod cli;
 pub mod db;
@@ -505,6 +506,18 @@ async fn job_cancel(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
 }
 
 #[tauri::command]
+async fn job_pause(st: State<'_, AppState>, job_id: String) -> R<Value> {
+    let q = st.queue.clone();
+    blocking(move || q.pause(&job_id)).await
+}
+
+#[tauri::command]
+async fn job_resume(st: State<'_, AppState>, job_id: String) -> R<Value> {
+    let q = st.queue.clone();
+    blocking(move || q.resume(&job_id)).await
+}
+
+#[tauri::command]
 async fn job_retry(st: State<'_, AppState>, job_id: String) -> R<db::Job> {
     db::job_requeue(&st.db.lock().unwrap_or_else(|e| e.into_inner()), &job_id)
 }
@@ -736,12 +749,7 @@ fn settings_before_ui() -> db::Settings {
 fn open_data_dir() {
     let d = util::data_dir();
     let _ = std::fs::create_dir_all(&d);
-    #[cfg(windows)]
-    let _ = std::process::Command::new("explorer.exe").arg(&d).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(&d).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(&d).spawn();
+    let _ = platform::open_in_file_manager(&d, false);
 }
 
 /// Startup steps shown on the shared Pikara splash (vendor/pikara-splash).
@@ -963,7 +971,7 @@ pub fn run() {
             prompt_tasks, prompt_build,
             claude_detect, claude_install_skill, claude_run, claude_worktrees, claude_worktree_diff, claude_worktree_merge, claude_worktree_discard,
             doctor_run, doctor_fix,
-            job_kinds, job_enqueue, job_list, job_get, job_events, job_cancel, job_retry, job_remove, queue_status, gpu_external_status,
+            job_kinds, job_enqueue, job_list, job_get, job_events, job_cancel, job_pause, job_resume, job_retry, job_remove, queue_status, gpu_external_status,
             monitor_sample, job_analyse_with_claude,
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
             outputs_list, publish_metadata, open_path, asset_url_allowed,

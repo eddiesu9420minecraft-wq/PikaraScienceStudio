@@ -19,7 +19,13 @@ pub fn doubao_path() -> Option<String> {
         return Some(p);
     }
     let appdata = std::env::var("APPDATA").unwrap_or_default();
-    for c in [format!(r"{appdata}\npm\doubao.cmd"), format!(r"{appdata}\npm\doubao")] {
+    let home = crate::platform::home_dir().to_string_lossy().into_owned();
+    let cands: Vec<String> = if cfg!(windows) {
+        vec![format!(r"{appdata}\npm\doubao.cmd"), format!(r"{appdata}\npm\doubao")]
+    } else {
+        vec!["/opt/homebrew/bin/doubao".into(), "/usr/local/bin/doubao".into(), format!("{home}/.npm-global/bin/doubao")]
+    };
+    for c in cands {
         if Path::new(&c).exists() {
             return Some(c);
         }

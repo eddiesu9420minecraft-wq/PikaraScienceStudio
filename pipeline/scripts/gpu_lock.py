@@ -14,32 +14,59 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-GENERIC_RW = 0x80000000 | 0x40000000
-OPEN_ALWAYS = 4
-INVALID = ctypes.c_void_p(-1).value
-k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-k32.CreateFileW.restype = ctypes.c_void_p
-k32.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
-k32.CloseHandle.argtypes = [ctypes.c_void_p]
+if os.name == "nt":
+    GENERIC_RW = 0x80000000 | 0x40000000
+    OPEN_ALWAYS = 4
+    INVALID = ctypes.c_void_p(-1).value
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = ctypes.c_void_p
+    k32.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+    k32.CloseHandle.argtypes = [ctypes.c_void_p]
+else:
+    import fcntl  # macOS / Linux: flock — the same lock Rust's File::try_lock takes in gpulock.rs
+
+
+def lock_dir() -> Path:
+    """Windows %ProgramData%\\PikaraScience; macOS ~/Library/Caches/PikaraScience; Linux $XDG_CACHE_HOME/PikaraScience."""
+    if os.name == "nt":
+        return Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "PikaraScience"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "PikaraScience"
+    return Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "PikaraScience"
 
 
 def lock_path() -> Path:
     if os.environ.get("PIKARA_GPU_LOCK"):
         return Path(os.environ["PIKARA_GPU_LOCK"])
-    return Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "PikaraScience" / "gpu.lock"
+    return lock_dir() / "gpu.lock"
 
 
 def _open_excl(p: Path):
     p.parent.mkdir(parents=True, exist_ok=True)
-    h = k32.CreateFileW(str(p), GENERIC_RW, 0, None, OPEN_ALWAYS, 0x80, None)  # share mode 0 = exclusive
-    return None if h in (None, INVALID) else h
+    if os.name == "nt":
+        h = k32.CreateFileW(str(p), GENERIC_RW, 0, None, OPEN_ALWAYS, 0x80, None)  # share mode 0 = exclusive
+        return None if h in (None, INVALID) else h
+    fd = os.open(str(p), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def _close(h) -> None:
+    if os.name == "nt":
+        k32.CloseHandle(h)
+    else:
+        os.close(h)  # closing the descriptor releases the flock
 
 
 def _free(p: Path) -> bool:
     h = _open_excl(p)
     if h is None:
         return False
-    k32.CloseHandle(h)
+    _close(h)
     return True
 
 
@@ -92,7 +119,7 @@ def gpu_lease(who: str, timeout: float = 3600, poll: float = 2.0, log=print):
         else:
             os.environ["PIKARA_GPU_LOCK_OWNER"] = prev
         info.unlink(missing_ok=True)
-        k32.CloseHandle(h)
+        _close(h)
         log(f"[GPU 租約] 釋放：{who}")
 
 

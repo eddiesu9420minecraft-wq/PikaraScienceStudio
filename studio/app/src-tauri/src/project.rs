@@ -150,14 +150,7 @@ pub fn open_path(root: &Path, path: &Path, reveal: bool) -> Result<(), String> {
         return Err("path is outside the project".into());
     }
     let p = clean_path(&std::fs::canonicalize(path).map_err(|e| e.to_string())?);
-    let mut c = std::process::Command::new("explorer.exe");
-    if reveal {
-        c.arg(format!("/select,{p}"));
-    } else {
-        c.arg(&p);
-    }
-    c.spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    crate::platform::open_in_file_manager(Path::new(&p), reveal)
 }
 
 #[cfg(test)]

@@ -14,6 +14,8 @@
 //! Nothing here panics on missing drivers or tools: every probe returns a result describing the failure.
 
 pub mod adapters;
+pub mod apple;
+pub mod profile;
 pub mod encoders;
 pub mod telemetry;
 //

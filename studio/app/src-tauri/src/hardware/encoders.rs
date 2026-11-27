@@ -14,7 +14,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// Built-in copy of `scripts/hw_encoders.json`; a project's own copy (if present) wins, see [`table_for`].
-const BUILTIN: &str = include_str!("../../../../../scripts/hw_encoders.json");
+const BUILTIN: &str = include_str!("../../../../../pipeline/scripts/hw_encoders.json");
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
