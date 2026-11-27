@@ -51,7 +51,7 @@ if (ei > 0) {
   const exe = process.argv[ei + 1];
   const r = spawnSync(exe, ['--cli', 'build-info'], { encoding: 'utf8', timeout: 30000, windowsHide: true });
   let info = null;
-  try { info = JSON.parse((r.stdout || '').trim().split(/\r?\n/).pop()); } catch {}
+  try { info = JSON.parse((r.stdout || '').trim()); } catch {}
   check(!!info, `exe answers --cli build-info (${exe})`);
   if (info) {
     console.log(`exe: v${info.version}, frontend ${info.frontendFiles} files, sha256 ${info.frontendSha256}`);
