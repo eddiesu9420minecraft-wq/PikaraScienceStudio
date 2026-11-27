@@ -47,5 +47,18 @@ fn main() {
     let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
     println!("cargo:rustc-env=PIKARA_FRONTEND_SHA256={hex}");
     println!("cargo:rustc-env=PIKARA_FRONTEND_FILES={}", files.len());
+    // Git commit the exe was built from (CI sets GITHUB_SHA; local builds ask git). "-dirty" when the tree had
+    // uncommitted changes, "unknown" outside a checkout.
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").args(args).current_dir(&repo).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let commit = std::env::var("GITHUB_SHA").ok().filter(|s| !s.is_empty()).or_else(|| git(&["rev-parse", "HEAD"])).unwrap_or_else(|| "unknown".into());
+    let dirty = std::env::var("GITHUB_SHA").is_err() && git(&["status", "--porcelain", "--untracked-files=no"]).is_some_and(|s| !s.is_empty());
+    println!("cargo:rustc-env=PIKARA_GIT_COMMIT={}{}", commit, if dirty { "-dirty" } else { "" });
+    if let Some(head) = git(&["rev-parse", "--git-path", "HEAD"]) {
+        println!("cargo:rerun-if-changed={}", repo.join(head).display());
+    }
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     tauri_build::build()
 }

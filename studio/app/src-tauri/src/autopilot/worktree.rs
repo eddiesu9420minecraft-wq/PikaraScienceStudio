@@ -221,8 +221,7 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
         // copy the whole video folder; the project's source tree is not touched
         let n = copy_tree(&wv, &rv)?;
         link_binaries(&rv);
-        let mut all = list_outputs(root, &vrel);
-        all.sort();
+        let all = verified_outputs(root, &vrel, p)?;
         return Ok((all.clone(), true, format!("Sandbox 測試完成（不合併到專案、不佔用正式集數）：{n} 個檔案已放到 {vrel}/；成品：{}", all.join("、"))));
     }
     // 2. formal: videos to the project's video folder (ignored by git), then commit + merge the text outputs
@@ -269,7 +268,7 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
         // the project has no branch files: copy the video folder so the user still gets everything
         let _ = copy_tree(&wv, &rv);
         return Ok((
-            list_outputs(root, &vrel),
+            verified_outputs(root, &vrel, p)?,
             false,
             format!(
                 "成品已放到 {vrel}/，但原始碼無法自動合併（專案在製作期間有其他修改）：{}\n分支 {br} 與工作樹保留；請在「提示詞」頁的工作樹清單檢視差異後手動合併，或解決衝突後按「繼續」。",
@@ -281,9 +280,49 @@ pub(crate) fn deliver(root: &Path, wt: &Path, p: &Production) -> Result<(Vec<Str
     if !p.config.assets.is_empty() {
         let _ = crate::assets::link(root, &p.episode, &rv.join("assets"));
     }
-    let mut all = list_outputs(root, &vrel);
-    all.sort();
+    let all = verified_outputs(root, &vrel, p)?;
     Ok((all.clone(), true, format!("已合併 {br}，成品在 {vrel}/：{}", all.join("、"))))
+}
+
+/// The delivered files, after checking they are really there and usable — a production is only marked done when
+/// this passes: at least one video, every video readable by ffprobe with a video stream and a duration, no empty
+/// file, and the thumbnail / publish metadata the production was asked for.
+pub(crate) fn verified_outputs(root: &Path, vrel: &str, p: &Production) -> Result<Vec<String>, String> {
+    let mut all = list_outputs(root, vrel);
+    all.sort();
+    let abs = |f: &str| crate::project::resolve_in_project(root, f);
+    let mut bad = vec![];
+    for f in &all {
+        let size = std::fs::metadata(abs(f)).map(|m| m.len()).unwrap_or(0);
+        if size == 0 {
+            bad.push(format!("{f}（空檔案）"));
+        }
+    }
+    let videos: Vec<&String> = all.iter().filter(|f| f.to_ascii_lowercase().ends_with(".mp4")).collect();
+    if videos.is_empty() {
+        bad.push(format!("{vrel}/output 沒有影片"));
+    }
+    if crate::util::tool("ffprobe").is_some() {
+        for f in &videos {
+            let pr = crate::project::ffprobe(&abs(f));
+            let ok = pr.as_ref().is_some_and(|v| v["width"].as_u64().unwrap_or(0) > 0 && v["durationS"].as_f64().unwrap_or(0.0) > 1.0);
+            if !ok {
+                bad.push(format!("{f}（ffprobe 讀不到有效的影像或長度）"));
+            }
+        }
+    }
+    let has = |suffix: &str| all.iter().any(|f| f.to_ascii_lowercase().ends_with(suffix));
+    if p.config.thumbnail && !has("thumbnail.png") {
+        bad.push("封面（*_Thumbnail.png）".into());
+    }
+    if p.config.publish_info && !has("_publish_metadata.md") {
+        bad.push("上架資訊（*_PUBLISH_METADATA.md）".into());
+    }
+    if bad.is_empty() {
+        Ok(all)
+    } else {
+        Err(format!("交付檢查失敗，不會標記為完成：{}。檔案保留在 {vrel}/，修正後按「繼續」。", bad.join("、")))
+    }
 }
 
 /// Copy a folder tree (files that already exist with the same size are skipped; different ones are not overwritten).

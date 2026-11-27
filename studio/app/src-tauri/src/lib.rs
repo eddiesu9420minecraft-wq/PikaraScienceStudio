@@ -67,6 +67,10 @@ fn root_of(db: &Db, project_id: &str) -> R<PathBuf> {
 async fn app_info() -> R<Value> {
     Ok(json!({
         "version": env!("CARGO_PKG_VERSION"),
+        "gitCommit": env!("PIKARA_GIT_COMMIT"),
+        "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
+        "pipelineBundle": pipeline_sync::bundle_sha(),
+        "pipelineFiles": pipeline_sync::FILES.len(),
         "dataDir": util::data_dir(),
         "dbPath": util::data_dir().join("studio.db"),
         "logsDir": util::logs_dir(),
@@ -579,15 +583,51 @@ async fn outputs_list(st: State<'_, AppState>, project_id: String, probe: Option
 }
 
 #[tauri::command]
-async fn publish_metadata(st: State<'_, AppState>, project_id: String) -> R<Value> {
+async fn publish_metadata(st: State<'_, AppState>, project_id: String, video: Option<String>) -> R<Value> {
     let root = root_of(&st.db, &project_id)?;
-    Ok(project::publish_metadata(&root))
+    Ok(project::publish_metadata(&root, video.as_deref()))
 }
 
 #[tauri::command]
 async fn open_path(st: State<'_, AppState>, project_id: String, path: String, reveal: Option<bool>) -> R<()> {
     let root = root_of(&st.db, &project_id)?;
-    project::open_path(&root, Path::new(&path), reveal.unwrap_or(false))
+    project::open_path(&root, &path, reveal.unwrap_or(false))
+}
+
+/// Pipeline scripts of a project vs. the ones this build carries (read-only plan; nothing is written).
+#[tauri::command]
+async fn pipeline_status(st: State<'_, AppState>, project_id: String) -> R<Value> {
+    let root = root_of(&st.db, &project_id)?;
+    blocking(move || {
+        let plan = pipeline_sync::sync(&root, false, false, false)?;
+        let manifest = std::fs::read_to_string(root.join(".studio").join("pipeline.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+        Ok(json!({
+            "plan": plan,
+            "projectBundle": manifest.as_ref().map(|m| m["bundle"].clone()),
+            "projectStudioVersion": manifest.as_ref().map(|m| m["studioVersion"].clone()),
+            "projectUpdatedAt": manifest.as_ref().map(|m| m["updatedAt"].clone()),
+            "buildBundle": pipeline_sync::bundle_sha(),
+        }))
+    })
+    .await
+}
+
+/// Studio's own folders (logs, data) — not part of any project, so open_path refuses them.
+#[tauri::command]
+async fn open_app_dir(which: String) -> R<()> {
+    let d = match which.as_str() {
+        "logs" => util::logs_dir(),
+        "data" => util::data_dir(),
+        _ => return Err(format!("unknown folder {which}")),
+    };
+    let _ = std::fs::create_dir_all(&d);
+    #[cfg(windows)]
+    let c = std::process::Command::new("explorer.exe").arg(&d).spawn();
+    #[cfg(target_os = "macos")]
+    let c = std::process::Command::new("open").arg(&d).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let c = std::process::Command::new("xdg-open").arg(&d).spawn();
+    c.map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1031,7 +1071,7 @@ pub fn run() {
             job_kinds, job_enqueue, job_list, job_get, job_events, job_cancel, job_retry, job_remove, queue_status, gpu_external_status,
             monitor_sample, job_analyse_with_claude,
             git_log, git_status, git_revert, git_branch_from, git_reset_hard,
-            outputs_list, publish_metadata, open_path, asset_url_allowed,
+            outputs_list, publish_metadata, open_path, open_app_dir, pipeline_status, asset_url_allowed,
             auto_defaults, auto_start, auto_list, auto_get, auto_events, auto_control, auto_board, auto_update_config, agent_check, agent_done,
             workspace_get, line_set, revoice_start, voice_versions, voice_restore, voice_reject, rerender_plan, rerender_start, db_info, db_backup, ui_tour_report, hw_info, hw_usage,
             auto_monitor, auto_preview, pick_files, asset_probe, layout_migrate, env_venv

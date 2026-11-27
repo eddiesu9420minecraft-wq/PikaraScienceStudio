@@ -2,7 +2,7 @@
 // resources, background threads (watchdog), database schema + backups, app paths, Git history / rollback.
 import { t } from '../i18n.js';
 import { h, mount, btn, toast, toastError, loading, errorBox, dot, fmtBytes, openPath, copyBtn } from '../ui.js';
-import { call, hasTauri } from '../api.js';
+import { call, hasTauri, errText } from '../api.js';
 import { store, on, monitorHistory } from '../store.js';
 import { tabbed, card, pathLine } from '../v03/common.js';
 import doctor from './doctor.js';
@@ -25,8 +25,10 @@ export default {
 async function systemTab(el, ctx) {
   if (!hasTauri) return mount(el, h('div.page', h('div.caption.muted', t('未連接 Studio 後端'))));
   mount(el, h('div.page', loading(4)));
-  let info, dbi;
+  let info, dbi, pipe = null;
   try { [info, dbi] = await Promise.all([call('app_info'), call('db_info')]); } catch (e) { return mount(el, h('div.page', errorBox(e, () => ctx.rerender()))); }
+  // the project's pipeline scripts vs. the ones this build carries (read-only)
+  if (store.projectId) { try { pipe = await call('pipeline_status', { projectId: store.projectId }); } catch (e) { pipe = { error: errText(e) }; } }
   const threads = h('div');
   const paintThreads = () => {
     const last = monitorHistory[monitorHistory.length - 1];
@@ -44,17 +46,32 @@ async function systemTab(el, ctx) {
       card(t('背景執行緒'), threads, { actions: [h('span.caption.muted', t('Watchdog'))] }),
       card(t('Studio'), h('dl.kv',
         h('dt', t('版本')), h('dd', info.version),
+        h('dt', t('Git Commit')), h('dd.mono.selectable', info.gitCommit || '—'),
+        h('dt', t('介面指紋')), h('dd.mono.selectable', (info.frontendSha256 || '').slice(0, 12) || '—'),
+        h('dt', t('製作腳本（內建）')), h('dd.mono.selectable', info.pipelineBundle ? `${info.pipelineBundle} · ${info.pipelineFiles} ${t('個檔案')}` : '—'),
+        h('dt', t('製作腳本（目前專案）')), h('dd', pipeLine(pipe, info)),
         h('dt', t('佇列排程')), h('dd', info.schedulerActive ? t('由這個視窗執行') : t('由另一個 Studio 程式執行（這裡只能檢視）')),
         h('dt', t('資料夾')), h('dd', pathLine(info.dataDir)),
         h('dt', t('紀錄')), h('dd', pathLine(info.logsDir)),
         h('dt', t('Watchdog 紀錄')), h('dd', pathLine(`${info.logsDir}\\studio-watchdog.log`))),
-        { actions: [btn(t('開啟紀錄資料夾'), { small: true, onClick: () => openPath(info.logsDir) })] })),
+        { actions: [btn(t('開啟紀錄資料夾'), { small: true, onClick: () => call('open_app_dir', { which: 'logs' }).catch((e) => toastError(e, t('開啟紀錄資料夾'))) })] })),
     card(t('資料庫'), h('div.col',
       h('dl.kv', h('dt', t('結構版本')), h('dd', `v${dbi.schemaVersion}${dbi.schemaVersion === dbi.latest ? '' : ' → v' + dbi.latest}`),
         h('dt', t('位置')), h('dd', pathLine(dbi.path))),
       h('div.caption.muted', t('結構變更前會自動備份並驗證；還原請關閉 Studio 後執行：PikaraScienceStudio.exe --cli db-restore --from <備份檔>')),
       dbi.backups.length ? h('div.col', { style: { gap: '6px' } }, dbi.backups.slice(0, 8).map((b) => h('div.row', h('div.grow', pathLine(b.path)), h('span.caption.muted', fmtBytes(b.bytes)), copyBtn(`"${info.exePath}" --cli db-restore --from "${b.path}"`, t('還原指令'))))) : h('div.caption.muted', t('還沒有備份'))),
       { actions: [backupBtn] })));
+}
+
+function pipeLine(pipe, info) {
+  if (!pipe) return h('span.caption.muted', t('未選擇專案'));
+  if (pipe.error) return h('span.caption', pipe.error);
+  const plan = pipe.plan || {};
+  if (plan.skipped) return h('span.caption.muted', t('不是製作管線專案'));
+  const pending = (plan.changed || []).length, kept = (plan.kept || []).length;
+  const ver = pipe.projectBundle ? `${pipe.projectBundle}${pipe.projectStudioVersion ? ' · v' + pipe.projectStudioVersion : ''}` : t('尚未由 Studio 同步');
+  const state = pending ? t('有 {n} 個待更新（下次啟動或開始製作時同步）', { n: pending }) : (pipe.projectBundle === info.pipelineBundle ? t('與內建一致') : t('已是最新'));
+  return h('span', h('span.mono.selectable', ver), ' · ', h('span', { class: pending ? '' : 'caption muted' }, state), kept ? h('span.caption.muted', ' · ' + t('保留你修改過的 {n} 個', { n: kept })) : null);
 }
 
 // GPU actually used by each role — Windows GPU Engine / GPU Process Memory counters (same source as Task Manager),

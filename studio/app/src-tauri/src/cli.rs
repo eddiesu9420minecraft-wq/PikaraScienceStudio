@@ -75,7 +75,7 @@ pub fn run(args: &[String]) -> i32 {
     // build-info: which version and which embedded frontend this exe contains (release guard, scripts/check-ui.mjs);
     // read-only, no database
     if cmd == "build-info" {
-        out(&json!({"version": env!("CARGO_PKG_VERSION"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
+        out(&json!({"version": env!("CARGO_PKG_VERSION"), "gitCommit": env!("PIKARA_GIT_COMMIT"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
                     "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0),
                     "pipelineBundle": crate::pipeline_sync::bundle_sha(), "pipelineFiles": crate::pipeline_sync::FILES.len()}));
         return 0;

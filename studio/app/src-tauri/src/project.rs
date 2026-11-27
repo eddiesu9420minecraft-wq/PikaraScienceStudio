@@ -4,7 +4,7 @@
 use crate::util::{clean_path, run};
 use crate::{gitops, narration};
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub fn info(project: &crate::db::Project) -> Value {
@@ -37,10 +37,21 @@ fn mtime_iso(m: &std::fs::Metadata) -> String {
         .unwrap_or_default()
 }
 
-/// *.mp4 / *.srt / *.png in the project root (deliverables live there).
+/// *.mp4 / *.srt / *.png deliverables: the project root (older layout) and every video folder
+/// (`projects/<EP>/{output,subtitles,thumbnail}`, where productions deliver since v0.3). Paths are absolute.
 pub fn outputs(root: &Path, probe: bool) -> Vec<Value> {
+    let mut dirs: Vec<(PathBuf, Option<String>)> = vec![(root.to_path_buf(), None)];
+    if let Ok(rd) = std::fs::read_dir(root.join("projects")) {
+        for e in rd.flatten().filter(|e| e.path().is_dir()) {
+            let ep = e.file_name().to_string_lossy().to_string();
+            for s in ["output", "subtitles", "thumbnail"] {
+                dirs.push((e.path().join(s), Some(ep.clone())));
+            }
+        }
+    }
     let mut v = vec![];
-    if let Ok(rd) = std::fs::read_dir(root) {
+    for (dir, ep) in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for e in rd.flatten() {
             let p = e.path();
             let ext = p.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
@@ -58,12 +69,28 @@ pub fn outputs(root: &Path, probe: bool) -> Vec<Value> {
                 "ext": ext,
                 "size": m.len(),
                 "mtime": mtime_iso(&m),
+                "episode": ep,
                 "probe": pr,
             }));
         }
     }
     v.sort_by(|a, b| b["mtime"].as_str().cmp(&a["mtime"].as_str()));
     v
+}
+
+/// Resolve a path the UI sends. Absolute paths stay as they are; relative ones (production outputs are stored
+/// relative to the project root, e.g. `projects/EP16/output/EP16_Bilibili_zh-CN.mp4`) are joined to the project
+/// root — never to the process working directory, which depends on how Studio was started (CYW, shortcut, CLI).
+pub fn resolve_in_project(root: &Path, path: &str) -> PathBuf {
+    let p = Path::new(path);
+    if p.is_absolute() {
+        return p.to_path_buf();
+    }
+    let mut out = root.to_path_buf();
+    for c in path.split(|c| c == '/' || c == '\\').filter(|c| !c.is_empty() && *c != ".") {
+        out.push(c);
+    }
+    out
 }
 
 fn parse_rate(r: &str) -> Option<f64> {
@@ -134,22 +161,57 @@ pub fn md_sections(text: &str) -> Vec<Value> {
     out
 }
 
-pub fn publish_metadata(root: &Path) -> Value {
-    let p = root.join("PUBLISH_METADATA.md");
-    match std::fs::read_to_string(&p) {
-        Ok(t) => json!({"path": clean_path(&p), "exists": true, "sections": md_sections(&t)}),
-        Err(_) => json!({"path": clean_path(&p), "exists": false, "sections": []}),
+/// Publish metadata for a video: `projects/<EP>/docs/<EP>_PUBLISH_METADATA.md` when the video is in a video
+/// folder; otherwise the project root's PUBLISH_METADATA.md (older layout), then the newest episode file.
+pub fn publish_metadata(root: &Path, video: Option<&str>) -> Value {
+    let mut cands = vec![];
+    if let Some(v) = video {
+        // <root>/projects/<EP>/<sub>/<file>
+        let v = resolve_in_project(root, v);
+        if let Some(epdir) = v.parent().and_then(|d| d.parent()) {
+            if epdir.parent().and_then(|x| x.file_name()).is_some_and(|n| n == "projects" || n == "sandbox") {
+                let ep = epdir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                cands.push(epdir.join("docs").join(format!("{ep}_PUBLISH_METADATA.md")));
+            }
+        }
     }
+    cands.push(root.join("PUBLISH_METADATA.md"));
+    let mut eps: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(root.join("projects"))
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path().join("docs").join(format!("{}_PUBLISH_METADATA.md", e.file_name().to_string_lossy())))
+                .filter_map(|f| std::fs::metadata(&f).and_then(|m| m.modified()).ok().map(|t| (t, f)))
+                .collect()
+        })
+        .unwrap_or_default();
+    eps.sort_by(|a, b| b.0.cmp(&a.0));
+    cands.extend(eps.into_iter().map(|x| x.1));
+    for p in &cands {
+        if let Ok(t) = std::fs::read_to_string(p) {
+            return json!({"path": clean_path(p), "exists": true, "sections": md_sections(&t)});
+        }
+    }
+    json!({"path": clean_path(&cands[0]), "exists": false, "sections": []})
 }
 
-pub fn open_path(root: &Path, path: &Path, reveal: bool) -> Result<(), String> {
+pub fn open_path(root: &Path, path: &str, reveal: bool) -> Result<(), String> {
+    let path = &resolve_in_project(root, path);
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err("path is outside the project".into());
+    }
     if !path.exists() {
-        return Err(format!("not found: {}", path.display()));
+        return Err(format!("找不到檔案：{}", clean_path(path)));
     }
     if !crate::util::is_inside(root, path) {
         return Err("path is outside the project".into());
     }
     let p = clean_path(&std::fs::canonicalize(path).map_err(|e| e.to_string())?);
+    // automated UI tests: resolve and check everything, but don't open an Explorer window on the user's screen
+    if let Some(log) = std::env::var_os("PIKARA_OPEN_DRYRUN").filter(|v| !v.is_empty()) {
+        use std::io::Write;
+        let _ = std::fs::OpenOptions::new().create(true).append(true).open(log).and_then(|mut f| writeln!(f, "{}\t{p}", if reveal { "reveal" } else { "open" }));
+        return Ok(());
+    }
     let mut c = std::process::Command::new("explorer.exe");
     if reveal {
         c.arg(format!("/select,{p}"));
@@ -188,9 +250,39 @@ mod tests {
     }
 
     #[test]
+    fn relative_output_paths_resolve_against_the_project_root_not_the_cwd() {
+        let d = std::env::temp_dir().join(format!("pss-open 測試 {}", uuid::Uuid::new_v4()));
+        let ep = d.join("projects").join("EP16");
+        for s in ["output", "docs", "thumbnail"] {
+            std::fs::create_dir_all(ep.join(s)).unwrap();
+        }
+        std::fs::write(ep.join("output").join("EP16_Bilibili_zh-CN.mp4"), b"x").unwrap();
+        std::fs::write(ep.join("thumbnail").join("EP16_Bilibili_zh-CN_Thumbnail.png"), b"x").unwrap();
+        std::fs::write(ep.join("docs").join("EP16_PUBLISH_METADATA.md"), "# EP16\n## Bilibili\nt").unwrap();
+        // the process CWD is somewhere else (as when CYW starts Studio from its apps folder)
+        assert_ne!(std::env::current_dir().unwrap(), d);
+        assert!(!Path::new("projects/EP16/output/EP16_Bilibili_zh-CN.mp4").exists());
+        let r = resolve_in_project(&d, "projects/EP16/output/EP16_Bilibili_zh-CN.mp4");
+        assert!(r.is_file(), "{}", r.display());
+        assert!(resolve_in_project(&d, "projects\\EP16\\docs\\EP16_PUBLISH_METADATA.md").is_file());
+        assert_eq!(resolve_in_project(&d, &r.to_string_lossy()), r, "absolute paths stay unchanged");
+        // traversal is refused before anything is opened; a missing file says so
+        assert!(open_path(&d, "projects/../../../Windows/notepad.exe", false).unwrap_err().contains("outside"));
+        assert!(open_path(&d, "projects/EP16/output/missing.mp4", false).unwrap_err().contains("找不到"));
+        // outputs include the video folder; publish metadata follows the selected video
+        let outs = outputs(&d, false);
+        assert!(outs.iter().any(|o| o["name"] == "EP16_Bilibili_zh-CN.mp4" && o["episode"] == "EP16"), "{outs:?}");
+        let m = publish_metadata(&d, Some("projects/EP16/output/EP16_Bilibili_zh-CN.mp4"));
+        assert_eq!(m["exists"], true);
+        assert!(m["path"].as_str().unwrap().ends_with("EP16_PUBLISH_METADATA.md"));
+        assert_eq!(publish_metadata(&d, None)["exists"], true, "falls back to the newest episode file");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
     fn real_publish_metadata_has_both_platforms() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let m = publish_metadata(&root);
+        let m = publish_metadata(&root, None);
         if m["exists"] == true {
             let titles: Vec<String> = m["sections"].as_array().unwrap().iter().map(|s| s["title"].as_str().unwrap().to_string()).collect();
             assert!(titles.iter().any(|t| t.contains("YouTube")), "{titles:?}");
