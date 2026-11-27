@@ -440,7 +440,9 @@ const encodeWith = (id) => {
         '-frames:v', String(rangeB - rangeA + 1),
         '-vf', `scale=in_range=pc:out_range=tv:out_color_matrix=bt709,${e.filter}`,
         ...e.args, '-color_range', 'tv', '-r', String(FPS_OUT), '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
-        ...(audioArgs.length ? [...(SPEED !== 1 ? ['-af', `atempo=${SPEED}`] : []), '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest'] : []),
+        // apad：音訊補靜音到影片結束 → -shortest 一定停在最後一幀。1.5× 版的 atempo 讓音訊比影片短不到一幀，
+        // 舊版 -shortest 因此少編最後一幀，驗證判定「輸出只有 N-1 幀」，每個編碼器都失敗（EP16-YT15 實測）
+        ...(audioArgs.length ? ['-af', [...(SPEED !== 1 ? [`atempo=${SPEED}`] : []), 'apad'].join(','), '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest'] : []),
         '-movflags', '+faststart', outFile,
       ], {cwd: ROOT});
     } catch (err) {
