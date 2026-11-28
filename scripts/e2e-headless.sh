@@ -22,7 +22,9 @@ t0=$(date +%s)
 # memory sampler: total RSS of the worker and every process it starts
 ( while sleep 5; do ps -eo rss=,args= | awk -v w="$W" 'index($0,w) || /render\.mjs|generate_voiceover|remotion|chrome-headless|ffmpeg/ {s+=$1} END {print s}'; done ) > "$LOG/rss.txt" &
 SAMPLER=$!
-trap 'kill $SAMPLER 2>/dev/null || true' EXIT
+WPID=""
+# on any exit (success, failure, timeout): stop the sampler and the worker (SIGINT = clean, resumable stop)
+trap 'kill $SAMPLER 2>/dev/null || true; [ -n "$WPID" ] && { kill -INT "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null; } || true' EXIT
 
 [ -d "$PROJ/scripts" ] || J project new --dest "$PROJ" --title "E2E 無頭測試" --template "$ROOT/pipeline" --no-link-tools > "$LOG/project.json"
 (cd "$PROJ" && npm ci --no-audit --no-fund > "$LOG/npm.txt" 2>&1)
