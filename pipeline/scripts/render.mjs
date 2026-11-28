@@ -343,6 +343,9 @@ for (const [a, z] of chunks) {
     ...(useGpu ? chromiumFlagsArg() : []),
     `--gl=${useGpu ? (process.platform === 'linux' ? 'angle-egl' : 'angle') : 'swangle'}`, `--concurrency=${concurrency}`,
     `--frames=${m1}-${m2}`, '--log=error',
+    // per-frame limit: SwiftShader (CPU, no GPU — servers, VMs) can need well over Remotion's default 30 s for the
+    // first frame of a heavy Three.js scene (measured on a 3-core Intel Mac VM); the GPU path keeps the default
+    `--timeout=${Number(process.env.PIKARA_RENDER_FRAME_TIMEOUT_MS) || (useGpu ? 30000 : 180000)}`,
     ...(isPreview ? ['--scale=0.6666667'] : []),
     ...(browser ? [`--browser-executable=${browser}`] : []),
   ];

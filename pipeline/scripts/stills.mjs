@@ -23,7 +23,9 @@ if (b.code !== 0) {
 let failed = 0;
 for (const f of frames) {
   const out = low ? `out/preview/${comp}-${String(f).padStart(5, '0')}.jpeg` : `out/stills/${comp}-${String(f).padStart(5, '0')}.png`;
-  const r = remotion(['still', buildDir, comp, out, `--frame=${f}`, `--gl=${gl}`, ...(low ? [`--scale=${scale}`, '--image-format=jpeg', '--jpeg-quality=80'] : [])]);
+  // SwiftShader (no GPU) may need more than Remotion's default 30 s per frame (same rule as render.mjs)
+  const timeout = Number(process.env.PIKARA_RENDER_FRAME_TIMEOUT_MS) || (gl === 'swangle' ? 180000 : 30000);
+  const r = remotion(['still', buildDir, comp, out, `--frame=${f}`, `--gl=${gl}`, `--timeout=${timeout}`, ...(low ? [`--scale=${scale}`, '--image-format=jpeg', '--jpeg-quality=80'] : [])]);
   if (r.code === 0) console.log(`${f} → ${out}`);
   else {
     failed++;

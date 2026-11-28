@@ -32,8 +32,9 @@ ID=$(J create --project "$PROJ" --topic "為什麼天空是藍色的" --script-f
       --no-youtube --no-thumbnail --no-publish-info --no-visual-review | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 echo "production $ID"
 
-worker() { S run --stay --timeout 7200 >> "$LOG/worker.txt" 2>&1 & echo $!; }
-WPID=$(worker)
+# the CLI itself must be the background job (not a function / subshell), so the signal and `wait` reach it
+start_worker() { "$CLI" --data "$DATA" run --stay --timeout 7200 >> "$LOG/worker.txt" 2>&1 & WPID=$!; }
+start_worker
 interrupted=0
 deadline=$(( $(date +%s) + 7200 ))
 while :; do
@@ -59,7 +60,7 @@ while :; do
     echo "worker exit $code (130 = interrupted, resumable)" | tee -a "$LOG/worker.txt"
     [ $code = 130 ] || { echo "worker did not stop cleanly"; exit 1; }
     interrupted=1
-    WPID=$(worker)
+    start_worker
   fi
   [ "$(date +%s)" -lt "$deadline" ] || { echo timeout; exit 6; }
   sleep 15

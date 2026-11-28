@@ -278,10 +278,24 @@ pub fn set_keep_awake(on: bool) {
     {
         // a helper process that holds a sleep assertion until it is killed or Studio exits (-w <our pid>)
         static HELPER: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+        // A helper that exits right away cannot hold the assertion (headless server / SSH without a logind session:
+        // systemd-inhibit answers "Access denied"). Then stay quiet: no retry on every heartbeat, no stderr spam.
+        static UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         let mut h = HELPER.lock().unwrap_or_else(|e| e.into_inner());
         if on {
-            if h.as_mut().map(|c| matches!(c.try_wait(), Ok(None))).unwrap_or(false) {
+            if UNAVAILABLE.load(std::sync::atomic::Ordering::Relaxed) {
                 return;
+            }
+            match h.as_mut().map(|c| c.try_wait()) {
+                Some(Ok(None)) => return, // still holding the assertion
+                Some(_) => {
+                    // the previous helper ended on its own: keeping the system awake is not possible here
+                    *h = None;
+                    UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
+                    eprintln!("防止睡眠不可用（沒有桌面工作階段或權限不足）；工作照常執行");
+                    return;
+                }
+                None => {}
             }
             let pid = std::process::id().to_string();
             let child = if cfg!(target_os = "macos") {
@@ -291,10 +305,15 @@ pub fn set_keep_awake(on: bool) {
                     std::process::Command::new(si)
                         .args(["--what=idle:sleep", "--who=Pikara Science Studio", "--why=video production jobs running", "sh", "-c", &format!("while kill -0 {pid} 2>/dev/null; do sleep 30; done")])
                         .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
                         .spawn()
                         .ok()
                 })
             };
+            if child.is_none() {
+                UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             *h = child;
         } else if let Some(mut c) = h.take() {
             let _ = c.kill();
