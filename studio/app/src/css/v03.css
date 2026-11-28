@@ -159,3 +159,25 @@ audio { width: 100%; height: 32px; }
   .setting .control .input, .setting .control .select { width: 100%; }
   .toolbar .subtitle { display: none; }
 }
+
+/* ---------------------------------------------------------------- v0.3.2：v0.2 畫面元件統一
+   v0.2 的「section＋section-head＋panel」結構與 v0.3 的 card 使用同一套外觀：一層卡片（不再卡片中有卡片）、
+   同樣的標題字級（headline 15px）、內距、圓角與陰影；標題列的說明文字與按鈕排在同一列。 */
+.tab-body .section, .page > .section { background: var(--fill-panel); border: 1px solid var(--separator); border-radius: var(--r-card); box-shadow: var(--shadow-card); gap: 0; min-width: 0; }
+.tab-body .section > .section-head, .page > .section > .section-head { padding: var(--s4) var(--s5) var(--s3); min-height: 40px; flex-wrap: wrap; row-gap: 4px; }
+.section-head .title2, .section-head h2 { font-size: var(--fs-headline); line-height: 20px; font-weight: 600; letter-spacing: 0; }
+.tab-body .section > :not(.section-head), .page > .section > :not(.section-head) { margin: 0 var(--s5) var(--s5); }
+.tab-body .section > .panel, .page > .section > .panel { margin: 0; border: 0; border-top: 1px solid var(--separator); border-radius: 0 0 var(--r-card) var(--r-card); background: transparent; box-shadow: none; }
+.tab-body .section > .panel.panel-body, .page > .section > .panel.panel-body { padding: var(--s4) var(--s5) var(--s5); }
+.panel { border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.panel-head { padding: var(--s4) var(--s5) var(--s3); border-bottom-color: var(--separator); }
+.panel-body { padding: var(--s4) var(--s5); }
+.title2 { font-size: var(--fs-title2); line-height: 24px; }
+/* 卡片內的 panel（例：單步工具的工作卡、專案統計）＝內嵌區塊，不是第二層卡片 */
+.tab-body .section .panel:not(.section > .panel), .page > .section .panel:not(.section > .panel), .card .panel {
+  background: var(--fill-sunken); box-shadow: none; border: 1px solid var(--separator); border-radius: var(--r-control); }
+.col:empty { display: none; }
+/* 資源監控小卡：時間軸標籤、最低／最高與總量分兩行，窄卡片時不會擠在一起 */
+.chart-card .foot { flex-wrap: wrap; gap: 2px var(--s3); }
+.chart-card .foot > span:first-child { color: var(--text-tertiary); }
+.chart-card .foot > :last-child:not(:first-child):not(:nth-child(2)) { margin-left: auto; }

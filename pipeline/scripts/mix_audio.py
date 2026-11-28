@@ -289,10 +289,17 @@ def main() -> int:
         chains.append(f"[{i}:a]aresample={SR},aformat=channel_layouts=stereo,adelay={ms}|{ms}[v{i}]")
     labels = "".join(f"[v{i}]" for i in range(1, len(vlines) + 1))
     voice_raw = work / "voice_raw.wav"
-    ff([*inputs, "-filter_complex", ";".join(chains) + f";[0:a]{labels}amix=inputs={len(vlines) + 1}:normalize=0:duration=first:dropout_transition=0[out]",
-        "-map", "[out]", "-c:a", "pcm_s24le", str(voice_raw)])
     voice = work / "voice_norm.wav"
-    loudnorm_apply(voice_raw, voice, VOICE_LUFS)
+
+    def voice_track() -> None:
+        ff([*inputs, "-filter_complex", ";".join(chains) + f";[0:a]{labels}amix=inputs={len(vlines) + 1}:normalize=0:duration=first:dropout_transition=0[out]",
+            "-map", "[out]", "-c:a", "pcm_s24le", str(voice_raw)])
+        loudnorm_apply(voice_raw, voice, VOICE_LUFS)
+
+    # 旁白軌（混音＋兩段式 loudnorm，約 1 分鐘）與配樂合成互不相依：同時進行，輸出與依序執行完全相同
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=1)
+    voice_job = pool.submit(voice_track)
 
     # 2) 背景音樂 + ducking（EP01：每一幕不同氛圍，見 scripts/music.py）
     bgm_raw = work / "bgm_raw.wav"
@@ -321,6 +328,8 @@ def main() -> int:
         synth_bgm(dur, bgm_raw)
     bgm_lvl = work / "bgm_level.wav"
     loudnorm_apply(bgm_raw, bgm_lvl, BGM_LEVEL_DB)
+    voice_job.result()  # 旁白軌的錯誤在這裡拋出
+    pool.shutdown()
     bgm = work / "bgm_ducked.wav"
     # Ducking：以旁白為側鏈壓縮背景音樂（長片也不受濾鏡運算式長度限制）。
     # 參數：門檻約 -36 dBFS、比例 10、起音 120ms、釋放 500ms → 說話時約降低 10–12 dB。

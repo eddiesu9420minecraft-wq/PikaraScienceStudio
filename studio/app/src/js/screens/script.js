@@ -113,7 +113,7 @@ class Editor {
 
   updateHeader() {
     const dirty = this.st.dirtyIds.size > 0;
-    document.getElementById('tb-title').textContent = t('腳本') + (dirty ? ' •' : '');
+    document.getElementById('tb-title').textContent = t('單集編輯') + (dirty ? ' •' : ''); // 未儲存標記；標題與其他分頁一致
     const nLines = (this.seq.scenes || []).reduce((a, s) => a + (s.lines || []).length, 0);
     this.ctx.subtitle(`${this.st.file.path}`);
     const v = this.st.validation;

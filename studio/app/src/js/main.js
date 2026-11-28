@@ -1,6 +1,6 @@
-// v0.3 app shell: 8 sections (Dashboard, Projects, Editor, Queue, Voice Studio, Assets, Settings, Diagnostics),
-// hash router #/<section>/<tab>, theme (light / dark / system), UI language, backend health watch, UI tour harness.
-// v0.2 screens are embedded unchanged as tabs (their routes #/queue, #/doctor … still work as aliases).
+// App shell: 10 sections (總覽、新影片、製作狀態、專案、單集編輯、任務佇列、語音工作室、素材庫｜設定、診斷),
+// hash router #/<section>/<tab>?query, theme (light / dark / system), UI language, backend health watch, UI tour harness.
+// 舊路由（#/auto、#/queue、#/doctor …）仍可使用，會轉到新的位置。
 import { t, setLang, getLang, onLang, applyStatic } from './i18n.js';
 import { h, mount, toast } from './ui.js';
 import { icon } from './icons.js';
@@ -8,10 +8,12 @@ import { hasTauri, call } from './api.js';
 import { store, on, refreshProjects, currentProject, wireEvents, monitorHistory } from './store.js';
 import { showWelcome } from './screens/guide.js';
 import { setTheme, getThemePref, onThemeChange } from './v03/theme.js';
-import { runTour } from './v03/tour.js';
+import { runTour, runActionTour } from './v03/tour.js';
 import { createBridge, mountReveal } from '../vendor/pikara-splash/pikara-splash.js';
 
 import dashboard from './screens/dashboard.js';
+import create from './screens/create.js';
+import status from './screens/status.js';
 import projectsx from './screens/projectsx.js';
 import editor from './screens/editor.js';
 import queuex from './screens/queuex.js';
@@ -20,10 +22,11 @@ import assetsx from './screens/assetsx.js';
 import settings from './screens/settingsx.js';
 import diagnostics from './screens/diagnostics.js';
 
-export const SECTIONS = [dashboard, projectsx, editor, queuex, voice, assetsx, settings, diagnostics];
+export const SECTIONS = [dashboard, create, status, projectsx, editor, queuex, voice, assetsx, settings, diagnostics];
+const SEP_BEFORE = SECTIONS.indexOf(settings);
 // v0.2 route ids → section/tab
 const ALIASES = {
-  auto: 'projects/auto', publish: 'projects/publish', projects: 'projects/folders', guide: 'projects/guide',
+  auto: 'create', production_status: 'status', publish: 'projects/publish', projects: 'projects/folders', guide: 'projects/guide',
   script: 'editor/script', prompt: 'editor/prompt', production: 'editor/production',
   queue: 'queue/jobs', monitor: 'diagnostics/monitor', doctor: 'diagnostics/doctor', rollback: 'diagnostics/history',
 };
@@ -35,10 +38,10 @@ let renderSeq = 0;
 function buildNav() {
   const nav = $('nav');
   mount(nav, SECTIONS.map((s, i) => [
-    i === 6 ? h('div.nav-sep', { role: 'separator' }) : null,
+    i === SEP_BEFORE ? h('div.nav-sep', { role: 'separator' }) : null,
     h('button.nav-item', { type: 'button', dataset: { route: s.id }, onclick: () => go(s.id), title: t(s.title),
       'aria-current': active && active.section.id === s.id ? 'page' : null },
-    icon(s.icon), h('span.label', t(s.title)), h('span', { class: 'badge', id: `badge-${s.id}`, hidden: true }), h('span.kbd-hint', `Ctrl ${i + 1}`)),
+    icon(s.icon), h('span.label', t(s.title)), h('span', { class: 'badge', id: `badge-${s.id}`, hidden: true }), i < 10 ? h('span.kbd-hint', `Ctrl ${(i + 1) % 10}`) : null),
   ]));
   updateBadges();
 }
@@ -66,7 +69,7 @@ export function go(path) { location.hash = `#/${path}`; }
 function parseRoute() {
   let raw = location.hash.replace(/^#\/?/, '');
   const [pathPart, query] = raw.split('?');
-  let path = pathPart;
+  let path = pathPart === 'projects/auto' ? 'create' : pathPart; // v0.3.0–0.3.1 的「新影片」分頁
   const first = path.split('/')[0];
   if (ALIASES[first] && !SECTIONS.find((s) => s.id === first)) path = ALIASES[first] + path.slice(first.length);
   const [sid, tab] = path.split('/');
@@ -124,8 +127,8 @@ function wireTheme() {
 
 function wireKeys() {
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && /^[1-8]$/.test(e.key)) {
-      const s = SECTIONS[Number(e.key) - 1];
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+      const s = SECTIONS[(Number(e.key) + 9) % 10];
       if (s) { e.preventDefault(); go(s.id); }
     }
   });
@@ -182,7 +185,7 @@ async function boot() {
   // can't hold the splash (the screen keeps loading in the visible window).
   await Promise.race([route(), new Promise((r) => setTimeout(r, 2500))]);
   if (splash) splash.mainReady().catch(() => {});
-  if (info && info.uiTour) { runTour({ go, info, sections: SECTIONS }); return; }
+  if (info && info.uiTour) { if (info.uiTourActions) runActionTour({ go, info }); else runTour({ go, info, sections: SECTIONS }); return; }
   showWelcome(go);
   if (hasTauri) watchBackend();
 }

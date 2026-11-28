@@ -41,7 +41,7 @@ export default {
     if (!ui.selected || !videos.find((v) => v.path === ui.selected)) ui.selected = (videos.find((v) => /YouTube/i.test(v.name)) || videos[0] || {}).path || null;
 
     const paintList = () => {
-      if (!videos.length) { mount(listBox, empty(t('沒有影片'), t('專案根目錄與 out/ 裡沒有 mp4。'), 'film')); return; }
+      if (!videos.length) { mount(listBox, empty(t('沒有影片'), t('專案根目錄與 projects/<集數>/output 裡沒有 mp4。'), 'film')); return; }
       mount(listBox, h('div.list', { role: 'listbox', 'aria-label': t('影片') }, videos.map((v) => {
         const sel = v.path === ui.selected;
         const pr = v.probe;
@@ -49,7 +49,7 @@ export default {
           h('div.main-text', h('div.t', { title: v.name }, v.name),
             h('div.d.num', [pr ? `${pr.width}×${pr.height}` : null, pr && pr.fps ? `${round(pr.fps)}fps` : null, pr ? fmtDur(pr.durationS) : null, fmtBytes(v.size)].filter(Boolean).join(' · ')),
             h('div.d', fmtTime(v.mtime))));
-        const pick = () => { ui.selected = v.path; paintList(); paintPlayer(); };
+        const pick = () => { const prev = ui.selected; ui.selected = v.path; paintList(); paintPlayer(); if (prev !== v.path) loadMeta(); };
         row.addEventListener('click', pick);
         row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } if (e.key === 'ArrowDown' && row.nextElementSibling) row.nextElementSibling.focus(); if (e.key === 'ArrowUp' && row.previousElementSibling) row.previousElementSibling.focus(); });
         return row;
@@ -98,7 +98,7 @@ export default {
     const paintMeta = () => {
       if (meta == null) return;
       if (meta.error) { mount(metaBox, errorBox(meta.error)); return; }
-      if (!meta.exists) { mount(metaBox, h('div.panel', empty(t('找不到 PUBLISH_METADATA.md'), t('在專案根目錄建立 PUBLISH_METADATA.md 後，這裡會顯示各平台的標題、說明與標籤。'), 'script'))); return; }
+      if (!meta.exists) { mount(metaBox, h('div.panel', empty(t('找不到 PUBLISH_METADATA.md'), t('自動製作會寫在 projects/<集數>/docs/<集數>_PUBLISH_METADATA.md；舊專案可放在專案根目錄的 PUBLISH_METADATA.md。'), 'script'))); return; }
       const secs = pickSections(meta.sections || [], ui.platform);
       mount(metaBox, h('section.section',
         h('div.section-head', h('h2.title2', t('平台中繼資料')), h('span.caption.mono.muted.ellipsis', meta.path),
@@ -106,10 +106,18 @@ export default {
         secs.length ? secs.map((s) => sectionView(s)) : h('div.caption.muted', t('這個平台沒有對應的段落。'))));
     };
 
+    // the metadata file belongs to the selected video's episode (projects/<EP>/docs/<EP>_PUBLISH_METADATA.md)
+    let metaSeq = 0;
+    const loadMeta = async () => {
+      const seq = ++metaSeq;
+      mount(metaBox, loading(4));
+      let m;
+      try { m = await call('publish_metadata', { projectId: p.id, video: ui.selected }); } catch (e) { m = { error: e }; }
+      if (!ctx.alive() || seq !== metaSeq) return;
+      meta = m; paintMeta();
+    };
     paintList(); paintPlayer(); paintThumbs();
-    mount(metaBox, loading(4));
-    try { meta = await call('publish_metadata', { projectId: p.id }); } catch (e) { meta = { error: e }; }
-    if (ctx.alive()) paintMeta();
+    await loadMeta();
   },
 };
 

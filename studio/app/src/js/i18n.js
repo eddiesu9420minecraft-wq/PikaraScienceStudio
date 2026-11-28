@@ -6,9 +6,9 @@ let lang = localStorage.getItem('ui.lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
 const subs = new Set();
 
 export function getLang() { return lang; }
-export function setLang(l) {
+export function setLang(l, persist = true) {
   lang = l === 'zh-CN' ? 'zh-CN' : 'zh-TW';
-  localStorage.setItem('ui.lang', lang);
+  if (persist) localStorage.setItem('ui.lang', lang); // 截圖導覽不保存（WebView 設定檔與使用者的 Studio 共用）
   document.documentElement.lang = lang;
   applyStatic(document);
   subs.forEach((f) => f(lang));

@@ -369,3 +369,189 @@ fn script_check_retries_are_targeted_and_stop_without_progress() {
     let m = s3.message.unwrap_or_default();
     assert!(m.contains("停止重複呼叫") && m.contains("include:B") && m.contains("REQUIREMENTS_CHECK.json"), "{m}");
 }
+
+// ------------------------------------------------------------------ v0.3.2 製作狀態頁、草稿、刪除、擬人化
+
+fn board_status(v: &Value, id: &str) -> String {
+    v["steps"].as_array().unwrap().iter().find(|s| s["id"] == id).unwrap()["status"].as_str().unwrap().to_string()
+}
+
+fn all_stages(done_until: &str, current: &str) -> Vec<StageInfo> {
+    let mut seen = false;
+    STAGES
+        .iter()
+        .map(|(id, _)| {
+            let status = if *id == current {
+                seen = true;
+                "running"
+            } else if seen || done_until.is_empty() {
+                "pending"
+            } else {
+                "done"
+            };
+            StageInfo { id: id.to_string(), label: id.to_string(), status: status.into(), ..Default::default() }
+        })
+        .collect()
+}
+
+#[test]
+fn board_maps_real_stage_state_to_eleven_steps() {
+    let ap = test_autopilot();
+    // 動畫階段執行中：研究、劇本、驗證已完成；動畫執行中；之後都在等待
+    let mut p = animate_production("prod-board");
+    p.stages = all_stages("script", "animate");
+    p.stages.iter_mut().find(|s| s.id == "bilibili").unwrap().status = "skipped".into();
+    ap.store(&p);
+    let cur = get(&ap.conn(), "prod-board").unwrap();
+    let v = ap.board_item(&cur);
+    assert_eq!(v["steps"].as_array().unwrap().len(), 11);
+    for (id, st) in [("research", "done"), ("script", "done"), ("validate", "done"), ("animate", "running"), ("voice", "pending"), ("render", "pending"), ("output", "pending")] {
+        assert_eq!(board_status(&v, id), st, "{id}");
+    }
+    assert_eq!(v["currentStep"], "animate");
+    let prog = v["progress"].as_f64().unwrap();
+    assert!((prog - 3.0 / 11.0).abs() < 0.01, "progress {prog}");
+    assert!(v["etaSecs"].is_null(), "AI 步驟沒有可靠的剩餘時間");
+    // 暫停：目前步驟顯示已暫停；失敗：顯示失敗；可用操作跟著狀態改變
+    let mut q = get(&ap.conn(), "prod-board").unwrap();
+    q.status = "paused".into();
+    ap.store(&q);
+    let v = ap.board_item(&q);
+    assert_eq!(board_status(&v, "animate"), "paused");
+    assert_eq!((v["can"]["resume"].as_bool(), v["can"]["pause"].as_bool()), (Some(true), Some(false)));
+    q.status = "failed".into();
+    ap.store(&q);
+    let v = ap.board_item(&q);
+    assert_eq!(board_status(&v, "animate"), "failed");
+    assert_eq!(v["can"]["retry"], true);
+    assert_eq!(v["can"]["deleteFiles"], true);
+}
+
+#[test]
+fn render_job_step_decides_mix_render_and_qa() {
+    let ap = test_autopilot();
+    let mut p = animate_production("prod-final");
+    p.stage = "final".into();
+    p.action = 1;
+    p.stages = all_stages("visual", "final");
+    let c = ap.conn();
+    let labels = ["時間軸 EP07", "複製字幕", "混音 EP07", "渲染 EP07-30fps", "品質檢查 EP07"];
+    let st: Vec<String> = labels.iter().map(|l| l.to_string()).collect();
+    let j = crate::db::job_insert(&c, None, "final_tw", "EP07 正式版", &json!({}), "gpu", &st).unwrap();
+    crate::db::job_mark_started(&c, &j.id, "x.log").unwrap();
+    crate::db::job_set_step(&c, &j.id, 3).unwrap();
+    crate::db::job_set_progress(&c, &j.id, (3.0 + 0.5) / 5.0, Some("幀 100/200")).unwrap();
+    drop(c);
+    p.job_id = Some(j.id.clone());
+    ap.store(&p);
+    let cur = get(&ap.conn(), "prod-final").unwrap();
+    let v = ap.board_item(&cur);
+    assert_eq!((board_status(&v, "mix"), board_status(&v, "render"), board_status(&v, "qa")), ("done".to_string(), "running".to_string(), "pending".to_string()));
+    let render = v["steps"].as_array().unwrap().iter().find(|s| s["id"] == "render").unwrap().clone();
+    assert!((render["progress"].as_f64().unwrap() - 0.5).abs() < 1e-6, "渲染這一步自己的進度");
+}
+
+#[test]
+fn draft_waits_until_started_and_edit_rules_follow_the_state() {
+    let ap = test_autopilot();
+    let mut p = animate_production("prod-draft");
+    p.status = "draft".into();
+    p.stage = "prepare".into();
+    p.action = 0;
+    ap.store(&p);
+    ap.tick();
+    assert_eq!(get(&ap.conn(), "prod-draft").unwrap().status, "draft", "排程器不會執行草稿");
+    // 草稿可以改主題與敘事方式
+    let e = ap.update_config("prod-draft", json!({"topic": "CPU 與 GPU 的分工", "narrative": "personified"})).unwrap();
+    assert_eq!((e.config.topic.as_str(), e.config.narrative.as_str()), ("CPU 與 GPU 的分工", "personified"));
+    assert!(ap.update_config("prod-draft", json!({"narrative": "story"})).is_err());
+    let s = ap.start_draft("prod-draft").unwrap();
+    assert_eq!(s.status, "queued");
+    assert!(ap.start_draft("prod-draft").is_err(), "不能重複開始");
+    // 製作中不能編輯；暫停後只能改不影響已完成成果的項目
+    let mut r = get(&ap.conn(), "prod-draft").unwrap();
+    r.status = "running".into();
+    ap.store(&r);
+    assert!(ap.update_config("prod-draft", json!({"maxMinutes": 90})).is_err());
+    r.status = "paused".into();
+    r.stages = vec![
+        StageInfo { id: "thumbnail".into(), status: "done".into(), ..Default::default() },
+        StageInfo { id: "publish".into(), status: "pending".into(), ..Default::default() },
+    ];
+    ap.store(&r);
+    let u = ap.update_config("prod-draft", json!({"maxMinutes": 90, "topic": "不能改", "publishInfo": false})).unwrap();
+    assert_eq!((u.config.max_minutes, u.config.topic.as_str(), u.config.publish_info), (90, "CPU 與 GPU 的分工", false));
+    assert_eq!(u.stages[1].status, "skipped");
+    assert!(ap.update_config("prod-draft", json!({"thumbnail": false})).unwrap_err().contains("已經執行過"));
+}
+
+#[test]
+fn delete_task_cancels_the_running_job_and_removes_only_the_record() {
+    let ap = test_autopilot();
+    let mut p = animate_production("prod-del");
+    let j = running_job(&ap);
+    p.job_id = Some(j.id.clone());
+    ap.store(&p);
+    let r = ap.delete_task("prod-del").unwrap();
+    assert_eq!(r["removed"], true);
+    assert_eq!(r["canceledJob"], json!(j.id));
+    assert!(get(&ap.conn(), "prod-del").is_err());
+    assert_eq!(crate::db::job_get(&ap.conn(), &j.id).unwrap().status, "canceled");
+    // 刪除影片檔案：製作中不允許
+    let mut q = animate_production("prod-del2");
+    q.status = "running".into();
+    ap.store(&q);
+    assert!(ap.delete_files("prod-del2").unwrap_err().contains("取消製作"));
+}
+
+#[test]
+fn narrative_and_characters_are_validated_and_reach_the_prompts() {
+    let mut c = AutoConfig { topic: "GPU 為什麼不能取代 CPU".into(), ..Default::default() };
+    c.characters = vec![
+        Character { name: " CPU 大廚 ".into(), concept: "CPU".into(), look: "冰藍色方形晶片".into(), personality: "精明".into(), voice: "ref_S1".into(), pitch: -9.0 },
+        Character::default(),
+    ];
+    c.validate().unwrap();
+    assert_eq!(c.characters.len(), 1, "空白角色會被移除");
+    assert_eq!((c.characters[0].name.as_str(), c.characters[0].pitch), ("CPU 大廚", -6.0));
+    assert_eq!(c.narrative_mode(), "personified", "指定了角色就一定使用");
+    let mut bad = c.clone();
+    bad.characters[0].voice = "../x".into();
+    assert!(bad.validate().is_err());
+    let p = Production { episode: "ep20".into(), config: c.clone(), data: json!({"voiceRefs": ["ref_S1", "ref_S3"]}), ..Default::default() };
+    let s = prompt_script(&p);
+    assert!(s.contains("必須**使用擬人化角色") && s.contains("CPU 大廚") && s.contains("ref_S1、ref_S3") && s.contains("\"speaker\""), "{s}");
+    let a = prompt_animate(&Production { stage: "animate".into(), ..p.clone() });
+    assert!(a.contains("characters.tsx") && a.contains("表情"));
+    // 預設：AI 自行判斷；一般旁白：提示詞不要求角色
+    let auto = Production { episode: "ep20".into(), config: AutoConfig { topic: "x 主題".into(), ..Default::default() }, data: json!({}), ..Default::default() };
+    assert!(prompt_script(&auto).contains("先判斷這個主題是否適合擬人化"));
+    let plain = Production { config: AutoConfig { narrative: "plain".into(), ..auto.config.clone() }, ..auto.clone() };
+    assert!(!prompt_script(&plain).contains("\"speaker\"") && !prompt_animate(&plain).contains("characters.tsx"));
+    // 動畫風格留空 = EP01 經典黑黃科技風
+    assert!(content::brief_block(&auto.config, "animate").contains("EP01 經典黑黃科技風"));
+}
+
+#[test]
+fn canceled_render_still_shows_the_render_step_as_canceled() {
+    // 控制驗收發現：取消後 job_id 被清空，製作狀態頁把「音訊混合」顯示為已取消（實際是在渲染時取消）
+    let ap = test_autopilot();
+    let mut p = animate_production("prod-cancel-render");
+    p.stage = "final".into();
+    p.action = 1;
+    p.stages = all_stages("visual", "final");
+    let c = ap.conn();
+    let labels: Vec<String> = ["時間軸 EP07", "複製字幕", "混音 EP07", "渲染 EP07-30fps", "品質檢查 EP07"].iter().map(|l| l.to_string()).collect();
+    let j = crate::db::job_insert(&c, None, "final_tw", "EP07 正式版", &json!({}), "gpu", &labels).unwrap();
+    crate::db::job_mark_started(&c, &j.id, "x.log").unwrap();
+    crate::db::job_set_step(&c, &j.id, 3).unwrap();
+    drop(c);
+    p.job_id = Some(j.id.clone());
+    ap.store(&p);
+    let s = ap.stop("prod-cancel-render").unwrap();
+    assert!(s.job_id.is_none());
+    let v = ap.board_item(&s);
+    assert_eq!((board_status(&v, "mix"), board_status(&v, "render"), board_status(&v, "qa")), ("done".to_string(), "canceled".to_string(), "pending".to_string()));
+    assert_eq!(v["currentStep"], "render");
+    assert_eq!(v["can"]["resume"], false, "測試資料沒有工作樹，不能從中斷處繼續");
+}

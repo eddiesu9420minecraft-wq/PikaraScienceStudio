@@ -129,6 +129,12 @@ def convert_seq(ep: dict, simplified: bool = False) -> dict:
                 th[k] = [conv(x) for x in th[k]]
         if isinstance(th.get("highlight"), str):
             th["highlight"] = conv(th["highlight"])
+    # 擬人化角色（v0.3.2）：名稱與設定轉成簡體；id、voice、pitch 不變（speaker 照樣對得上）
+    for ch in ep.get("characters") or []:
+        if isinstance(ch, dict):
+            for k in ("name", "concept", "look", "personality"):
+                if isinstance(ch.get(k), str):
+                    ch[k] = conv(ch[k])
     for sc in ep["scenes"]:
         sc["title"] = conv(sc.get("title", ""))
         for line in sc["lines"]:

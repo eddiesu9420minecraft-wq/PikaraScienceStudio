@@ -590,7 +590,7 @@ pub fn job_remove(conn: &Connection, id: &str) -> Result<(), String> {
 
 /// Startup recovery: running jobs whose heartbeat is older than `stale_ms` → interrupted.
 /// Returns the ids that were marked.
-pub fn recover_stale(conn: &Connection, stale_ms: i64, now: i64) -> Result<Vec<String>, String> {
+pub fn recover_stale(conn: &Connection, stale_ms: i64, now: i64, exclude: &[String]) -> Result<Vec<String>, String> {
     let mut st = conn
         .prepare("SELECT id FROM jobs WHERE status='running' AND (heartbeat_ms IS NULL OR heartbeat_ms < ?1)")
         .map_err(|e| e.to_string())?;
@@ -598,6 +598,7 @@ pub fn recover_stale(conn: &Connection, stale_ms: i64, now: i64) -> Result<Vec<S
         .query_map([now - stale_ms], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
+        .filter(|id: &String| !exclude.contains(id))
         .collect();
     for id in &ids {
         conn.execute(
@@ -838,7 +839,7 @@ mod tests {
         job_mark_started(&c, &fresh.id, "y.log").unwrap();
         // pretend the first job's heartbeat is 60 s old
         c.execute("UPDATE jobs SET heartbeat_ms=heartbeat_ms-60000 WHERE id=?1", [&j.id]).unwrap();
-        let ids = recover_stale(&c, 20_000, now_ms()).unwrap();
+        let ids = recover_stale(&c, 20_000, now_ms(), &[]).unwrap();
         assert_eq!(ids, vec![j.id.clone()]);
         assert_eq!(job_get(&c, &j.id).unwrap().status, "interrupted");
         assert_eq!(job_get(&c, &fresh.id).unwrap().status, "running");

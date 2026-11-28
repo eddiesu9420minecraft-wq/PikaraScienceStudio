@@ -35,6 +35,7 @@
 //!   output-promote --root <dir> --episode <ep> --file <mp4>      rerender-plan --root … --params <json>
 //!   db-backups     db-backup     db-restore --from <backup>  (Studio must be closed)
 //!   hardware       read-only machine profile, GPU snapshot, device assignment, power-mode budgets (no DB access)
+//!   build-info     version + SHA-256 of the embedded frontend (no database)
 //! ```
 //! auto-start config (v0.2.1): mode auto|guided|script, brief (Markdown), chapters [..], mustInclude, mustAvoid,
 //! opening, ending, voiceTone, animationStyle, pacing, scriptText, language zh-TW|zh-CN|both|en, minSources,
@@ -82,6 +83,33 @@ pub fn run(args: &[String]) -> i32 {
                          "packagedContainer": crate::platform::packaged_container(), "dataDir": crate::util::data_dir(), "cacheDir": crate::util::cache_dir()},
             "machine": crate::hardware::profile::report(), "snapshot": snap, "assignment": assign}));
         return 0;
+    }
+    // build-info: which version and which embedded frontend this exe contains (release guard, scripts/check-ui.mjs);
+    // read-only, no database
+    if cmd == "build-info" {
+        out(&json!({"version": env!("CARGO_PKG_VERSION"), "gitCommit": env!("PIKARA_GIT_COMMIT"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
+                    "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0),
+                    "pipelineBundle": crate::pipeline_sync::bundle_sha(), "pipelineFiles": crate::pipeline_sync::FILES.len()}));
+        return 0;
+    }
+    // pipeline-sync --project <dir> [--check] [--force]: bring a project's scripts/ up to this build (no database)
+    if cmd == "pipeline-sync" {
+        let Some(root) = arg(args, "--project").or_else(|| arg(args, "--root")) else {
+            out(&json!({"ok": false, "command": cmd, "error": "缺少 --project <專案資料夾>"}));
+            return 1;
+        };
+        let check = args.iter().any(|a| a == "--check");
+        return match crate::pipeline_sync::sync(Path::new(&root), !check, args.iter().any(|a| a == "--force"), true) {
+            Ok(v) => {
+                let pending = check && v["changed"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
+                out(&v);
+                i32::from(pending)
+            }
+            Err(e) => {
+                out(&json!({"ok": false, "command": cmd, "error": e}));
+                1
+            }
+        };
     }
     // restore must not open (and migrate) the database it is about to replace
     if cmd == "db-restore" {
@@ -325,7 +353,7 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             };
             let limit = arg(args, "--limit").and_then(|s| s.parse().ok()).unwrap_or(50);
             let list = db::job_list(&db.lock().unwrap_or_else(|e| e.into_inner()), pid.as_deref(), None, limit)?;
-            out(&json!(list.iter().map(|j| json!({"id": j.id, "kind": j.kind, "label": j.label, "status": j.status, "step": j.step, "steps": j.steps.len(), "attempt": j.attempt, "progress": j.progress, "exitCode": j.exit_code, "error": j.error, "logPath": j.log_path})).collect::<Vec<_>>()));
+            out(&json!(list.iter().map(|j| json!({"id": j.id, "kind": j.kind, "label": j.label, "status": j.status, "step": j.step, "steps": j.steps.len(), "attempt": j.attempt, "pid": j.pid, "progress": j.progress, "exitCode": j.exit_code, "error": j.error, "logPath": j.log_path})).collect::<Vec<_>>()));
             Ok(0)
         }
         "job-retry" => {
@@ -361,8 +389,45 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                 _ => return Err("缺少 --config-file <設定.json>（或 --config <json>）".into()),
             };
             let cfg: crate::autopilot::AutoConfig = serde_json::from_str(&text).map_err(|e| format!("設定不是有效 JSON：{e}"))?;
-            let p = autopilot(db, q).start(&pid, cfg)?;
+            let p = autopilot(db, q).create(&pid, cfg, args.iter().any(|a| a == "--hold"))?;
             out(&json!({"ok": true, "id": p.id, "episode": p.episode, "status": p.status, "config": p.config}));
+            Ok(0)
+        }
+        // 製作狀態頁的資料（11 個步驟、進度、目前工作、日誌、錯誤、可用操作）；--id 只看一部
+        "auto-board" => {
+            let ap = autopilot(db, q);
+            let v = match arg(args, "--id") {
+                Some(id) => {
+                    // 先放開資料庫鎖再組狀態（board_item 自己會讀資料庫）
+                    let p = crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
+                    vec![ap.board_item(&p)]
+                }
+                None => ap.board(None, 50)?,
+            };
+            out(&json!(v));
+            Ok(0)
+        }
+        "auto-start-draft" | "auto-delete-task" | "auto-delete-files" => {
+            let id = arg(args, "--id").ok_or("缺少 --id")?;
+            let ap = autopilot(db, q);
+            let v = match cmd {
+                "auto-start-draft" => serde_json::to_value(ap.start_draft(&id)?).unwrap(),
+                "auto-delete-task" => ap.delete_task(&id)?,
+                _ => ap.delete_files(&id)?,
+            };
+            out(&json!({"ok": true, "result": v}));
+            Ok(0)
+        }
+        "auto-update-config" => {
+            let id = arg(args, "--id").ok_or("缺少 --id")?;
+            let text = match (arg(args, "--patch-file"), arg(args, "--patch")) {
+                (Some(f), _) => read_text_file(&f)?,
+                (None, Some(c)) => c,
+                _ => return Err("缺少 --patch-file <patch.json>".into()),
+            };
+            let patch: Value = serde_json::from_str(&text).map_err(|e| format!("patch 不是有效 JSON：{e}"))?;
+            let p = autopilot(db, q).update_config(&id, patch)?;
+            out(&json!({"ok": true, "status": p.status, "config": p.config}));
             Ok(0)
         }
         "auto-list" => {
@@ -642,7 +707,8 @@ fn auto_run(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
         let n_pending = db::jobs_pending(&db.lock().unwrap_or_else(|e| e.into_inner()))?.len(); // separate statements: one DB lock at a time
         let jobs_running = n_running + n_pending;
         let active = prods.iter().filter(|p| ["queued", "running"].contains(&p.status.as_str())).count() + jobs_running;
-        if active == 0 {
+        // --stay：像 Studio 視窗一樣持續執行（草稿、等待 Agent、暫停時也不結束），直到 --timeout
+        if active == 0 && !flag(args, "--stay") {
             break;
         }
         if t0.elapsed() > timeout {

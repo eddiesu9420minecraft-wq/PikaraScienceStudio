@@ -160,7 +160,7 @@ pub fn run(args: &[String]) -> i32 {
         if !probed.is_empty() && with_duration == 0 {
             return Err(format!("ffprobe returned no duration for any of {} mp4 files", probed.len()));
         }
-        let md = project::publish_metadata(&project_root);
+        let md = project::publish_metadata(&project_root, None);
         Ok(json!({"files": o.len(), "mp4": probed, "publishSections": md["sections"].as_array().map(|a| a.len())}))
     });
 

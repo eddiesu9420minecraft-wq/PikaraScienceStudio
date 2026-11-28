@@ -46,21 +46,28 @@ const QUALITY = ['high', 'standard', 'draft'].includes(opt('quality', 'standard'
 const JPEG_Q = isPreview ? 88 : QUALITY === 'high' ? 98 : QUALITY === 'draft' ? 88 : 95;
 // ---- 效能模式（預設 balanced）：只決定「起始值與上限」，實際並行數每段依實測 VRAM／GPU／CPU／RAM／fps 調整 ----
 //  eco         起始 1、上限 2；CPU ≤ 70%、溫度 ≤ 80°C、RAM 至少留 4 GB
-//  balanced    起始 2、上限 4；CPU ≤ 85%、溫度 ≤ 85°C、RAM 至少留 3 GB、VRAM ≤ 85% 總量
+//  balanced    起始 3、上限＝邏輯核心的一半；CPU ≤ 85%、溫度 ≤ 85°C、RAM 至少留 3 GB、VRAM ≤ 85% 總量
+//              （2026-11-28 實測 RTX 4050 筆電＋12 執行緒、EP16 同樣 3600 幀：並行 3＝25.2 fps、4＝30.5、6＝33.0，
+//               CPU 平均 19%／22%／32%；舊版上限 4、且只比一段就鎖定，實際常停在 3）
 //  performance 起始 3、上限 8；CPU ≤ 95%、溫度 ≤ 87°C、RAM 至少留 2 GB、VRAM ≤ 90% 總量
 // 這些是保守的起點，不是實測最佳值；每段結束都會記錄調整原因到報告（concurrencyLog）。
 const PERF = opt('perf', process.env.PIKARA_PERF || 'balanced');
 const PRESETS = {
   eco: {start: 1, max: 2, cpuMax: 70, tempMax: 80, ramMinMiB: 4096, vramFrac: 0.8},
-  balanced: {start: 2, max: 4, cpuMax: 85, tempMax: 85, ramMinMiB: 3072, vramFrac: 0.85},
+  balanced: {start: 3, max: 64, cpuMax: 85, tempMax: 85, ramMinMiB: 3072, vramFrac: 0.85},
   performance: {start: 3, max: 8, cpuMax: 95, tempMax: 87, ramMinMiB: 2048, vramFrac: 0.9},
 };
 const P = PRESETS[PERF] ?? PRESETS.balanced;
-const CHUNK = Number(opt('chunk', PERF === 'performance' ? 1800 : 900)); // 較小的段＝較多量測點
+// 900 幀的段比 1800 幀慢約 5%（每段都要重新啟動分頁）；eco 保留較小的段以便較快降載
+const CHUNK = Number(opt('chunk', PERF === 'eco' ? 900 : 1800));
 const VRAM_CAP_OPT = opt('vram-cap', process.env.PIKARA_VRAM_CAP || null); // Studio: GPU 資源使用上限
 let VRAM_CAP = Number(VRAM_CAP_OPT ?? 5300);
+// 自動調整的上限：模式上限與邏輯核心的一半取小。--concurrency 明確指定時只受「邏輯核心數」這個安全上限限制
+// （舊版會被模式上限悄悄改成 4，報告卻寫「固定」）
+const HARD_MAX = Math.max(1, os.cpus().length);
 // Studio's power-mode budget (PIKARA_RENDER_MAX_CONC, from hardware::profile) can only lower the ceiling
-const MAX_CONC = Math.min(P.max, Math.max(1, Math.floor(os.cpus().length / 2)), Number(process.env.PIKARA_RENDER_MAX_CONC) > 0 ? Number(process.env.PIKARA_RENDER_MAX_CONC) : Infinity);
+const ENV_CAP = Number(process.env.PIKARA_RENDER_MAX_CONC) > 0 ? Number(process.env.PIKARA_RENDER_MAX_CONC) : Infinity;
+const MAX_CONC = Math.min(P.max, Math.max(1, Math.floor(os.cpus().length / 2)), ENV_CAP);
 
 const smi = () => {
   const r = run('nvidia-smi', ['--query-gpu=memory.used,memory.total,temperature.gpu,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.sw_thermal_slowdown', '--format=csv,noheader,nounits']);
@@ -295,12 +302,15 @@ const base = smi(); // 非 NVIDIA 時為 null：沒有 VRAM 遙測，只用 CPU�
 const baselineVram = base?.used ?? 2000;
 if (base?.total && !VRAM_CAP_OPT) VRAM_CAP = Math.round(base.total * P.vramFrac);
 const envStart = Number(process.env.PIKARA_RENDER_START_CONC || 0);
-let concurrency = Math.min(MAX_CONC, Number(opt('concurrency', 0)) || Number(opt('start-concurrency', 0)) || envStart || P.start);
 const fixedConc = !!opt('concurrency', null);
+let concurrency = fixedConc
+  ? Math.min(HARD_MAX, Math.max(1, Number(opt('concurrency', 1)) || 1))
+  : Math.min(MAX_CONC, Number(opt('start-concurrency', 0)) || envStart || P.start);
 let perTab = 350; // MiB，第一段後以實測更新
 const concLog = [];
 let bestFps = null; // {conc, fps}：升級後若吞吐量沒有變好就退回並鎖定
 let lockedMax = MAX_CONC;
+const noGain = {}; // 並行數 → 沒有變快的次數：段與段的內容不同，單一段的 fps 有 ±5% 的雜訊，兩次都沒變快才鎖定
 console.log(`效能模式 ${PERF}：起始並行 ${concurrency}、上限 ${MAX_CONC}${fixedConc ? '（--concurrency 固定）' : ''}；VRAM 上限 ${VRAM_CAP} MiB${base ? '' : '（無 VRAM 遙測）'}、CPU ≤ ${P.cpuMax}%、RAM 至少留 ${P.ramMinMiB} MiB`);
 const chunks = [];
 for (let a = rangeA; a <= rangeB; a += CHUNK) chunks.push([a, Math.min(rangeB, a + CHUNK - 1)]);
@@ -383,9 +393,10 @@ for (const [a, z] of chunks) {
     if (why.length) next = concurrency - 1;
     else {
       // 吞吐量檢查：比上一個並行數慢（< 5% 改善）就退回並不再往上試
-      if (bestFps && concurrency > bestFps.conc && fps < bestFps.fps * 1.05) {
-        why.push(`並行 ${concurrency} 的 ${fps.toFixed(1)} fps 沒有比並行 ${bestFps.conc} 的 ${bestFps.fps.toFixed(1)} fps 快 5% 以上`);
-        lockedMax = bestFps.conc;
+      if (bestFps && concurrency > bestFps.conc && fps < bestFps.fps * 1.03) {
+        noGain[concurrency] = (noGain[concurrency] || 0) + 1;
+        why.push(`並行 ${concurrency} 的 ${fps.toFixed(1)} fps 沒有比並行 ${bestFps.conc} 的 ${bestFps.fps.toFixed(1)} fps 快 3% 以上（第 ${noGain[concurrency]} 次）`);
+        if (noGain[concurrency] >= 2) lockedMax = bestFps.conc;
         next = bestFps.conc;
       } else {
         const vramRoom = !gs.length || peak + perTab <= VRAM_CAP;
@@ -431,7 +442,9 @@ const encodeWith = (id) => {
         '-frames:v', String(rangeB - rangeA + 1),
         '-vf', `scale=in_range=pc:out_range=tv:out_color_matrix=bt709,${e.filter}`,
         ...e.args, '-color_range', 'tv', '-r', String(FPS_OUT), '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
-        ...(audioArgs.length ? [...(SPEED !== 1 ? ['-af', `atempo=${SPEED}`] : []), '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest'] : []),
+        // apad：音訊補靜音到影片結束 → -shortest 一定停在最後一幀。1.5× 版的 atempo 讓音訊比影片短不到一幀，
+        // 舊版 -shortest 因此少編最後一幀，驗證判定「輸出只有 N-1 幀」，每個編碼器都失敗（EP16-YT15 實測）
+        ...(audioArgs.length ? ['-af', [...(SPEED !== 1 ? [`atempo=${SPEED}`] : []), 'apad'].join(','), '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest'] : []),
         '-movflags', '+faststart', outFile,
       ], {cwd: ROOT});
     } catch (err) {

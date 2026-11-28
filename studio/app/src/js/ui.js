@@ -2,6 +2,7 @@
 import { t } from './i18n.js';
 import { NotReady, errText, call } from './api.js';
 import { icon } from './icons.js';
+import { store } from './store.js';
 
 // h('div.cls#id', {attrs}, ...children)
 export function h(sel, attrs, ...kids) {
@@ -141,10 +142,25 @@ export function needProject() {
 // ---------- toast ----------
 export function toast(text, kind = 'info', actions = []) {
   const host = document.getElementById('toasts');
+  const ms = kind === 'fail' ? 8000 : 5000;
+  // the same message already on screen (repeated clicks, a polling refresh): keep one toast, count repeats, restart its timer
+  const key = `${kind}\u0000${text}`;
+  const same = [...host.children].find((x) => x.__toastKey === key);
+  if (same) {
+    same.__repeat = (same.__repeat || 1) + 1;
+    const n = same.querySelector('.toast-count');
+    if (n) n.textContent = `×${same.__repeat}`;
+    clearTimeout(same.__timer);
+    same.__timer = setTimeout(() => same.remove(), ms);
+    return same;
+  }
   const el = h('div.toast', { role: kind === 'fail' ? 'alert' : 'status' }, dot(kind === 'info' ? 'running' : kind), h('div.grow', text),
+    h('span.toast-count.caption.muted.num'),
     actions.length ? h('div.row.gap2', actions.map((a) => btn(a.label, { small: true, kind: 'plain', onClick: () => { a.onClick(); el.remove(); } }))) : null);
+  el.__toastKey = key;
   host.appendChild(el);
-  setTimeout(() => el.remove(), kind === 'fail' ? 8000 : 5000);
+  el.__timer = setTimeout(() => el.remove(), ms);
+  return el;
 }
 export function toastError(e, prefix) {
   if (e instanceof NotReady) return toast(`${prefix ? prefix + '：' : ''}${t('後端尚未就緒')}（${e.cmd}）`, 'warn');
@@ -210,8 +226,10 @@ export function copyBtn(getText, label) {
 }
 
 // ---------- open path via backend ----------
-export async function openPath(path, cmd = 'open_path') {
-  try { await call(cmd, { path }); } catch (e) { toastError(e, t('開啟資料夾')); }
+// open_path checks the path is inside the project, so it needs the project id (it used to be omitted here, and
+// every button using openPath failed with a missing-argument error).
+export async function openPath(path, { projectId = store.projectId, reveal = false } = {}) {
+  try { await call('open_path', { projectId, path, reveal }); } catch (e) { toastError(e, t('開啟資料夾')); }
 }
 
 // ---------- formatters ----------
