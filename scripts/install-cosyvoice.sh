@@ -38,7 +38,13 @@ CONDA_EXTRA=()
 [ "$(uname)" = Darwin ] && CONDA_EXTRA=("scipy=1.15.*" "libblas=*=*accelerate")
 
 if [ ! -d "$COSY/.git" ]; then
-  git clone --quiet https://github.com/FunAudioLLM/CosyVoice.git "$COSY"
+  if [ -d "$COSY" ] && [ -n "$(ls -A "$COSY")" ]; then
+    # folder already holds files (e.g. pretrained_models restored from a cache): put the repository around them
+    git -C "$COSY" init --quiet
+    git -C "$COSY" remote add origin https://github.com/FunAudioLLM/CosyVoice.git
+  else
+    git clone --quiet https://github.com/FunAudioLLM/CosyVoice.git "$COSY"
+  fi
 fi
 git -C "$COSY" fetch --quiet origin "$COMMIT" 2>/dev/null || git -C "$COSY" fetch --quiet origin
 git -C "$COSY" checkout --quiet "$COMMIT"
