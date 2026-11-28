@@ -165,7 +165,7 @@ jobs:
           if [ "$RUNNER_OS" = macOS ]; then APP=$(ls -d $T/bundle/macos/*.app | head -1); EXE="$APP/Contents/MacOS/PikaraScienceStudio"; else EXE=$T/PikaraScienceStudio.exe; fi
           node studio/app/scripts/check-ui.mjs --exe "$EXE"
           "$EXE" --json version | tee "$RUNNER_TEMP/gui-version.json"
-          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/gui-version.json'));assert d['gui'] is True, d"
+          python3 -c "import json,sys;d=json.load(open(sys.argv[1]));assert d['gui'] is True, d" "$RUNNER_TEMP/gui-version.json"
           D="$RUNNER_TEMP/gui-data"
           "$EXE" nogui --data "$D" --json list
           "$EXE" --data "$D" --json config path
