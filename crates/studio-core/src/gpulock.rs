@@ -191,8 +191,14 @@ mod tests {
         let keys = ["10de:28e1#0", "1002:1901#0", "cpu-heavy"];
         assert!(keys.iter().all(|k| !is_free(&adapter_lock_path(k))), "all three leases held");
         drop((j1, j2, c1));
-        // cpu-heavy is shared with concurrently running queue tests: check the two adapter leases
-        assert!(keys[..2].iter().all(|k| is_free(&adapter_lock_path(k))), "adapter leases released");
+        // cpu-heavy is shared with concurrently running queue tests: check the two adapter leases. Concurrent tests
+        // spawn children; between fork and exec a child holds copies of our descriptors (close-on-exec applies only
+        // at exec) and flock follows the shared open file, so the release may lag briefly (seen on a Linux runner)
+        let t0 = std::time::Instant::now();
+        while !keys[..2].iter().all(|k| is_free(&adapter_lock_path(k))) {
+            assert!(t0.elapsed() < std::time::Duration::from_secs(5), "adapter leases released");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         let _ = std::fs::remove_dir_all(lock_path().parent().unwrap());
     }
 }
