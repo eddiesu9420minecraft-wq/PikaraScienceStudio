@@ -377,7 +377,16 @@ mod tests {
         let a = open_exclusive(&p).expect("first open");
         assert!(open_exclusive(&p).is_err(), "second open must fail while the first is held");
         drop(a);
-        assert!(open_exclusive(&p).is_ok(), "lock released on drop");
+        // Other tests in this process spawn children concurrently: between fork and exec a child briefly holds a
+        // copy of every descriptor (close-on-exec applies only at exec), and flock locks belong to the shared open
+        // file, so the release can lag by a moment (seen once on a macOS x64 runner). Studio's children always exec.
+        let t0 = std::time::Instant::now();
+        let mut ok = open_exclusive(&p).is_ok();
+        while !ok && t0.elapsed() < std::time::Duration::from_secs(3) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            ok = open_exclusive(&p).is_ok();
+        }
+        assert!(ok, "lock released on drop");
         let _ = std::fs::remove_dir_all(dir);
     }
 

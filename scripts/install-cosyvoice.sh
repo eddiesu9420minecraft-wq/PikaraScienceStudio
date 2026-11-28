@@ -31,20 +31,29 @@ git -C "$COSY" submodule update --init --recursive --quiet
 
 [ -x "$COSY/.venv/bin/python" ] || "$PY" -m venv "$COSY/.venv"
 V="$COSY/.venv/bin/python"
-"$V" -m pip install --quiet -U pip wheel setuptools
+"$V" -m pip install --quiet -U pip wheel
+# openai-whisper 20231117 and pyworld 0.3.4 (CosyVoice pins) build from source and need pkg_resources / numpy at
+# build time; setuptools >= 70 dropped pkg_resources from the build backend's reach → build them without isolation
+"$V" -m pip install --quiet "setuptools<70" numpy==1.26.4 cython
 if [ "$(uname)" = Darwin ]; then
   "$V" -m pip install --quiet "torch==$TORCH" "torchaudio==$TORCH"
 else
   "$V" -m pip install --quiet "torch==$TORCH" "torchaudio==$TORCH" --index-url "https://download.pytorch.org/whl/$DEV"
 fi
+# (after torch, so they never pull a different torch) — their own runtime deps are listed explicitly
+"$V" -m pip install --quiet --no-build-isolation --no-deps openai-whisper==20231117 pyworld==0.3.4
+"$V" -m pip install --quiet tiktoken numba more-itertools tqdm
 # CosyVoice's list minus: CUDA-only (deepspeed, TensorRT, onnxruntime-gpu), the web UI / server (gradio, fastapi,
 # uvicorn, grpcio), training (tensorboard) and the torch pins handled above
 REQ=$(mktemp)
 grep -vE '^(--extra-index-url|deepspeed|tensorrt|onnxruntime|gradio|fastapi|uvicorn|grpcio|tensorboard|torch==|torchaudio==)' "$COSY/requirements.txt" > "$REQ"
 ORT=onnxruntime==1.18.0
 [ "$DEV" != cpu ] && [ "$(uname)" = Linux ] && ORT=onnxruntime-gpu==1.18.0
-"$V" -m pip install --quiet -r "$REQ" "$ORT" faster-whisper==1.2.1 opencc-python-reimplemented==0.1.7 "huggingface_hub>=0.30"
-rm -f "$REQ"
+# constraints: nothing may replace the torch build chosen above (a newer PyPI torch would be CUDA-only and huge)
+CON=$(mktemp)
+{ echo "torch==$TORCH"; echo "torchaudio==$TORCH"; echo "numpy==1.26.4"; } > "$CON"
+"$V" -m pip install --quiet -c "$CON" -r "$REQ" "$ORT" faster-whisper==1.2.1 opencc-python-reimplemented==0.1.7 "huggingface_hub>=0.30"
+rm -f "$REQ" "$CON"
 
 M="$COSY/pretrained_models/Fun-CosyVoice3-0.5B"
 if [ ! -f "$M/llm.pt" ]; then

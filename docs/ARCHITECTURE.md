@@ -1,20 +1,39 @@
 # 架構（跨平台）
 
+一套引擎，三個入口。GUI 與 CLI 共用影片製作引擎、任務佇列、設定、資料庫與驗證機制；Linux 只編譯 CLI。
+
 ```
-studio/app/src            前端（純 ES module，WebView2／WKWebView／WebKitGTK）
-studio/app/src-tauri/src
-  platform/               ← 所有作業系統差異都在這裡
-    mod.rs                路徑（資料／快取）、exe 名稱、venv、which、PATH、獨佔鎖、防睡眠、檔案管理員、容器偵測
-    process.rs            ProcessManagerBackend：程序樹 kill／pause／resume、子程序設定
-  hardware/               HardwareDetectionBackend
-    native.rs             Windows：DXGI／D3D12／CUDA driver API
-    apple.rs              macOS：sysctl + system_profiler
-    manager.rs            依平台建立 Snapshot（快取、重新偵測）
+crates/                       Cargo workspace（引擎＋指令列；不含任何 GUI 套件）
+  studio-platform/            ← 所有作業系統差異都在這裡（不依賴其他 Studio 程式碼）
+    lib.rs                    路徑（資料／快取）、exe 名稱、venv、which、PATH、獨佔鎖、防睡眠、檔案管理員、容器偵測
+    process.rs                程序樹 kill／pause／resume、子程序設定
+  studio-core/                引擎：db、queue、autopilot、pipeline、jobs、hardware、doctor、content 驗證 …
+                              （由 studio/app/src-tauri 原封不動搬來；`studio_core::platform` = studio-platform）
+  studio-cli/                 指令列：PikaraScienceStudio <指令>（docs/CLI.md）；legacy.rs = 舊的 --cli 指令
+                              bin `pikara-studio`：Linux 發布檔就是它（打包時改名 PikaraScienceStudio）
+studio/app/src-tauri          studio-gui：Tauri 視窗與命令。`pub use studio_core::*`，只多了視窗程式碼；
+                              main.rs：有指令參數或 nogui → studio_cli::run，否則開視窗
+studio/app/src                前端（WebView2／WKWebView；Linux 不使用）
+pipeline/                     專案範本與製作腳本（scripts/）
+scripts/                      打包（package-linux.sh、package-macos.sh）、CosyVoice 安裝、無頭 E2E
+```
+
+依賴方向：`studio-gui → studio-cli → studio-core → studio-platform`。`cargo build -p studio-cli` 不會編譯 Tauri、WebKitGTK、GTK、X11、Wayland；CI 用 `cargo tree` 與 `ldd` 檢查（Linux 執行檔只連結 libc／libm／libgcc_s）。
+
+與建議結構（`crates/{studio-core,studio-cli,studio-platform,studio-gui},scripts,frontend,tests`）的差異：GUI crate 與前端保留在 `studio/app/`，因為 Tauri 建置、`check-ui.mjs` 的前端指紋、Windows 發布流程與 CYW 的 Windows 安裝都依賴這個位置；搬動不會減少程式碼，只會增加 Windows 版退化的風險。測試放在各 crate（單元測試）與 `crates/studio-cli/tests`（實際執行 CLI 的整合測試）。
+
+```
+studio-core/src
+  hardware/                   HardwareDetectionBackend
+    native.rs                 Windows：DXGI／D3D12／CUDA driver API
+    apple.rs                  macOS：sysctl + system_profiler
+    linux.rs                  Linux：/sys/class/drm + nvidia-smi + ROCm 存在檢查（無桌面也可）
+    manager.rs                依平台建立 Snapshot（快取、重新偵測）
     selector.rs           UI／渲染／AI／編碼裝置分配（CUDA、Apple GPU、CPU）
     encoders.rs           VideoEncoderBackend 的 Rust 端（實測試編碼）
     profile.rs            MachineProfile + 功率模式預算（省電／平衡／高效能／自訂）
   queue.rs                佇列、排程、心跳、停滯監控、取消／暫停／繼續
-  db.rs                   SQLite（WAL、版本、online backup、遷移鎖）
+  db.rs                   SQLite（WAL、版本、online backup、遷移鎖；rusqlite 0.43，內建 SQLite 已修補 RUSTSEC-2026-0459）
 pipeline/scripts          製作腳本（各自是子程序）
   render.mjs + hwenc.mjs  RenderBackend（Remotion/Chromium）＋ VideoEncoderBackend（hw_encoders.json）
   generate_voiceover_cosy.py  VoiceBackend（CosyVoice 3）＋ SpeechRecognitionBackend（Whisper）

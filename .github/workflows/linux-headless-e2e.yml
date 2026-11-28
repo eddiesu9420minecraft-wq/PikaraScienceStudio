@@ -22,9 +22,9 @@ jobs:
     name: CLI-only production (ubuntu-24.04, no display, CPU)
     runs-on: ubuntu-24.04
     timeout-minutes: 240
-    env:
-      W: ${{ github.workspace }}/../e2e
     steps:
+      - name: Work folder (outside the checkout)
+        run: echo "W=$RUNNER_TEMP/e2e" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
