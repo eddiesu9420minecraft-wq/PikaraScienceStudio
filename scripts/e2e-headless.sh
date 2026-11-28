@@ -94,8 +94,7 @@ kept = None
 before = (log / "voice-before-interrupt.txt")
 if intr and before.exists():
     ts = int((log / "interrupt-ts.txt").read_text().strip())
-    files = [pathlib.Path(x) for x in before.read_text().split("
-") if x.strip()]
+    files = [pathlib.Path(x) for x in before.read_text().splitlines() if x.strip()]
     # a line finished before the interruption must not have been voiced again after the restart
     redone = [str(f) for f in files if f.exists() and f.stat().st_mtime > ts + 1]
     kept = {"finishedBeforeInterrupt": len(files), "revoicedAfterRestart": len(redone)}

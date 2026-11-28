@@ -15,7 +15,7 @@
 | 11 | Windows | `GetCurrentPackageFullName` 偵測不到「由封裝程式啟動的子程序」仍被虛擬化 AppData 的情況 | 測試若用預設資料夾可能寫到容器 | 測試一律用 `PIKARA_STUDIO_DATA`（TESTING.md §2） |
 | 12 | 發佈 | ~~Tauri 的 `.app.tar.gz` 檔名不含架構~~ | 已處理 | `scripts/package-macos.sh` 產生 `Pikara.Science.Studio_<ver>_<aarch64\|x64>.app.tar.gz`／`.dmg`（CI 實際產出驗證）；名稱已交給 CYW |
 | 13 | 全部 | Studio 沒有自我更新（P9 未實作） | — | ROADMAP |
-| 14 | Linux | 完整流程只在 GitHub VM（x86_64、無 GPU、CPU 配音）跑過，沒有實體 Linux 主機 | NVIDIA／AMD／Intel GPU 上的配音、渲染、VA-API 都未實測 | 需要實體 Linux 主機或使用者同意使用本機 WSL2 |
+| 14 | Linux | The full production ran end to end on a GitHub VM (x86_64, no GPU, CPU voice; see COMPATIBILITY §4), but not on a physical Linux machine | Voice, rendering and VA-API on NVIDIA / AMD / Intel GPUs haven't been tested | Needs a physical Linux machine, or the user's OK to use the local WSL2 |
 | 15 | Linux | VA-API 試編碼原本固定用 `/dev/dri/renderD128` | 多 GPU 主機會開錯 GPU，實測失敗並退回 libx264 | 已改：Studio 傳 `PIKARA_VAAPI_DEVICE`（渲染 GPU 或第一個 Intel／AMD 的 render node），hwenc.mjs 使用它；**未在真機驗證** |
 | 16 | Linux | 混合顯卡筆電無法指定 Chromium 用哪張 GPU 渲染（Windows 有 LUID） | 由驅動決定；gpu-check 實測決定是否用 GPU | PRIME offload 環境變數待真機驗證 |
 | 17 | Linux | AMD ROCm：只偵測是否存在，CosyVoice／Whisper 一律用 CPU | 有 AMD 獨顯也不加速配音 | 真機 ROCm A/B 後才開放 |

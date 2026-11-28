@@ -54,7 +54,29 @@
 
 `.github/workflows/linux-headless-e2e.yml` runs on GitHub `ubuntu-24.04`: 4 vCPU, no GPU, no display, CPU voice. The test voice is CosyVoice's own Apache-2.0 sample prompt, not the narrator.
 
-Results: (filled in once the CI run finishes)
+**Result: complete video produced** (run 46119361218, commit 2753764, 2026-11-28). The CLI was the only interface; no window, DISPLAY, X11 or Wayland was involved.
+
+| Stage | Result (CI VM) |
+|---|---|
+| Project | `project new` from the template, `npm ci` |
+| Script | Custom script imported verbatim (2 chapters, 5 lines). The "external agent" step went through `agent task` / `agent done` |
+| Voice | CosyVoice 3, CPU fp32 (no CUDA, so it fell back automatically). 5 lines; the worker was **interrupted with SIGINT at line 2/5** (exit 130). After restart it reported "5 lines in total, 3 to generate": **the 2 finished lines were not voiced again** |
+| Recognition check | faster-whisper large-v3-turbo, CPU int8, aligned all 5 lines. Pronunciation check passed |
+| Subtitles / timeline | 9 subtitle segments, total 28.10 s |
+| Mix | −16.1 LUFS, peak −1.5 dBFS; narration vs. background music 21.1 dB apart |
+| Render | Headless Chromium + SwiftShader (no GPU, correctly decided by Studio). 1,686 frames, libx264 |
+| QA | Automatic QA found 0 issues |
+| Output | `EP02_Final.mp4`: 1920×1080, 30 fps, H.264 + AAC, 28.1 s; `EP02.srt`. Sampled frames show correct titles, chapters and Traditional Chinese subtitles |
+| Time | About 7 minutes in total (voice 4.6 min including the interruption; render + QA 1.7 min) |
+| Memory | Peak total RSS (all processes) 7.7 GiB |
+
+Problems this test found and fixed (all of them affect real servers too):
+1. A boot framebuffer (`simple-framebuffer`) was treated as a GPU, so the render step tried the GPU path and failed.
+2. On a server without a desktop session, keep-awake was denied and retried endlessly, filling stderr.
+3. On CPU rendering, the first frame could exceed Remotion's 30 s per-frame limit (seen on the Intel Mac VM); CPU rendering now allows 180 s.
+4. `doctor` ran Windows checks on Linux and macOS.
+
+Limits: this is a VM result. Voice quality is only checked by the recognition error rate (with a test voice, no listening test), and no GPU path (CUDA, NVENC, VA-API, ROCm) was exercised.
 
 ## 5. Not supported / not done
 
