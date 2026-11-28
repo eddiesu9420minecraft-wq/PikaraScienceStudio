@@ -58,7 +58,31 @@ pub fn instructions(id: &str) -> Option<&'static str> {
 
 static RE_VER: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?").unwrap());
 
+/// macOS / Linux: name and version (`sw_vers` / `/etc/os-release`), arch. No minimum is enforced on Linux: the CLI
+/// binary needs only glibc; macOS needs 12+ (tauri.macos.conf.json).
+fn check_os_unix() -> Check {
+    let arch = crate::platform::ARCH;
+    if cfg!(target_os = "macos") {
+        let v = run("sw_vers", &["-productVersion"], None, T).ok().map(|o| o.stdout.trim().to_string()).filter(|s| !s.is_empty());
+        let major: u32 = v.as_deref().and_then(|s| s.split('.').next()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let st = if major == 0 || major >= 12 { "ok" } else { "error" };
+        let d = match &v {
+            Some(v) if st == "ok" => format!("macOS {v}（{arch}）"),
+            Some(v) => format!("macOS {v}：需要 macOS 12 以上"),
+            None => format!("macOS（{arch}，無法讀取版本）"),
+        };
+        return c("os.version", "作業系統版本", st, d, v, None);
+    }
+    let rel = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
+    let name = rel.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")).map(|s| s.trim_matches('"').to_string()).unwrap_or_else(|| "Linux".into());
+    let kernel = run("uname", &["-r"], None, T).ok().map(|o| o.stdout.trim().to_string()).unwrap_or_default();
+    c("os.version", "作業系統版本", "ok", format!("{name}（kernel {kernel}，{arch}）"), Some(name), None)
+}
+
 fn check_os() -> Check {
+    if !cfg!(windows) {
+        return check_os_unix();
+    }
     match run("cmd", &["/d", "/c", "ver"], None, T) {
         Ok(o) => match RE_VER.captures(&o.stdout) {
             Some(m) => {
@@ -88,6 +112,10 @@ fn reg_value(key: &str, name: &str) -> Option<String> {
 }
 
 fn check_longpaths(root: Option<&Path>) -> Check {
+    if !cfg!(windows) {
+        // MAX_PATH (260) is a Windows limit; macOS / Linux paths allow 1024 / 4096 bytes
+        return c("os.longpaths", "長路徑支援", "ok", "不適用（只有 Windows 有 260 字元限制）", None, None);
+    }
     let v = reg_value(r"HKLM\SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled");
     let on = v.as_deref().map(|x| x == "0x1").unwrap_or(false);
     if on {
@@ -103,6 +131,12 @@ fn check_longpaths(root: Option<&Path>) -> Check {
 }
 
 fn check_webview2() -> Check {
+    if cfg!(target_os = "macos") {
+        return c("webview2", "介面瀏覽器元件", "ok", "WKWebView（macOS 內建）", None, None);
+    }
+    if !cfg!(windows) {
+        return c("webview2", "介面瀏覽器元件", "ok", "不需要（Linux 只有指令列，沒有 WebView）", None, None);
+    }
     const G: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
     let keys = [
         format!(r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{G}"),

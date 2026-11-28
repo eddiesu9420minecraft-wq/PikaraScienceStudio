@@ -116,7 +116,12 @@ pub fn gpus(cards: &[DrmCard], smi: &[(CudaDevice, String, String)], rocm: bool)
     for (i, c) in cards.iter().enumerate() {
         let nv = smi.iter().find(|(_, _, bus)| !c.pci.is_empty() && bus.eq_ignore_ascii_case(&c.pci));
         let vendor = vendor_name(c.vendor_id);
-        let (kind, kind_source) = if virtual_vendor(c.vendor_id) || c.driver == "virtio-pci" || c.driver == "virtio_gpu" || c.driver == "vmwgfx" || c.driver == "bochs-drm" {
+        // boot / firmware framebuffers (simpledrm, efifb, vesafb) are DRM cards without any GPU behind them
+        // (seen on GitHub's Ubuntu VM: card0 "simple-framebuffer", vendor 0000)
+        let framebuffer = c.vendor_id == 0 || ["simple-framebuffer", "simpledrm", "efi-framebuffer", "efifb", "vesa-framebuffer", "vesafb"].contains(&c.driver.as_str());
+        let (kind, kind_source) = if framebuffer {
+            (Kind::Software, format!("開機畫面緩衝區（{}），不是 GPU", if c.driver.is_empty() { "無驅動" } else { &c.driver }))
+        } else if virtual_vendor(c.vendor_id) || c.driver == "virtio-pci" || c.driver == "virtio_gpu" || c.driver == "vmwgfx" || c.driver == "bochs-drm" {
             (Kind::Software, format!("虛擬顯示卡（{}）", if c.driver.is_empty() { "無驅動" } else { &c.driver }))
         } else {
             match c.vendor_id {
@@ -262,6 +267,10 @@ mod tests {
         assert_eq!(g[0].kind, Kind::Software);
         assert!(!g[0].available);
         assert!(!g[1].available, "nouveau: no CUDA / NVENC");
+        // GitHub ubuntu-24.04 runner: card0 = simple-framebuffer, vendor 0000
+        let fb = gpus(&[DrmCard { card: "card0".into(), driver: "simple-framebuffer".into(), connected_outputs: 1, ..Default::default() }], &[], false);
+        assert_eq!(fb[0].kind, Kind::Software);
+        assert!(!fb[0].available, "a boot framebuffer is not a GPU");
     }
 
     #[test]
