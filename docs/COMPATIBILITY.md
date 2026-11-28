@@ -15,7 +15,7 @@
 | Target | Build | Unit + CLI integration tests | GUI | Packaging | Full production (script → MP4) |
 |---|---|---|---|---|---|
 | Windows x64 | Real hardware + CI | Real hardware (137 + 4) + CI | Real hardware (build, `check-ui --exe`, CLI mode); this branch hasn't run a full GUI production | NSIS + portable exe (unchanged) | Earlier releases were tested on real hardware; **not re-run on this branch** |
-| macOS ARM64 | **Real hardware (M2)** + CI | **Real hardware: all 145 pass** (case-sensitive APFS) + CI | CI: `.app`, frontend fingerprint, CLI mode. The window hasn't been opened on the real machine | CI: `.dmg`, `.app.tar.gz` (**not signed, not notarized**) | **Not done** (CosyVoice model download needs approval) |
+| macOS ARM64 | **Real hardware (M2)** + CI | **Real hardware: all 145 pass** (case-sensitive APFS) + CI | CI: `.app`, frontend fingerprint, CLI mode. The window hasn't been opened on the real machine | CI: `.dmg`, `.app.tar.gz` (**not signed, not notarized**) | **Real hardware: passed (CLI, CPU voice, Metal render)** |
 | macOS x64 | CI | CI | CI (same as above) | CI (same as above) | **Not done** |
 | Linux x86_64 | CI | CI | Not offered (CLI by design) | CI: `.tar.gz` (unpacking and creating a project tested) | CI: see §4 |
 | Linux ARM64 | CI (`ubuntu-24.04-arm`) | CI | Not offered | CI: `.tar.gz` | **Not done** (media probes only) |
@@ -94,12 +94,14 @@ macOS 27.0.1, M2 (4P + 4E, 10-core GPU, Metal 4), 16 GB. User-level install only
 | WebGL / Three.js | Chromium ANGLE → **Metal** (`ANGLE Metal Renderer: Apple M2`), hardware acceleration |
 | Rendering (1080p30) | 90 frames 10.1 fps; 300 frames **14.2 fps** (2–3 tabs, half the user's memory in use); VideoToolbox encodes 300 frames in 2 s |
 | PyTorch / MLX | CPU 496 GFLOPS; **MPS 864 GFLOPS** (works on real hardware, unlike the CI VM); **MLX 1308 GFLOPS** |
-| CosyVoice / Whisper / full production | **Not done**: about 6 GB of models to download, waiting for the user's approval |
+| Full production (CLI only, eco mode, while the user was using the Mac) | **Passed**: script → external agent → **CosyVoice 3 (CPU fp32, 4 threads)** → Whisper alignment → subtitles → mix → **render on Metal + VideoToolbox** (843 frames) → QA 0 issues → MP4 1920×1080 30 fps H.264, 28.1 s. **Interrupted during voice and resumed**: after the restart it generated only 3 of 5 lines. 472 s total (voice 6 min), peak 6.4 GiB |
 
 Problems this test found and fixed:
 1. `gpu-check` could misjudge "no GPU". `remotion still` doesn't forward the console, and a hand-launched browser crashes on the Mac. Now the probe page POSTs its result to a one-shot listener on 127.0.0.1, which read the Metal renderer correctly on the real machine.
 2. render.mjs read macOS's "completely free pages" (66 MiB) and would always have limited rendering concurrency. It now uses vm_stat's available memory (2.4 GiB on the real machine).
-3. A limit found but not fixed: started from inside a live SSH session, Chromium's GPU process fails to start; detached with `nohup … &` it worked 6 out of 6 times. On a Mac, use the window or a detached `run` (KNOWN_ISSUES #21).
+3. CosyVoice on macOS 27: pip's scipy wheel can't be loaded by dyld (`__thread_bss`), so it now comes from conda-forge. That brought in conda's OpenBLAS/OpenMP, which together with the pip torch's own libomp crashed the model load (SIGSEGV, exit 139). The CosyVoice environment now uses conda-forge's Accelerate BLAS (libblas=*accelerate), and only one OpenMP runtime is loaded.
+4. A path with a space ("agars data", and on macOS "Application Support") breaks C-extension builds (pyworld), so pyworld now comes prebuilt from conda-forge.
+5. A limit found but not fixed: started from inside a live SSH session, Chromium's GPU process fails to start; detached with `nohup … &` it worked 6 out of 6 times. On a Mac, use the window or a detached `run` (KNOWN_ISSUES #21).
 
 ## 5. Not supported / not done
 

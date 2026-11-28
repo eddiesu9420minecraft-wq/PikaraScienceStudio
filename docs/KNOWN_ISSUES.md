@@ -2,7 +2,7 @@
 
 | # | 平台 | 問題 | 影響 | 處理 |
 |---|---|---|---|---|
-| 1 | macOS | Mac mini M2 真機（2026-11-28）：145 項測試、VideoToolbox、Metal WebGL、1080p 渲染已實測；**完整製作流程（含 CosyVoice 配音）尚未在真機跑** | 配音速度與品質未驗證 | 下載 CosyVoice 模型（約 6 GB）需使用者同意 |
+| 1 | macOS | Mac mini M2 真機（2026-11-28）：完整 CLI 製作已通過（CPU 配音、Metal 渲染、VideoToolbox、中斷續作）；**配音只用測試參考聲音，沒有人耳試聽**；MPS／MLX 配音未啟用 | 正式旁白音質與速度未驗證 | 用使用者自己的 reference.wav 做 A/B（MACOS.md §3） |
 | 2 | macOS | CosyVoice 3 在 macOS 沒有 CUDA；MPS 是否完整可用未知；`ttsfrd` 沒有 macOS wheel | 速度、數字／單位念法可能與 Windows 不同 | MACOS.md §3 A/B 測試；發音字典 + CER 檢查 |
 | 3 | macOS | faster-whisper（CTranslate2）只有 CPU | ASR 慢 | 評估 mlx-whisper／whisper.cpp |
 | 4 | macOS | splash 視窗 `transparent: true` 在未開 `macOSPrivateApi` 時不透明 | 外觀（有底色），功能不受影響 | 共用 pikara-splash，需與 CYW 協調是否開啟 |
@@ -25,3 +25,5 @@
 | 21 | macOS | Chromium（Remotion）在「仍連線中的 SSH 工作階段」裡啟動時，GPU 程序起不來（icudtl.dat not found → Target closed）；同一指令以 `nohup … &` 脫離後 6／6 成功 | 從 SSH 前景執行渲染會失敗 | 在 Mac 上用視窗版，或 `nohup PikaraScienceStudio run --stay &`／tmux 後中斷 SSH 連線；docs/MACOS.md |
 | 22 | macOS | ~~render.mjs 用 os.freemem()，macOS 只算完全空閒的頁面（M2 實測 66 MiB，實際可用 4 GiB），會讓記憶體保護無故降低並行~~ | 已修正 | vm_stat：free + file-backed + purgeable（與 Remotion 相同規則）；真機實測讀到 2.4 GiB |
 | 23 | 全部 | ~~gpu-check 讀不到 WebGL renderer 時誤判「GPU 不可用」~~（Remotion still 不轉送 console；手動啟動瀏覽器在 Mac 會當掉） | 已修正 | 探測頁把結果 POST 到 gpu-check 在 127.0.0.1 的一次性接收端；M2 真機讀到「ANGLE Metal Renderer: Apple M2」 |
+| 24 | macOS | CosyVoice 環境：pip 的 scipy 在 macOS 27 無法載入；conda 的 OpenBLAS/OpenMP 與 pip torch 的 libomp 衝突（模型載入 SIGSEGV） | 已修正（install-cosyvoice.sh：macOS 用 conda env + conda-forge scipy + Accelerate BLAS） | Mac 上需要 micromamba；沒有 micromamba 的 Mac 未測試 |
+| 25 | 全部 | CosyVoice 的文字正規化（wetext）從 ModelScope 下載時回 403（需要登入權杖），CosyVoice 改用「無前端」模式 | 數字、單位的念法可能與 Windows（已快取 wetext）不同；Studio 的發音字典與 CER 檢查仍會檢查 | 預先下載 wetext 或改由安裝腳本提供（未做） |

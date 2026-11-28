@@ -7,8 +7,10 @@
 # Also tests resume: the worker is interrupted (SIGINT) during the voice stage and started again; finished lines
 # must not be re-voiced. Writes <work>/report.json (timings, peak memory, GPU / encoder used, output checks).
 set -euo pipefail
-CLI=$(realpath "${1:?cli}")
-W=$(realpath -m "${2:?work dir}")
+# absolute paths without GNU `realpath -m` (macOS has no -m)
+abspath() { python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$1"; }
+CLI=$(abspath "${1:?cli}")
+W=$(abspath "${2:?work dir}")
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 DATA="$W/data"; PROJ="$W/project"; LOG="$W/logs"
 mkdir -p "$W" "$LOG"
@@ -54,7 +56,7 @@ while :; do
   if [ $interrupted = 0 ] && [ "$kind" = voiceover_tw ] && python3 -c "import sys; sys.exit(0 if float('$prog') >= 0.3 else 1)"; then
     echo "--- SIGINT to the worker during voice ($prog)"
     # voice files live in the production's worktree; remember which lines were already finished
-    find "$PROJ" -path '*voiceover_cosy*' -name '*.mp3' -not -path '*/_test/*' 2>/dev/null | sort > "$LOG/voice-before-interrupt.txt" || true
+    find -H "$PROJ" -path '*voiceover_cosy*' -name '*.mp3' -not -path '*/_test/*' 2>/dev/null | sort > "$LOG/voice-before-interrupt.txt" || true
     date +%s > "$LOG/interrupt-ts.txt"
     kill -INT "$WPID"; set +e; wait "$WPID"; code=$?; set -e
     echo "worker exit $code (130 = interrupted, resumable)" | tee -a "$LOG/worker.txt"

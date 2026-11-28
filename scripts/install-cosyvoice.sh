@@ -20,7 +20,22 @@ elif [ "$(uname)" = Linux ] && command -v nvidia-smi >/dev/null && nvidia-smi -L
 else DEV=cpu; fi
 PY=${PYTHON:-}
 if [ -z "$PY" ]; then for c in python3.10 python3.11 python3; do command -v $c >/dev/null && PY=$c && break; done; fi
-echo "CosyVoice → $COSY  (torch $TORCH/$DEV, $($PY --version))"
+echo "CosyVoice → $COSY  (torch $TORCH/$DEV, $("$PY" --version 2>&1))"
+# A path with a space (macOS "Application Support", external drives) breaks C-extension builds: the compiler gets the
+# Python prefix's -I flags unquoted. pyworld has no prebuilt wheel for every platform, so with micromamba available
+# the environment is a conda env at the same place (.venv/bin/python — Studio finds it the same way) and pyworld
+# comes prebuilt from conda-forge. Everything else is the same pip install.
+# macOS: pip's scipy wheels (1.15.x) cannot be loaded by dyld on macOS 27 ("__DATA/__thread_bss has a zero-fill
+# section type, but offset field is not zero", measured on a Mac mini M2) — conda-forge's scipy build loads fine.
+USE_CONDA=0
+case "$COSY" in *" "*) command -v micromamba >/dev/null && USE_CONDA=1 ;; esac
+[ "$(uname)" = Darwin ] && command -v micromamba >/dev/null && USE_CONDA=1
+# Apple's Accelerate as BLAS: with conda-forge's default OpenBLAS, numpy / scipy load conda's OpenMP runtime and the
+# pip torch wheel loads its own libomp — two OpenMP runtimes in one process; the CosyVoice model load then crashed
+# with SIGSEGV (exit 139) whenever numpy was imported before torch (as generate_voiceover_cosy.py does). Measured on
+# the Mac mini M2; with libblas=*accelerate the same load works.
+CONDA_EXTRA=()
+[ "$(uname)" = Darwin ] && CONDA_EXTRA=("scipy=1.15.*" "libblas=*=*accelerate")
 
 if [ ! -d "$COSY/.git" ]; then
   git clone --quiet https://github.com/FunAudioLLM/CosyVoice.git "$COSY"
@@ -29,7 +44,13 @@ git -C "$COSY" fetch --quiet origin "$COMMIT" 2>/dev/null || git -C "$COSY" fetc
 git -C "$COSY" checkout --quiet "$COMMIT"
 git -C "$COSY" submodule update --init --recursive --quiet
 
-[ -x "$COSY/.venv/bin/python" ] || "$PY" -m venv "$COSY/.venv"
+if [ $USE_CONDA = 1 ]; then
+  [ -f "$COSY/.venv/conda-meta/history" ] || { rm -rf "$COSY/.venv"; micromamba create -y -q -p "$COSY/.venv" -c conda-forge python=3.10 pyworld=0.3.5 "numpy=1.26.4" ${CONDA_EXTRA[@]+"${CONDA_EXTRA[@]}"}; }
+  # an existing conda env from an earlier run still gets the macOS packages above (idempotent)
+  [ ${#CONDA_EXTRA[@]} -gt 0 ] && micromamba install -y -q -p "$COSY/.venv" -c conda-forge "numpy=1.26.4" "${CONDA_EXTRA[@]}"
+else
+  [ -x "$COSY/.venv/bin/python" ] || "$PY" -m venv "$COSY/.venv"
+fi
 V="$COSY/.venv/bin/python"
 "$V" -m pip install --quiet -U pip wheel
 # openai-whisper 20231117 and pyworld 0.3.4 (CosyVoice pins) build from source and need pkg_resources / numpy at
@@ -41,17 +62,25 @@ else
   "$V" -m pip install --quiet "torch==$TORCH" "torchaudio==$TORCH" --index-url "https://download.pytorch.org/whl/$DEV"
 fi
 # (after torch, so they never pull a different torch) — their own runtime deps are listed explicitly
-"$V" -m pip install --quiet --no-build-isolation --no-deps openai-whisper==20231117 pyworld==0.3.4
+"$V" -m pip install --quiet --no-build-isolation --no-deps openai-whisper==20231117
+# pyworld: the prebuilt 0.3.5 wheel (what the Windows install actually runs; CosyVoice pins 0.3.4, source only).
+# Building from source fails when the install path contains a space (the compiler gets an unquoted -I path).
+if [ $USE_CONDA = 0 ]; then
+  "$V" -m pip install --quiet --only-binary pyworld --no-deps pyworld==0.3.5 \
+    || "$V" -m pip install --quiet --no-build-isolation --no-deps pyworld==0.3.4   # no wheel here: build (path has no space)
+fi
 "$V" -m pip install --quiet tiktoken numba more-itertools tqdm
 # CosyVoice's list minus: CUDA-only (deepspeed, TensorRT, onnxruntime-gpu), the web UI / server (gradio, fastapi,
-# uvicorn, grpcio), training (tensorboard) and the torch pins handled above
+# uvicorn, grpcio), training (tensorboard), the torch pins handled above and pyworld (installed above)
 REQ=$(mktemp)
-grep -vE '^(--extra-index-url|deepspeed|tensorrt|onnxruntime|gradio|fastapi|uvicorn|grpcio|tensorboard|torch==|torchaudio==)' "$COSY/requirements.txt" > "$REQ"
+grep -vE '^(--extra-index-url|deepspeed|tensorrt|onnxruntime|gradio|fastapi|uvicorn|grpcio|tensorboard|torch==|torchaudio==|pyworld)' "$COSY/requirements.txt" > "$REQ"
 ORT=onnxruntime==1.18.0
 [ "$DEV" != cpu ] && [ "$(uname)" = Linux ] && ORT=onnxruntime-gpu==1.18.0
 # constraints: nothing may replace the torch build chosen above (a newer PyPI torch would be CUDA-only and huge)
 CON=$(mktemp)
 { echo "torch==$TORCH"; echo "torchaudio==$TORCH"; echo "numpy==1.26.4"; } > "$CON"
+# keep conda-forge's scipy (macOS) — pip would otherwise be free to swap in its own wheel
+[ ${#CONDA_EXTRA[@]} -gt 0 ] && echo "scipy==$("$V" -c 'import scipy; print(scipy.__version__)')" >> "$CON"
 "$V" -m pip install --quiet -c "$CON" -r "$REQ" "$ORT" faster-whisper==1.2.1 opencc-python-reimplemented==0.1.7 "huggingface_hub>=0.30"
 rm -f "$REQ" "$CON"
 
