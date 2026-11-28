@@ -20,7 +20,7 @@ pub fn configure(c: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        c.creation_flags(crate::util::CREATE_NO_WINDOW);
+        c.creation_flags(crate::CREATE_NO_WINDOW);
     }
     #[cfg(unix)]
     {
@@ -61,7 +61,9 @@ pub fn kill_tree(pid: u32) -> String {
     #[cfg(windows)]
     {
         use std::process::Stdio;
-        let mut c = crate::util::cmd("taskkill");
+        let mut c = Command::new("taskkill");
+        configure(&mut c);
+        c.stdin(Stdio::null());
         c.args(["/T", "/F", "/PID", &pid.to_string()]).stdout(Stdio::piped()).stderr(Stdio::piped());
         let child = match c.spawn() {
             Ok(ch) => ch,

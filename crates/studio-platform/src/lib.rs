@@ -212,9 +212,12 @@ pub fn link_dir(link: &Path, target: &Path) -> Result<String, String> {
     #[cfg(windows)]
     {
         // chcp 65001 first: otherwise mklink prints the (Chinese) paths in the console code page
-        let (l, t) = (crate::util::clean_path(link), crate::util::clean_path(target));
-        let o = crate::util::run("cmd", &["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &l, &t], None, std::time::Duration::from_secs(30))?;
-        if o.ok() { Ok(o.combined()) } else { Err(o.combined()) }
+        let (l, t) = (clean_path(link), clean_path(target));
+        let mut c = std::process::Command::new("cmd");
+        process::configure(&mut c);
+        let o = c.args(["/d", "/c", "chcp", "65001", ">nul", "&", "mklink", "/J", &l, &t]).stdin(std::process::Stdio::null()).output().map_err(|e| format!("cmd: {e}"))?;
+        let text = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)).trim().to_string();
+        if o.status.success() { Ok(text) } else { Err(text) }
     }
     #[cfg(unix)]
     {
@@ -303,7 +306,36 @@ pub fn set_keep_awake(on: bool) {
 /// Is this process running inside a packaged-app container (Windows MSIX) whose AppData writes are virtualized?
 /// Tests must know this before touching any data dir (see docs/TESTING.md).
 pub fn packaged_container() -> Option<String> {
-    crate::envfix::current_package()
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetCurrentPackageFullName(len: *mut u32, name: *mut u16) -> i32;
+        }
+        let mut len: u32 = 0;
+        // ERROR_INSUFFICIENT_BUFFER (122) when packaged; APPMODEL_ERROR_NO_PACKAGE (15700) otherwise
+        let r = unsafe { GetCurrentPackageFullName(&mut len, std::ptr::null_mut()) };
+        if r != 122 || len == 0 {
+            return None;
+        }
+        let mut buf = vec![0u16; len as usize];
+        let r = unsafe { GetCurrentPackageFullName(&mut len, buf.as_mut_ptr()) };
+        if r != 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buf[..(len as usize).saturating_sub(1)]))
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+/// Windows process creation flag: no console window for child processes.
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Path as text without the `\\?\` verbatim prefix `canonicalize` adds on Windows.
+pub fn clean_path(p: &Path) -> String {
+    let s = p.to_string_lossy().to_string();
+    s.strip_prefix(r"\\?\").map(|x| x.to_string()).unwrap_or(s)
 }
 
 #[cfg(test)]

@@ -1,0 +1,25 @@
+# Pikara Science Studio shared crates (one engine for the GUI and the command line).
+#
+#   studio-platform  OS layer: paths, processes (suspend/resume/kill trees), locks, links, power, packaged containers
+#   studio-core      engine: database, queue + scheduler, autopilot, pipeline steps, hardware, validation
+#   studio-cli       command line (`PikaraScienceStudio <command>`); the Linux release is this binary only
+#
+# The Tauri window (studio/app/src-tauri, "studio-gui") depends on these by path and adds only window code, so
+# `cargo build -p studio-cli` never compiles Tauri, WebKitGTK, X11 or Wayland crates.
+[workspace]
+resolver = "2"
+members = ["studio-platform", "studio-core", "studio-cli"]
+
+[workspace.package]
+# keep equal to studio/app/package.json and src-tauri/Cargo.toml (checked by studio-core's version test)
+version = "0.3.4"
+edition = "2021"
+rust-version = "1.89"
+license = "MIT"
+authors = ["Pikara Science contributors"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true

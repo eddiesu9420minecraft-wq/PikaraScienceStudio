@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn real_publish_metadata_has_both_platforms() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let m = publish_metadata(&root, None);
         if m["exists"] == true {
             let titles: Vec<String> = m["sections"].as_array().unwrap().iter().map(|s| s["title"].as_str().unwrap().to_string()).collect();

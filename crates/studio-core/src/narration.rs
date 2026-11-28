@@ -257,7 +257,7 @@ mod tests {
 
     fn project_root() -> PathBuf {
         // studio/app/src-tauri → project root
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
     }
 
     #[test]

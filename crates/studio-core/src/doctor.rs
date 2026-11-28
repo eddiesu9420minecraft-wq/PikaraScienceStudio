@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn real_doctor_run_on_this_machine() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let root = std::fs::canonicalize(&root).unwrap();
         let checks = run_all(Some(&root), &Settings::default(), false, false);
         let ids: Vec<&str> = checks.iter().map(|c| c.id).collect();

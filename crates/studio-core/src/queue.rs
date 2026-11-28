@@ -259,8 +259,7 @@ impl Queue {
                 if let Some(pid) = j.pid {
                     let snap = gpu::snapshot();
                     if let Some((_, name, _)) = snap.procs.get(&(pid as u32)) {
-                        let n = name.to_ascii_lowercase();
-                        if ["cmd.exe", "node.exe", "python.exe", "py.exe", "claude.exe", "git.exe"].contains(&n.as_str()) {
+                        if is_job_process_name(name) {
                             let o = kill_tree(pid as u32);
                             self.event(id, "system", "warn", &format!("結束上次遺留的程序樹 PID {pid}：{}", o.trim()));
                         }
@@ -277,6 +276,27 @@ impl Queue {
             self.emit_job(id);
         }
         ids
+    }
+}
+
+/// Can this be the root process of a job's step (so a leftover tree may be killed after a crash)? A recycled PID can
+/// belong to anything, so only the launchers jobs use are accepted. Windows names end in `.exe`; macOS / Linux
+/// names don't (`python3.11`, `node`, `sh` — job steps start through `/bin/sh -c` there).
+pub fn is_job_process_name(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    let base = n.strip_suffix(".exe").unwrap_or(&n);
+    ["cmd", "node", "python", "py", "claude", "git", "sh", "bash", "zsh", "doubao"].contains(&base)
+        || base.strip_prefix("python3").is_some_and(|v| v.chars().all(|c| c.is_ascii_digit() || c == '.'))
+}
+
+#[cfg(test)]
+#[test]
+fn job_process_names_on_every_os() {
+    for ok in ["node.exe", "PYTHON.EXE", "cmd.exe", "node", "python3", "python3.11", "sh", "bash", "claude"] {
+        assert!(is_job_process_name(ok), "{ok}");
+    }
+    for no in ["explorer.exe", "chrome", "python3x", "launchd", "systemd", "Finder"] {
+        assert!(!is_job_process_name(no), "{no}");
     }
 }
 

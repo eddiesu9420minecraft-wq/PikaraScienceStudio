@@ -3,16 +3,19 @@
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--selftest" || a == "--cli") {
+    // `PikaraScienceStudio <command>` / `nogui` / `--cli …` / `--selftest`: command line, no window
+    // (crates/studio-cli — the same code as the Linux CLI-only build)
+    let selftest = args.iter().any(|a| a == "--selftest");
+    if selftest || studio_cli::wants_cli(&args) {
         #[cfg(windows)]
         unsafe {
-            // GUI-subsystem exe: attach to the parent console so `--selftest` prints there.
+            // GUI-subsystem exe: attach to the parent console so output appears there.
             windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
         }
-        if args.iter().any(|a| a == "--cli") {
-            std::process::exit(studio_lib::cli::run(&args));
+        if selftest {
+            std::process::exit(studio_lib::selftest::run(&args));
         }
-        std::process::exit(studio_lib::selftest::run(&args));
+        std::process::exit(studio_cli::run(&args, studio_lib::build_info()));
     }
     studio_lib::run();
 }

@@ -1,54 +1,18 @@
 //! Pikara Science Studio — Rust core. Tauri commands are listed in studio/app/API.md.
 
-pub mod activity;
-pub mod agents;
-pub mod assets;
-pub mod autopilot;
-pub mod content;
-pub mod envfix;
-pub mod layout;
 pub mod picker;
-pub mod platform;
-pub mod claude;
-pub mod cli;
-pub mod db;
-pub mod doctor;
-pub mod episodes;
-pub mod gitops;
-pub mod gpulock;
-pub mod i18n;
-pub mod hardware;
-/// Compatibility path: NVIDIA telemetry used to live in `gpu.rs`.
-pub use hardware::telemetry as gpu;
-pub mod jobs;
-pub mod monitor;
-pub mod narration;
-pub mod pipeline;
-pub mod pipeline_sync;
-pub mod rerender;
-pub mod project;
-pub mod prompt;
-pub mod queue;
-pub mod scaffold;
-pub mod selftest;
-pub mod util;
-pub mod watchdog;
 
-use db::Db;
+// Backend engine (database, queue, autopilot, pipeline, hardware, platform) lives in crates/studio-core and is
+// shared with the command line (crates/studio-cli). This crate is only the Tauri window and its commands.
+pub use studio_core::*;
+
 use queue::Queue;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 
-pub struct AppState {
-    pub db: Db,
-    pub queue: Arc<Queue>,
-    pub monitor: Arc<monitor::Monitor>,
-    pub autopilot: Arc<autopilot::Autopilot>,
-}
 
-type R<T> = Result<T, String>;
 
 /// false when another process holds the scheduler lock for this data dir (queue / autopilot not running here).
 static SCHEDULER_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -57,10 +21,6 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> R<T> + Send + 'static) 
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
 }
 
-fn root_of(db: &Db, project_id: &str) -> R<PathBuf> {
-    let p = db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), project_id)?;
-    Ok(PathBuf::from(p.root_path))
-}
 
 // ------------------------------------------------------------------ app & settings
 
@@ -107,15 +67,6 @@ async fn project_list(st: State<'_, AppState>) -> R<Vec<db::Project>> {
     db::project_list(&st.db.lock().unwrap_or_else(|e| e.into_inner()))
 }
 
-pub fn register_project(db: &Db, path: &str) -> R<db::Project> {
-    let p = Path::new(path.trim());
-    if !p.is_dir() {
-        return Err(format!("資料夾不存在：{path}"));
-    }
-    let canon = util::clean_path(&std::fs::canonicalize(p).map_err(|e| e.to_string())?);
-    let name = Path::new(&canon).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(canon.clone());
-    db::project_upsert(&db.lock().unwrap_or_else(|e| e.into_inner()), &canon, &name)
-}
 
 #[tauri::command]
 async fn project_register(app: tauri::AppHandle, st: State<'_, AppState>, path: String) -> R<db::Project> {
@@ -143,13 +94,6 @@ async fn episode_list(st: State<'_, AppState>, project_id: String) -> R<Value> {
     blocking(move || Ok(episodes::list(&root))).await
 }
 
-pub fn create_episode(root: &Path, title: &str, episode_id: Option<&str>, scene_title: Option<&str>, first_line: Option<&str>, locales: Option<Vec<String>>) -> R<Value> {
-    let locales = locales.unwrap_or_else(|| vec!["zh-TW".into()]);
-    for l in &locales {
-        narration::rel_path(l)?;
-    }
-    episodes::create(root, &episodes::NewEpisode { id: episode_id, title, scene_title, first_line, locales })
-}
 
 #[tauri::command]
 async fn episode_create(
@@ -165,16 +109,6 @@ async fn episode_create(
     blocking(move || create_episode(&root, &title, episode_id.as_deref(), scene_title.as_deref(), first_line.as_deref(), locales)).await
 }
 
-pub fn create_project(db: &Db, dest: &str, title: &str, template: Option<&Path>, link_tools: bool) -> R<Value> {
-    let dest = PathBuf::from(dest.trim());
-    if dest.as_os_str().is_empty() || !dest.is_absolute() {
-        return Err("請提供新專案資料夾的完整路徑（例如 D:\\影片\\我的 科普）".into());
-    }
-    let tpl = scaffold::find_template(template, None)?;
-    let r = scaffold::create(&scaffold::NewProject { dest: &dest, title, template: &tpl, link_tools })?;
-    let p = register_project(db, &dest.to_string_lossy())?;
-    Ok(json!({"project": p, "scaffold": r}))
-}
 
 #[tauri::command]
 async fn project_create(
@@ -225,21 +159,6 @@ async fn prompt_tasks() -> R<Value> {
     Ok(prompt::tasks())
 }
 
-fn job_extra(db: &Db, job_id: Option<&str>) -> R<prompt::Extra> {
-    let Some(id) = job_id else { return Ok(prompt::Extra { job_summary: None, job_log_tail: None }) };
-    let c = db.lock().unwrap_or_else(|e| e.into_inner());
-    let j = db::job_get(&c, id)?;
-    let ev = db::events_list(&c, id, 0, 1_000_000)?;
-    let tail: Vec<String> = ev.iter().rev().take(150).rev().map(|e| format!("[{}] {}", e.stream, e.line)).collect();
-    Ok(prompt::Extra {
-        job_summary: Some(format!(
-            "- 種類：{}（{}）\n- 參數：{}\n- 狀態：{}，結束碼 {:?}，第 {}/{} 步\n- 錯誤：{}\n- 完整 log：{}",
-            j.kind, j.label, j.params, j.status, j.exit_code, j.step + 1, j.steps.len().max(1),
-            j.error.clone().unwrap_or_default(), j.log_path.clone().unwrap_or_default()
-        )),
-        job_log_tail: Some(tail.join("\n")),
-    })
-}
 
 #[tauri::command]
 async fn prompt_build(st: State<'_, AppState>, project_id: String, task: String, options: Value) -> R<Value> {
@@ -263,16 +182,6 @@ async fn claude_install_skill(st: State<'_, AppState>, project_id: String, overw
     claude::install_skill(&root, overwrite.unwrap_or(false))
 }
 
-pub fn enqueue_claude(st: &AppState, project_id: &str, prompt_text: &str, allow_edits: bool, title: &str) -> R<db::Job> {
-    let root = root_of(&st.db, project_id)?;
-    if prompt_text.trim().is_empty() {
-        return Err("prompt is empty".into());
-    }
-    claude::ensure_excluded(&root)?;
-    let wid = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let params = json!({"prompt": prompt_text, "allowEdits": allow_edits, "worktreeId": wid, "title": title});
-    st.queue.enqueue(Some(project_id), "claude", &params, &root)
-}
 
 #[tauri::command]
 async fn claude_run(st: State<'_, AppState>, project_id: String, prompt: String, allow_edits: Option<bool>) -> R<db::Job> {
@@ -320,20 +229,6 @@ async fn job_analyse_with_claude(st: State<'_, AppState>, job_id: String) -> R<d
 
 // ------------------------------------------------------------------ doctor
 
-pub fn doctor_report(st_db: &Db, q: &Queue, project_id: Option<&str>, gpu_tests: bool) -> R<Value> {
-    let root = match project_id {
-        Some(p) => Some(root_of(st_db, p)?),
-        None => None,
-    };
-    let s = db::settings_get(&st_db.lock().unwrap_or_else(|e| e.into_inner()));
-    let gpu_free = gpu_tests && q.gpu_holder().is_none() && !q.check_external(None).busy;
-    let checks = doctor::run_all(root.as_deref(), &s, gpu_tests, gpu_free);
-    let c = st_db.lock().unwrap_or_else(|e| e.into_inner());
-    for ch in &checks {
-        let _ = db::env_check_add(&c, ch.id, ch.status, &ch.to_json());
-    }
-    Ok(json!({"ts": util::now_iso(), "checks": checks.iter().map(|c| c.to_json()).collect::<Vec<_>>()}))
-}
 
 #[tauri::command]
 async fn doctor_run(st: State<'_, AppState>, project_id: Option<String>, gpu_tests: Option<bool>) -> R<Value> {
@@ -375,9 +270,6 @@ async fn job_kinds() -> R<Value> {
 
 // ------------------------------------------------------------------ v0.3 workspace / re-voice / re-render
 
-fn ep_ref(db: &Db, project_id: &str, episode: &str, locale: &str) -> R<pipeline::Ep> {
-    pipeline::Ep::new(&root_of(db, project_id)?, episode, locale)
-}
 
 #[tauri::command]
 async fn workspace_get(st: State<'_, AppState>, project_id: String, episode: String, locale: String) -> R<Value> {
@@ -817,10 +709,6 @@ async fn agent_done(st: State<'_, AppState>, id: String, failed: Option<bool>, n
 
 // ------------------------------------------------------------------ startup
 
-pub fn open_db() -> R<Db> {
-    let p = util::data_dir().join("studio.db");
-    Ok(Arc::new(Mutex::new(db::open(&p)?)))
-}
 
 /// Settings needed before any WebView exists (UI GPU choice). Read-only: no migration, no file is
 /// created; defaults when the database is missing or unreadable (the splash then shows why).
@@ -1029,6 +917,20 @@ fn initialize(app: tauri::AppHandle, monitor_init: std::thread::JoinHandle<monit
     }
 
     s.backend_done();
+}
+
+/// What this executable is (shown by `--version` / `build-info`, checked by scripts/check-ui.mjs).
+pub fn build_info() -> studio_cli::BuildInfo {
+    studio_cli::BuildInfo {
+        version: env!("CARGO_PKG_VERSION"),
+        git_commit: env!("PIKARA_GIT_COMMIT"),
+        frontend_sha256: Some(env!("PIKARA_FRONTEND_SHA256")),
+        frontend_files: match env!("PIKARA_FRONTEND_FILES").parse::<u64>() {
+            Ok(n) => n,
+            Err(_) => 0,
+        },
+        gui: true,
+    }
 }
 
 pub fn run() {

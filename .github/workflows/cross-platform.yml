@@ -1,8 +1,8 @@
 name: Cross-platform
 
-# Real tests on every target OS. Nothing here signs, notarizes or publishes; no secrets are used, so the job is safe
-# to run on any branch. Release builds (signed update packages) are a separate workflow that checks its secrets
-# first and never passes empty Apple certificate variables to tauri.
+# Real builds and tests on every target. Nothing here signs, notarizes or publishes; no secrets are used, so it is
+# safe on any branch. CI results are CI results: they are reported separately from tests on real hardware
+# (docs/COMPATIBILITY.md) — a GitHub VM has no display, no Apple GPU access for MPS and no NVIDIA GPU.
 
 on:
   push:
@@ -14,9 +14,13 @@ concurrency:
   group: xp-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
+  # ---------------------------------------------------------------- engine + CLI on every OS / CPU
   core:
-    name: Core tests (${{ matrix.name }})
+    name: Engine + CLI (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,39 +30,164 @@ jobs:
           - { name: macos-arm64, os: macos-15 }
           - { name: macos-x64, os: macos-15-intel }
           - { name: linux-x64, os: ubuntu-24.04 }
-    env:
-      CARGO_TERM_COLOR: always
+          - { name: linux-arm64, os: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: studio/app/src-tauri -> target
-          key: ${{ matrix.name }}
-      - name: Linux system libraries for Tauri
+          workspaces: crates -> target
+          key: core-${{ matrix.name }}
+      - name: Unit + CLI integration tests (isolated temp data dirs)
+        working-directory: crates
+        run: cargo test --release --workspace --no-fail-fast
+      - name: Build CLI (release, no local paths in the binary)
+        working-directory: crates
+        shell: bash
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=$HOME=~ --remap-path-prefix=$GITHUB_WORKSPACE=."
+          cargo build --release -p studio-cli
+      - name: CLI smoke test (help, version, JSON, exit codes, hardware, doctor)
+        shell: bash
+        run: |
+          B=crates/target/release/pikara-studio
+          [ "$RUNNER_OS" = Windows ] && B=$B.exe
+          D="$RUNNER_TEMP/pss-data"
+          "$B" --help > /dev/null
+          "$B" --json version | tee "$RUNNER_TEMP/version.json"
+          set +e
+          "$B" --data "$D" no-such-command; test $? -eq 2 || { echo "unknown command must exit 2"; exit 1; }
+          "$B" --data "$D" status deadbeef; test $? -eq 3 || { echo "unknown id must exit 3"; exit 1; }
+          set -e
+          "$B" hardware > "$RUNNER_TEMP/hardware-${{ matrix.name }}.json"
+          "$B" --data "$D" --json doctor > "$RUNNER_TEMP/doctor-${{ matrix.name }}.json" || echo "doctor exit $? (missing tools on a bare runner are expected)"
+          "$B" --data "$D" --json list
+      - name: "Linux: no GUI stack in the CLI (no Tauri / WebKitGTK / GTK / X11 / Wayland)"
+        if: runner.os == 'Linux'
+        working-directory: crates
+        run: |
+          if cargo tree -p studio-cli -e normal,build --prefix none | grep -Ei '^(tauri|wry|tao|webkit2gtk|javascriptcore|gtk|gdk|soup|x11|xcb|wayland)'; then
+            echo "GUI crates in the Linux CLI dependency tree"; exit 1; fi
+          ldd target/release/pikara-studio | tee "$RUNNER_TEMP/ldd.txt"
+          if grep -Ei 'gtk|webkit|libX11|wayland|libxcb|gdk' "$RUNNER_TEMP/ldd.txt"; then echo "GUI libraries linked"; exit 1; fi
+          # no display at all: must still work
+          env -u DISPLAY -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE target/release/pikara-studio --data "$RUNNER_TEMP/nodisplay" --json list
+      - name: Binary contains no local user paths or secrets
+        shell: bash
+        run: |
+          B=crates/target/release/pikara-studio; [ "$RUNNER_OS" = Windows ] && B=$B.exe
+          strings -a "$B" > "$RUNNER_TEMP/strings.txt" 2>/dev/null || python3 -c "import re,sys;d=open('$B','rb').read();print('\n'.join(m.decode('latin1') for m in re.findall(rb'[\x20-\x7e]{6,}',d)))" > "$RUNNER_TEMP/strings.txt"
+          HOME_ESC=$(printf '%s' "$HOME" | sed 's/[][\.*^$/]/\\&/g')
+          if grep -E "$HOME_ESC|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{20}|untrusted comment: minisign secret" "$RUNNER_TEMP/strings.txt" | head; then
+            echo "local path or secret material in the binary"; exit 1; fi
+      - name: Package (Linux .tar.gz)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
-      - name: Rust unit tests
-        working-directory: studio/app/src-tauri
-        run: cargo test --no-fail-fast
-      - name: Hardware detection (read-only CLI, isolated data dir)
-        shell: bash
-        working-directory: studio/app/src-tauri
-        run: |
-          cargo build
-          export PIKARA_STUDIO_DATA="$RUNNER_TEMP/pss-data"
-          ./target/debug/PikaraScienceStudio --cli hardware | tee "$RUNNER_TEMP/hardware-${{ matrix.name }}.json"
+          mkdir -p dist
+          bash scripts/package-linux.sh crates/target/release/pikara-studio dist
+          tar -tzf dist/*.tar.gz | head -20
+          # the packaged binary finds its template and creates a project with no desktop
+          mkdir -p "$RUNNER_TEMP/pkg" && tar -xzf dist/*.tar.gz -C "$RUNNER_TEMP/pkg"
+          git config --global user.email ci@example.invalid && git config --global user.name ci
+          env -u DISPLAY "$RUNNER_TEMP/pkg/PikaraScienceStudio/PikaraScienceStudio" --data "$RUNNER_TEMP/pkgdata" --json project new --dest "$RUNNER_TEMP/proj" --title CI --no-link-tools
+          test -f "$RUNNER_TEMP/proj/scripts/render.mjs"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: PikaraScienceStudio-${{ matrix.name }}-CI-BUILD
+          path: dist/*
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: hardware-${{ matrix.name }}
-          path: ${{ runner.temp }}/hardware-${{ matrix.name }}.json
+          name: reports-${{ matrix.name }}
+          path: |
+            ${{ runner.temp }}/hardware-*.json
+            ${{ runner.temp }}/doctor-*.json
+            ${{ runner.temp }}/version.json
           if-no-files-found: ignore
 
+  security:
+    name: Security (dependency advisories, path tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: RustSec advisories (engine + CLI)
+        working-directory: crates
+        run: cargo audit --deny unsound --deny yanked
+      - name: Path-traversal, restore-lock and isolation tests
+        working-directory: crates
+        run: cargo test --release -p studio-core -- open_path restore_refused concurrent_openers is_inside
+
+  # ---------------------------------------------------------------- GUI (Windows / macOS) — same engine
+  gui:
+    name: GUI + CLI (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          - { name: macos-arm64, os: macos-15 }
+          - { name: macos-x64, os: macos-15-intel }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: studio/app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: studio/app/src-tauri -> target
+          key: gui-${{ matrix.name }}
+      - name: Tauri CLI
+        working-directory: studio/app
+        run: npm ci
+      - name: UI routes check
+        working-directory: studio/app
+        run: node scripts/check-ui.mjs
+      - name: Build (Windows exe + NSIS / macOS .app + .dmg, unsigned)
+        working-directory: studio/app
+        shell: bash
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do unset $v; done
+          export RUSTFLAGS="--remap-path-prefix=$HOME=~ --remap-path-prefix=$GITHUB_WORKSPACE=."
+          if [ "$RUNNER_OS" = macOS ]; then npx tauri build --bundles app,dmg; else npx tauri build; fi
+      - name: GUI executable embeds this frontend and runs the CLI without a window
+        shell: bash
+        run: |
+          T=studio/app/src-tauri/target/release
+          if [ "$RUNNER_OS" = macOS ]; then APP=$(ls -d $T/bundle/macos/*.app | head -1); EXE="$APP/Contents/MacOS/PikaraScienceStudio"; else EXE=$T/PikaraScienceStudio.exe; fi
+          node studio/app/scripts/check-ui.mjs --exe "$EXE"
+          "$EXE" --json version | tee "$RUNNER_TEMP/gui-version.json"
+          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/gui-version.json'));assert d['gui'] is True, d"
+          D="$RUNNER_TEMP/gui-data"
+          "$EXE" nogui --data "$D" --json list
+          "$EXE" --data "$D" --json config path
+          "$EXE" --cli hardware > /dev/null
+      - name: "macOS: bundle contents, architecture, packaging"
+        if: runner.os == 'macOS'
+        run: |
+          B=studio/app/src-tauri/target/release/bundle
+          APP=$(ls -d $B/macos/*.app | head -1)
+          file "$APP/Contents/MacOS/"*
+          if find "$APP" -iname '*.exe' -o -iname '*.dll' | grep .; then echo "Windows binaries inside the macOS bundle"; exit 1; fi
+          bash scripts/package-macos.sh $B dist
+          test $(stat -f%z dist/*.dmg) -gt 2000000
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: PikaraScienceStudio-${{ matrix.name }}-NOT-NOTARIZED
+          path: dist/*
+
+  # ---------------------------------------------------------------- real media probes
   media:
-    # Real encodes (not encoder lists), real WebGL frame in Chromium, real tensor ops on the accelerator.
+    # Real encodes (not encoder lists), a real WebGL frame in headless Chromium, real tensor ops on the accelerator.
     name: Media + AI probes (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -68,6 +197,7 @@ jobs:
           - { name: macos-arm64, os: macos-15 }
           - { name: macos-x64, os: macos-15-intel }
           - { name: linux-x64, os: ubuntu-24.04 }
+          - { name: linux-arm64, os: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,31 +208,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: ffmpeg
+      - name: ffmpeg (+ VAAPI tools on Linux)
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then brew install ffmpeg; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi
-          ffmpeg -hide_banner -encoders | grep -Ei 'videotoolbox|nvenc|vaapi|libx26' || true
+          if [ "$RUNNER_OS" = macOS ]; then brew install ffmpeg; else sudo apt-get update && sudo apt-get install -y ffmpeg vainfo; fi
+          ffmpeg -hide_banner -encoders | grep -Ei 'videotoolbox|nvenc|vaapi|amf|libx26' || true
+          if [ "$RUNNER_OS" = Linux ]; then ls -la /dev/dri 2>&1 || true; vainfo 2>&1 | head -20 || true; nvidia-smi 2>&1 | head -5 || true; fi
       - name: Encoder real-encode test (hwenc.mjs)
         working-directory: pipeline
         shell: bash
         run: |
           mkdir -p out
-          if [ "$RUNNER_OS" = macOS ]; then system_profiler SPDisplaysDataType -json > out/system_profiler-displays.json || true; cat out/system_profiler-displays.json; fi
+          if [ "$RUNNER_OS" = macOS ]; then system_profiler SPDisplaysDataType -json > out/system_profiler-displays.json || true; fi
           node -e "import('./scripts/hwenc.mjs').then(async m => { const r = await m.probe({codec:'h264', all:true, force:true}); console.log(JSON.stringify(r,null,2)); })" | tee out/hwenc-h264.json
           node -e "import('./scripts/hwenc.mjs').then(async m => { const r = await m.probe({codec:'hevc', all:true, force:true}); console.log(JSON.stringify(r,null,2)); })" | tee out/hwenc-hevc.json
       - name: Pipeline dependencies
         working-directory: pipeline
         run: npm ci
-      - name: Chromium WebGL / Three.js probe (gpu-check.mjs, real frame)
+      - name: Headless Chromium WebGL / Three.js probe (gpu-check.mjs, real frame)
         working-directory: pipeline
         continue-on-error: true
         run: node scripts/gpu-check.mjs --force
-      - name: Short real render (render.mjs, 90 frames, measured encoder)
+      - name: Short real render (render.mjs, 90 frames, measured encoder, no display)
         working-directory: pipeline
-        continue-on-error: true
-        run: node scripts/render.mjs gpu --comp EP01-30fps --frames 0-89 --skip-check --allow-cpu-fallback --out out/ci-render.mp4
-      - name: AI accelerator probe (torch CPU/MPS, MLX)
+        shell: bash
+        run: env -u DISPLAY node scripts/render.mjs gpu --comp EP01-30fps --frames 0-89 --skip-check --allow-cpu-fallback --out out/ci-render.mp4
+      - name: AI accelerator probe (torch CPU / CUDA / MPS / ROCm, MLX)
         shell: bash
         continue-on-error: true
         run: |
@@ -117,61 +248,4 @@ jobs:
             pipeline/out/*.json
             pipeline/out/ci-render.mp4
             pipeline/out/render-report*.json
-            pipeline/out/probe-*.log
           if-no-files-found: ignore
-
-  macos-bundle:
-    # Unsigned, NOT notarized developer build: proves a native .app/.dmg is produced and contains no Windows
-    # binaries. Apple notarization needs an Apple Developer certificate (not configured); Pikara update signing is a
-    # separate trust chain (minisign) handled by the release workflow.
-    name: macOS bundle (${{ matrix.name }}, not notarized)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: arm64, os: macos-15 }
-          - { name: x64, os: macos-15-intel }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: studio/app/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: studio/app/src-tauri -> target
-          key: bundle-${{ matrix.name }}
-      - name: Install Tauri CLI
-        working-directory: studio/app
-        run: npm ci
-      - name: Build .app + .dmg (unsigned)
-        working-directory: studio/app
-        shell: bash
-        run: |
-          # never pass empty Apple certificate variables (tauri would try to sign with them)
-          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do unset $v; done
-          npx tauri build --bundles app,dmg
-      - name: Verify bundle contents
-        shell: bash
-        run: |
-          B=studio/app/src-tauri/target/release/bundle
-          APP=$(ls -d $B/macos/*.app | head -1)
-          file "$APP/Contents/MacOS/"*
-          lipo -archs "$APP/Contents/MacOS/PikaraScienceStudio"
-          if find "$APP" -iname '*.exe' -o -iname '*.dll' | grep .; then echo "Windows binaries inside the macOS bundle" && exit 1; fi
-          ls -la $B/dmg/
-          DMG=$(ls $B/dmg/*.dmg | head -1)
-          test $(stat -f%z "$DMG") -gt 2000000
-          # the bundled app must start headless and answer the read-only hardware CLI
-          PIKARA_STUDIO_DATA="$RUNNER_TEMP/pss-data" "$APP/Contents/MacOS/PikaraScienceStudio" --cli hardware > "$RUNNER_TEMP/bundle-hw.json"
-          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/bundle-hw.json'));print(d['platform'], d['machine']['profile']['appleSilicon'], [g['name'] for g in d['snapshot']['gpus']])"
-          shasum -a 256 "$DMG" | tee $B/dmg/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PikaraScienceStudio-macos-${{ matrix.name }}-NOT-NOTARIZED
-          path: |
-            studio/app/src-tauri/target/release/bundle/dmg/*.dmg
-            studio/app/src-tauri/target/release/bundle/dmg/SHA256SUMS.txt

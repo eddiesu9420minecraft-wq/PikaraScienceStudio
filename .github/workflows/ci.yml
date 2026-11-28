@@ -26,7 +26,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: studio/app/src-tauri -> target
+          workspaces: |
+            studio/app/src-tauri -> target
+            crates -> target
 
       - name: Install frontend/CLI dependencies
         working-directory: studio/app
@@ -36,7 +38,11 @@ jobs:
         working-directory: studio/app
         run: node scripts/check-ui.mjs
 
-      - name: Rust unit tests
+      - name: Engine + CLI tests (crates/studio-core, studio-platform, studio-cli)
+        working-directory: crates
+        run: cargo test --release --workspace
+
+      - name: GUI crate tests
         working-directory: studio/app/src-tauri
         run: cargo test --release
 

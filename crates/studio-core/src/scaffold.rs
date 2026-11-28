@@ -197,7 +197,7 @@ mod tests {
     use super::*;
 
     fn project_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
     }
 
     #[test]

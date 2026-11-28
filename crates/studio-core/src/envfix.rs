@@ -37,27 +37,7 @@ pub struct VenvDiag {
 
 /// Name of the MSIX package the current process runs in, if any (GetCurrentPackageFullName).
 pub fn current_package() -> Option<String> {
-    #[cfg(windows)]
-    {
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn GetCurrentPackageFullName(len: *mut u32, name: *mut u16) -> i32;
-        }
-        let mut len: u32 = 0;
-        // ERROR_INSUFFICIENT_BUFFER (122) when packaged; APPMODEL_ERROR_NO_PACKAGE (15700) otherwise
-        let r = unsafe { GetCurrentPackageFullName(&mut len, std::ptr::null_mut()) };
-        if r != 122 || len == 0 {
-            return None;
-        }
-        let mut buf = vec![0u16; len as usize];
-        let r = unsafe { GetCurrentPackageFullName(&mut len, buf.as_mut_ptr()) };
-        if r != 0 {
-            return None;
-        }
-        Some(String::from_utf16_lossy(&buf[..(len as usize).saturating_sub(1)]))
-    }
-    #[cfg(not(windows))]
-    None
+    crate::platform::packaged_container()
 }
 
 fn read_cfg(venv: &Path) -> Option<(String, String)> {

@@ -25,7 +25,7 @@ use std::path::Path;
 
 macro_rules! embedded {
     ($($f:literal),* $(,)?) => {
-        &[$((concat!("scripts/", $f), include_bytes!(concat!("../../../../pipeline/scripts/", $f)) as &[u8])),*]
+        &[$((concat!("scripts/", $f), include_bytes!(concat!("../../../pipeline/scripts/", $f)) as &[u8])),*]
     };
 }
 
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn embedded_list_matches_pipeline_dir() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../pipeline/scripts");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../pipeline/scripts");
         let mut missing = vec![];
         for e in std::fs::read_dir(&dir).unwrap().flatten() {
             let name = e.file_name().to_string_lossy().to_string();

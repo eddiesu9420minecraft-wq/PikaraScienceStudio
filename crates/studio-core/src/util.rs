@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub const CREATE_NO_WINDOW: u32 = crate::platform::CREATE_NO_WINDOW;
 
 pub fn now_iso() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
@@ -205,8 +205,7 @@ pub fn is_inside(root: &Path, child: &Path) -> bool {
 
 /// Strip the \\?\ prefix canonicalize() adds on Windows.
 pub fn clean_path(p: &Path) -> String {
-    let s = p.to_string_lossy().to_string();
-    s.strip_prefix(r"\\?\").map(|x| x.to_string()).unwrap_or(s)
+    crate::platform::clean_path(p)
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {

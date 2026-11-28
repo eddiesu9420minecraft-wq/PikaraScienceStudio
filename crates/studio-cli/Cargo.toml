@@ -1,0 +1,28 @@
+[package]
+name = "studio-cli"
+description = "Pikara Science Studio command line"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "studio_cli"
+path = "src/lib.rs"
+
+# CLI-only executable (Linux release; also shipped for headless use on Windows / macOS).
+# Packaging renames it to `PikaraScienceStudio` in the Linux archive (scripts/package-linux.sh).
+[[bin]]
+name = "pikara-studio"
+path = "src/main.rs"
+
+[dependencies]
+studio-core = { path = "../studio-core" }
+serde_json = { version = "1", features = ["preserve_order"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+ctrlc = { version = "3", features = ["termination"] }
+
+[build-dependencies]
+# none: the git commit comes from build.rs below (no frontend in this binary)

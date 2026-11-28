@@ -272,7 +272,8 @@ impl Default for Settings {
             keep_awake: true,
             claude_max_turns: 30,
             claude_max_budget_usd: None,
-            node_dir: r"C:\Program Files\nodejs".into(),
+            // Windows: the official installer's folder; macOS / Linux: empty = node from PATH (Homebrew, nvm, apt …)
+            node_dir: if cfg!(windows) { r"C:\Program Files\nodejs".into() } else { String::new() },
             cosy_python: None,
             perf_mode: "balanced".into(),
             render_start_concurrency: 2,

@@ -43,9 +43,9 @@
 //! `--data` isolates the queue (PIKARA_STUDIO_DATA); default is the app's real data dir.
 //! Prints JSON (one object per command) or, for run-queue, one line per status change. Exit 0 = success.
 
-use crate::db::{self, Db};
-use crate::queue::Queue;
-use crate::{episodes, narration};
+use studio_core::db::{self, Db};
+use studio_core::queue::Queue;
+use studio_core::{episodes, narration};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -65,31 +65,31 @@ fn out(v: &Value) {
 
 fn project_id(db: &Db, args: &[String]) -> Result<(String, PathBuf), String> {
     let p = arg(args, "--project").ok_or("缺少 --project <專案資料夾>")?;
-    let pr = crate::register_project(db, &p)?;
+    let pr = studio_core::register_project(db, &p)?;
     Ok((pr.id.clone(), PathBuf::from(pr.root_path)))
 }
 
-pub fn run(args: &[String]) -> i32 {
+pub fn run(args: &[String], info: &crate::BuildInfo) -> i32 {
     if let Some(d) = arg(args, "--data") {
         std::env::set_var("PIKARA_STUDIO_DATA", d);
     }
     let cmd = args.iter().position(|a| a == "--cli").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
     // hardware: read-only report — never opens (or migrates) any database, writes nothing; safe on CI runners
     if cmd == "hardware" {
-        let snap = crate::hardware::manager::snapshot();
-        let assign = crate::hardware::selector::select(&snap, &db::Settings::default().hw);
+        let snap = studio_core::hardware::manager::snapshot();
+        let assign = studio_core::hardware::selector::select(&snap, &db::Settings::default().hw);
         out(&json!({"ok": true,
-            "platform": {"os": crate::platform::OS, "arch": crate::platform::ARCH, "nodePlatform": crate::platform::NODE_PLATFORM,
-                         "packagedContainer": crate::platform::packaged_container(), "dataDir": crate::util::data_dir(), "cacheDir": crate::util::cache_dir()},
-            "machine": crate::hardware::profile::report(), "snapshot": snap, "assignment": assign}));
+            "platform": {"os": studio_core::platform::OS, "arch": studio_core::platform::ARCH, "nodePlatform": studio_core::platform::NODE_PLATFORM,
+                         "packagedContainer": studio_core::platform::packaged_container(), "dataDir": studio_core::util::data_dir(), "cacheDir": studio_core::util::cache_dir()},
+            "machine": studio_core::hardware::profile::report(), "snapshot": snap, "assignment": assign}));
         return 0;
     }
     // build-info: which version and which embedded frontend this exe contains (release guard, scripts/check-ui.mjs);
     // read-only, no database
     if cmd == "build-info" {
-        out(&json!({"version": env!("CARGO_PKG_VERSION"), "gitCommit": env!("PIKARA_GIT_COMMIT"), "frontendSha256": env!("PIKARA_FRONTEND_SHA256"),
-                    "frontendFiles": env!("PIKARA_FRONTEND_FILES").parse::<u64>().unwrap_or(0),
-                    "pipelineBundle": crate::pipeline_sync::bundle_sha(), "pipelineFiles": crate::pipeline_sync::FILES.len()}));
+        out(&json!({"version": info.version, "gitCommit": info.git_commit, "frontendSha256": info.frontend_sha256,
+                    "frontendFiles": info.frontend_files, "gui": info.gui, "os": studio_core::platform::OS, "arch": studio_core::platform::ARCH,
+                    "pipelineBundle": studio_core::pipeline_sync::bundle_sha(), "pipelineFiles": studio_core::pipeline_sync::FILES.len()}));
         return 0;
     }
     // pipeline-sync --project <dir> [--check] [--force]: bring a project's scripts/ up to this build (no database)
@@ -99,7 +99,7 @@ pub fn run(args: &[String]) -> i32 {
             return 1;
         };
         let check = args.iter().any(|a| a == "--check");
-        return match crate::pipeline_sync::sync(Path::new(&root), !check, args.iter().any(|a| a == "--force"), true) {
+        return match studio_core::pipeline_sync::sync(Path::new(&root), !check, args.iter().any(|a| a == "--force"), true) {
             Ok(v) => {
                 let pending = check && v["changed"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
                 out(&v);
@@ -113,7 +113,7 @@ pub fn run(args: &[String]) -> i32 {
     }
     // restore must not open (and migrate) the database it is about to replace
     if cmd == "db-restore" {
-        let r = arg(args, "--from").ok_or_else(|| "缺少 --from <備份檔>".to_string()).and_then(|b| db::restore(&crate::util::data_dir().join("studio.db"), Path::new(&b)));
+        let r = arg(args, "--from").ok_or_else(|| "缺少 --from <備份檔>".to_string()).and_then(|b| db::restore(&studio_core::util::data_dir().join("studio.db"), Path::new(&b)));
         return match r {
             Ok(v) => {
                 out(&json!({"ok": true, "result": v}));
@@ -125,7 +125,7 @@ pub fn run(args: &[String]) -> i32 {
             }
         };
     }
-    let db: Db = match crate::open_db() {
+    let db: Db = match studio_core::open_db() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("無法開啟 Studio 資料庫：{e}");
@@ -143,10 +143,10 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
-fn ep_of(args: &[String]) -> Result<crate::pipeline::Ep, String> {
+fn ep_of(args: &[String]) -> Result<studio_core::pipeline::Ep, String> {
     let root = arg(args, "--root").or_else(|| arg(args, "--project")).ok_or("缺少 --root <專案資料夾>")?;
     let root = std::fs::canonicalize(&root).map_err(|e| format!("{root}：{e}"))?;
-    crate::pipeline::Ep::new(Path::new(&crate::util::clean_path(&root)), &arg(args, "--episode").ok_or("缺少 --episode")?, &arg(args, "--locale").unwrap_or_else(|| "zh-TW".into()))
+    studio_core::pipeline::Ep::new(Path::new(&studio_core::util::clean_path(&root)), &arg(args, "--episode").ok_or("缺少 --episode")?, &arg(args, "--locale").unwrap_or_else(|| "zh-TW".into()))
 }
 
 /// v0.3 commands (workspace, re-voice, re-render, versions, database backup).
@@ -158,11 +158,11 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
                 let ep = ep_of(args)?;
                 let c = conn();
                 let s = db::settings_get(&c);
-                out(&json!({"ok": true, "workspace": crate::pipeline::workspace(&c, &ep, &s)?}));
+                out(&json!({"ok": true, "workspace": studio_core::pipeline::workspace(&c, &ep, &s)?}));
             }
             "line-set" => {
                 let ep = ep_of(args)?;
-                let r = crate::rerender::line_set(&ep.root, &ep.locale, &ep.id, &arg(args, "--line").ok_or("缺少 --line")?, arg(args, "--subtitle").as_deref(), arg(args, "--speak").as_deref())?;
+                let r = studio_core::rerender::line_set(&ep.root, &ep.locale, &ep.id, &arg(args, "--line").ok_or("缺少 --line")?, arg(args, "--subtitle").as_deref(), arg(args, "--speak").as_deref())?;
                 out(&json!({"ok": true, "result": r}));
             }
             "voice-promote" => {
@@ -175,13 +175,13 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
                 let c = conn();
                 let r = if flag(args, "--review") {
                     // keep every candidate for listening in Voice Studio; current audio untouched
-                    crate::pipeline::promote_batch(&c, &ep, &batch, Some(&[]), false, job.as_deref()).map(|_| json!({"review": true}))?;
+                    studio_core::pipeline::promote_batch(&c, &ep, &batch, Some(&[]), false, job.as_deref()).map(|_| json!({"review": true}))?;
                     let dir = ep.candidate_dir(&batch);
                     let n = std::fs::read_dir(&dir).map(|d| d.flatten().filter(|e| e.path().extension().map(|x| x == "mp3").unwrap_or(false)).count()).unwrap_or(0);
                     println!("已產生 {n} 個候選音檔，等待在語音工作室試聽後決定（目前的配音沒有改變）");
-                    json!({"review": true, "candidates": n, "dir": crate::util::clean_path(&dir)})
+                    json!({"review": true, "candidates": n, "dir": studio_core::util::clean_path(&dir)})
                 } else {
-                    let r = crate::pipeline::promote_batch(&c, &ep, &batch, only.as_deref(), force, job.as_deref())?;
+                    let r = studio_core::pipeline::promote_batch(&c, &ep, &batch, only.as_deref(), force, job.as_deref())?;
                     for x in r["results"].as_array().cloned().unwrap_or_default() {
                         if x["ok"] == true {
                             println!("  ✓ {} 已切換為新版本 v{}（舊版 v{} 保留）", x["line"].as_str().unwrap_or(""), x["version"], x["previousVersion"]);
@@ -202,12 +202,12 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
             "voice-restore" => {
                 let ep = ep_of(args)?;
                 let v: i64 = arg(args, "--version").ok_or("缺少 --version")?.trim_start_matches('v').parse().map_err(|_| "--version 必須是數字")?;
-                let r = crate::pipeline::restore_voice(&conn(), &ep, &arg(args, "--line").ok_or("缺少 --line")?, v, None)?;
+                let r = studio_core::pipeline::restore_voice(&conn(), &ep, &arg(args, "--line").ok_or("缺少 --line")?, v, None)?;
                 out(&json!({"ok": true, "result": r}));
             }
             "voice-versions" => {
                 let ep = ep_of(args)?;
-                out(&json!({"ok": true, "versions": crate::pipeline::voice_versions(&conn(), &ep, arg(args, "--line").as_deref())}));
+                out(&json!({"ok": true, "versions": studio_core::pipeline::voice_versions(&conn(), &ep, arg(args, "--line").as_deref())}));
             }
             "output-promote" => {
                 let ep = ep_of(args)?;
@@ -215,7 +215,7 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
                 let p = if Path::new(&f).is_absolute() { PathBuf::from(&f) } else { ep.root.join(&f) };
                 let enc: Value = arg(args, "--encode").and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
                 let c = conn();
-                let r = crate::pipeline::promote_output(&c, &ep, &p, arg(args, "--job").as_deref(), &json!({"encode": enc}))?;
+                let r = studio_core::pipeline::promote_output(&c, &ep, &p, arg(args, "--job").as_deref(), &json!({"encode": enc}))?;
                 println!("新影片：{}（舊版保留為 v{}）", r["output"].as_str().unwrap_or(""), r["previousVersion"]);
                 out(&json!({"ok": true, "result": r}));
             }
@@ -224,42 +224,42 @@ fn dispatch_v03(cmd: &str, args: &[String], db: &Db) -> Option<Result<i32, Strin
                 let p: Value = arg(args, "--params").and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(json!({}));
                 let c = conn();
                 let s = db::settings_get(&c);
-                out(&json!({"ok": true, "plan": crate::rerender::plan(&c, &ep, &p, &s)?}));
+                out(&json!({"ok": true, "plan": studio_core::rerender::plan(&c, &ep, &p, &s)?}));
             }
             "hw-info" => {
                 let c = conn();
                 let s = db::settings_get(&c);
                 drop(c);
                 let root = arg(args, "--project").map(PathBuf::from);
-                out(&json!({"ok": true, "hardware": crate::hardware::selector::info(&s, root.as_deref(), flag(args, "--redetect"))}));
+                out(&json!({"ok": true, "hardware": studio_core::hardware::selector::info(&s, root.as_deref(), flag(args, "--redetect"))}));
             }
             "hw-usage" => {
                 // which GPU each role really uses (GPU Engine counters); --ui-root <Studio PID> for a running window
                 let ms = arg(args, "--ms").and_then(|v| v.parse().ok()).unwrap_or(1500);
                 let root = arg(args, "--ui-root").and_then(|v| v.parse().ok()).unwrap_or(std::process::id());
-                out(&json!({"ok": true, "usage": crate::hardware::selector::usage(ms, root)}));
+                out(&json!({"ok": true, "usage": studio_core::hardware::selector::usage(ms, root)}));
             }
-            "gpu-lease" => out(&json!({"ok": true, "lease": crate::gpulock::status()})),
+            "gpu-lease" => out(&json!({"ok": true, "lease": studio_core::gpulock::status()})),
             "auto-check" => {
                 // read-only: check a production's current narration against its requirements with the current checker
-                let p = crate::autopilot::get(&conn(), &arg(args, "--id").ok_or("缺少 --id")?)?;
+                let p = studio_core::autopilot::get(&conn(), &arg(args, "--id").ok_or("缺少 --id")?)?;
                 let pr = db::project_get(&conn(), p.project_id.as_deref().unwrap_or(""))?;
-                let wt = crate::jobs::worktree_dir(Path::new(&pr.root_path), p.worktree.as_deref().ok_or("沒有工作樹")?);
+                let wt = studio_core::jobs::worktree_dir(Path::new(&pr.root_path), p.worktree.as_deref().ok_or("沒有工作樹")?);
                 let doc = narration::read(&wt, "zh-TW")?;
                 let seq = doc["doc"]["sequences"][&p.episode].clone();
-                let rep = crate::content::requirements_report(&p.config, &seq);
-                out(&json!({"ok": rep.failed == 0, "episode": p.episode, "worktree": crate::util::clean_path(&wt), "report": rep}));
+                let rep = studio_core::content::requirements_report(&p.config, &seq);
+                out(&json!({"ok": rep.failed == 0, "episode": p.episode, "worktree": studio_core::util::clean_path(&wt), "report": rep}));
             }
             "settings-set" => {
                 // merge a JSON patch into the settings (same as the Settings page), e.g. {"hw":{"uiGpu":"discrete",…}}
                 let patch: Value = serde_json::from_str(&arg(args, "--json").ok_or("缺少 --json")?).map_err(|e| format!("--json：{e}"))?;
                 out(&json!({"ok": true, "settings": db::settings_merge(&conn(), &patch)?}));
             }
-            "db-backups" => out(&json!({"ok": true, "schemaVersion": db::user_version(&conn()), "latest": db::schema_version(), "backups": db::backups(&crate::util::data_dir().join("studio.db"))})),
+            "db-backups" => out(&json!({"ok": true, "schemaVersion": db::user_version(&conn()), "latest": db::schema_version(), "backups": db::backups(&studio_core::util::data_dir().join("studio.db"))})),
             "db-backup" => {
                 let c = conn();
                 let v = db::user_version(&c);
-                let b = db::backup_verified(&c, &crate::util::data_dir().join("studio.db"), v, "manual")?;
+                let b = db::backup_verified(&c, &studio_core::util::data_dir().join("studio.db"), v, "manual")?;
                 out(&json!({"ok": true, "backup": b}));
             }
             _ => return Err("__not_v03__".into()),
@@ -291,7 +291,7 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                 Some("both") => vec!["zh-TW".to_string(), "zh-CN".to_string()],
                 Some(x) => return Err(format!("--locale 必須是 zh-TW、zh-CN 或 both（收到 {x}）")),
             };
-            let r = crate::create_episode(&root, &title, arg(args, "--id").as_deref(), arg(args, "--scene-title").as_deref(), arg(args, "--first-line").as_deref(), Some(locales))?;
+            let r = studio_core::create_episode(&root, &title, arg(args, "--id").as_deref(), arg(args, "--scene-title").as_deref(), arg(args, "--first-line").as_deref(), Some(locales))?;
             out(&json!({"ok": true, "result": r}));
             Ok(0)
         }
@@ -317,13 +317,13 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             let dest = arg(args, "--dest").ok_or("缺少 --dest <新專案資料夾>")?;
             let title = arg(args, "--title").ok_or("缺少 --title")?;
             let tpl = arg(args, "--template").map(PathBuf::from).or_else(|| std::env::current_dir().ok());
-            let r = crate::create_project(db, &dest, &title, tpl.as_deref(), !flag(args, "--no-link-tools"))?;
+            let r = studio_core::create_project(db, &dest, &title, tpl.as_deref(), !flag(args, "--no-link-tools"))?;
             out(&json!({"ok": true, "result": r}));
             Ok(0)
         }
         "doctor" => {
             let (pid, _) = project_id(db, args)?;
-            let r = crate::doctor_report(db, q, Some(&pid), false)?;
+            let r = studio_core::doctor_report(db, q, Some(&pid), false)?;
             let lines: Vec<String> = r["checks"].as_array().unwrap().iter().map(|c| format!("{:<6} {:<16} {}", c["status"].as_str().unwrap_or(""), c["id"].as_str().unwrap_or(""), c["detail"].as_str().unwrap_or(""))).collect();
             for l in &lines {
                 println!("{l}");
@@ -388,7 +388,7 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                 (None, Some(c)) => c,
                 _ => return Err("缺少 --config-file <設定.json>（或 --config <json>）".into()),
             };
-            let cfg: crate::autopilot::AutoConfig = serde_json::from_str(&text).map_err(|e| format!("設定不是有效 JSON：{e}"))?;
+            let cfg: studio_core::autopilot::AutoConfig = serde_json::from_str(&text).map_err(|e| format!("設定不是有效 JSON：{e}"))?;
             let p = autopilot(db, q).create(&pid, cfg, args.iter().any(|a| a == "--hold"))?;
             out(&json!({"ok": true, "id": p.id, "episode": p.episode, "status": p.status, "config": p.config}));
             Ok(0)
@@ -399,7 +399,7 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             let v = match arg(args, "--id") {
                 Some(id) => {
                     // 先放開資料庫鎖再組狀態（board_item 自己會讀資料庫）
-                    let p = crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
+                    let p = studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
                     vec![ap.board_item(&p)]
                 }
                 None => ap.board(None, 50)?,
@@ -431,13 +431,13 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             Ok(0)
         }
         "auto-list" => {
-            let l = crate::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
+            let l = studio_core::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
             out(&json!(l.iter().map(|p| json!({"id": p.id, "episode": p.episode, "topic": p.config.topic, "status": p.status, "stage": p.stage, "attempt": p.attempt, "message": p.message, "warnings": p.warnings, "outputs": p.outputs, "claudeCostUsdEstimate": p.claude_cost_usd})).collect::<Vec<_>>()));
             Ok(0)
         }
         "auto-get" => {
             let id = arg(args, "--id").ok_or("缺少 --id")?;
-            out(&serde_json::to_value(crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?).unwrap());
+            out(&serde_json::to_value(studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?).unwrap());
             Ok(0)
         }
         "auto-pause" | "auto-resume" | "auto-recover" | "auto-stop" | "auto-discard" => {
@@ -455,9 +455,9 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
         }
         "auto-run" => auto_run(args, db, q),
         "auto-status" => {
-            let list = crate::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
+            let list = studio_core::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
             let want = arg(args, "--id");
-            let sel: Vec<&crate::autopilot::Production> = list.iter().filter(|p| want.as_deref().map(|w| p.id == w || p.id.starts_with(w)).unwrap_or(true)).take(if want.is_some() { 1 } else { 10 }).collect();
+            let sel: Vec<&studio_core::autopilot::Production> = list.iter().filter(|p| want.as_deref().map(|w| p.id == w || p.id.starts_with(w)).unwrap_or(true)).take(if want.is_some() { 1 } else { 10 }).collect();
             if sel.is_empty() {
                 return Err("找不到這個製作（用 auto-status 不加 --id 列出全部）".into());
             }
@@ -476,12 +476,12 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                 rows.push(json!({
                     "activity": activity,
                     "id": p.id, "episode": p.episode, "topic": p.config.topic, "agent": p.config.agent, "status": p.status,
-                    "stage": p.stage, "stageLabel": crate::autopilot::STAGES.iter().find(|s| s.0 == p.stage).map(|s| s.1), "attempt": p.attempt,
+                    "stage": p.stage, "stageLabel": studio_core::autopilot::STAGES.iter().find(|s| s.0 == p.stage).map(|s| s.1), "attempt": p.attempt,
                     "job": job.map(|j| json!({"id": j.id, "label": j.label, "status": j.status, "progress": j.progress, "text": j.progress_text})),
                     "message": p.message, "warnings": p.warnings,
                     "agentTask": p.data.get("agentTask").map(|t| json!({"title": t["title"], "file": t["file"]})),
-                    "worktree": p.worktree.as_ref().zip(root.as_ref()).map(|(w, r)| crate::util::clean_path(&crate::jobs::worktree_dir(r, w))),
-                    "outputs": p.outputs.iter().map(|o| root.as_ref().map(|r| crate::util::clean_path(&r.join(o))).unwrap_or(o.clone())).collect::<Vec<_>>(),
+                    "worktree": p.worktree.as_ref().zip(root.as_ref()).map(|(w, r)| studio_core::util::clean_path(&studio_core::jobs::worktree_dir(r, w))),
+                    "outputs": p.outputs.iter().map(|o| root.as_ref().map(|r| studio_core::util::clean_path(&r.join(o))).unwrap_or(o.clone())).collect::<Vec<_>>(),
                     "next": next,
                 }));
             }
@@ -490,14 +490,14 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
         }
         "agent-task" => {
             let id = arg(args, "--id").ok_or("缺少 --id")?;
-            let p = crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
+            let p = studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?;
             if p.status != "waiting_agent" {
                 out(&json!({"ok": false, "status": p.status, "message": format!("目前沒有給 Agent 的任務（狀態：{}）。用 auto-status 查看。", p.status)}));
                 return Ok(1);
             }
             let t = &p.data["agentTask"];
             out(&json!({"ok": true, "id": p.id, "episode": p.episode, "stage": p.stage, "mode": p.mode, "title": t["title"], "taskFile": t["file"],
-                "workdir": p.worktree.as_ref().and_then(|w| p.project_id.as_deref().and_then(|pid| db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), pid).ok()).map(|x| crate::util::clean_path(&crate::jobs::worktree_dir(std::path::Path::new(&x.root_path), w)))),
+                "workdir": p.worktree.as_ref().and_then(|w| p.project_id.as_deref().and_then(|pid| db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), pid).ok()).map(|x| studio_core::util::clean_path(&studio_core::jobs::worktree_dir(std::path::Path::new(&x.root_path), w)))),
                 "prompt": t["prompt"], "whenDone": format!("--cli agent-done --id {}", p.id)}));
             Ok(0)
         }
@@ -516,25 +516,25 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
                 None => json!({}),
             };
             let s = |k: &str| a.get(k).and_then(|v| v.as_str()).map(String::from).unwrap_or_default();
-            let root_of = |pid: &str| crate::db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), pid).map(|p| PathBuf::from(p.root_path));
+            let root_of = |pid: &str| studio_core::db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), pid).map(|p| PathBuf::from(p.root_path));
             let v: Value = match name.as_str() {
-                "app_info" => json!({"version": env!("CARGO_PKG_VERSION"), "dataDir": crate::util::data_dir(), "schedulerActive": false, "uiBridge": true}),
-                "project_list" => serde_json::to_value(crate::db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner()))?).unwrap(),
-                "project_info" => serde_json::to_value(crate::project::info(&crate::db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("projectId"))?)).unwrap(),
+                "app_info" => json!({"version": env!("CARGO_PKG_VERSION"), "dataDir": studio_core::util::data_dir(), "schedulerActive": false, "uiBridge": true}),
+                "project_list" => serde_json::to_value(studio_core::db::project_list(&db.lock().unwrap_or_else(|e| e.into_inner()))?).unwrap(),
+                "project_info" => serde_json::to_value(studio_core::project::info(&studio_core::db::project_get(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("projectId"))?)).unwrap(),
                 "queue_status" => q.status(),
-                "claude_detect" => crate::claude::detect(),
-                "auto_defaults" => json!({"config": crate::autopilot::AutoConfig::default(), "stages": crate::autopilot::STAGES.iter().map(|(id, l)| json!({"id": id, "label": l})).collect::<Vec<_>>()}),
-                "auto_list" => serde_json::to_value(crate::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), a["limit"].as_i64().unwrap_or(50))?).unwrap(),
-                "auto_get" => serde_json::to_value(crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("id"))?).unwrap(),
-                "auto_events" => serde_json::to_value(crate::autopilot::events(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("id"), a["afterId"].as_i64().unwrap_or(0), a["limit"].as_i64().unwrap_or(500))?).unwrap(),
+                "claude_detect" => studio_core::claude::detect(),
+                "auto_defaults" => json!({"config": studio_core::autopilot::AutoConfig::default(), "stages": studio_core::autopilot::STAGES.iter().map(|(id, l)| json!({"id": id, "label": l})).collect::<Vec<_>>()}),
+                "auto_list" => serde_json::to_value(studio_core::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), a["limit"].as_i64().unwrap_or(50))?).unwrap(),
+                "auto_get" => serde_json::to_value(studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("id"))?).unwrap(),
+                "auto_events" => serde_json::to_value(studio_core::autopilot::events(&db.lock().unwrap_or_else(|e| e.into_inner()), &s("id"), a["afterId"].as_i64().unwrap_or(0), a["limit"].as_i64().unwrap_or(500))?).unwrap(),
                 "auto_monitor" => autopilot(db, q).monitor(&s("id"))?,
                 "asset_probe" => json!(a["paths"].as_array().cloned().unwrap_or_default().iter().filter_map(|p| p.as_str()).map(|p| {
                     let m = std::fs::metadata(p);
-                    json!({"source": p, "kind": crate::assets::detect_kind(p), "bytes": m.as_ref().map(|m| m.len()).unwrap_or(0), "exists": m.map(|m| m.is_file()).unwrap_or(false)})
+                    json!({"source": p, "kind": studio_core::assets::detect_kind(p), "bytes": m.as_ref().map(|m| m.len()).unwrap_or(0), "exists": m.map(|m| m.is_file()).unwrap_or(false)})
                 }).collect::<Vec<_>>()),
-                "layout_migrate" => crate::layout::migrate(&root_of(&s("projectId"))?, false)?, // dry run only through the bridge
+                "layout_migrate" => studio_core::layout::migrate(&root_of(&s("projectId"))?, false)?, // dry run only through the bridge
                 "asset_url_allowed" => json!({"allowed": true}),
-                "episode_list" => crate::episodes::list(&root_of(&s("projectId"))?),
+                "episode_list" => studio_core::episodes::list(&root_of(&s("projectId"))?),
                 other => return Err(format!("ui-invoke 不支援 {other}（只提供唯讀指令）")),
             };
             out(&v);
@@ -542,7 +542,7 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
         }
         "auto-monitor" => {
             let id = arg(args, "--id").ok_or("缺少 --id")?;
-            let full = crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?.id;
+            let full = studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?.id;
             let mut v = autopilot(db, q).monitor(&full)?;
             if flag(args, "--brief") {
                 for k in ["jobLines", "script", "voice", "stills"] {
@@ -561,14 +561,14 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
         }
         "auto-preview" => {
             let id = arg(args, "--id").ok_or("缺少 --id")?;
-            let full = crate::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?.id;
+            let full = studio_core::autopilot::get(&db.lock().unwrap_or_else(|e| e.into_inner()), &id)?.id;
             let j = autopilot(db, q).preview(&full)?;
             out(&json!({"ok": true, "job": j.id, "label": j.label, "next": "用 run-queue 或開著的 Studio 執行；完成後 out/preview/ 有 640×360 關鍵幀"}));
             Ok(0)
         }
         "layout-migrate" => {
             let (_, root) = project_id(&db, args)?;
-            let r = crate::layout::migrate(&root, flag(args, "--apply"))?;
+            let r = studio_core::layout::migrate(&root, flag(args, "--apply"))?;
             println!("{}", r["report"].as_str().unwrap_or(""));
             Ok(if r["errors"].as_array().map(|a| a.is_empty()).unwrap_or(true) { 0 } else { 1 })
         }
@@ -576,19 +576,19 @@ fn dispatch(cmd: &str, args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, 
             let (_, root) = project_id(&db, args)?;
             let venv = root.join("tools").join("CosyVoice").join(".venv");
             if flag(args, "--repair") {
-                let r = crate::envfix::repair(&venv);
-                out(&json!({"ok": r.is_ok(), "repair": r.as_ref().ok(), "error": r.as_ref().err(), "diagnosis": crate::envfix::diagnose(&venv)}));
+                let r = studio_core::envfix::repair(&venv);
+                out(&json!({"ok": r.is_ok(), "repair": r.as_ref().ok(), "error": r.as_ref().err(), "diagnosis": studio_core::envfix::diagnose(&venv)}));
                 Ok(if r.is_ok() { 0 } else { 1 })
             } else {
-                let d = crate::envfix::diagnose(&venv);
+                let d = studio_core::envfix::diagnose(&venv);
                 let ok = d.problem.is_none();
-                out(&json!({"ok": ok, "diagnosis": d, "studioPackage": crate::envfix::current_package()}));
+                out(&json!({"ok": ok, "diagnosis": d, "studioPackage": studio_core::envfix::current_package()}));
                 Ok(if ok { 0 } else { 1 })
             }
         }
         "agent-check" => {
             let prov = arg(args, "--provider").unwrap_or_else(|| "claude".into());
-            let r = crate::agents::check(&prov, flag(args, "--deep"));
+            let r = studio_core::agents::check(&prov, flag(args, "--deep"));
             let ok = r["ok"].as_bool().unwrap_or(false);
             out(&r);
             Ok(if ok { 0 } else { 1 })
@@ -645,14 +645,14 @@ fn read_text_file(f: &str) -> Result<String, String> {
     Ok(s.trim_start_matches('\u{feff}').to_string())
 }
 
-fn autopilot(db: &Db, q: &Arc<Queue>) -> Arc<crate::autopilot::Autopilot> {
+fn autopilot(db: &Db, q: &Arc<Queue>) -> Arc<studio_core::autopilot::Autopilot> {
     let notify: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(|t: &str, b: &str| println!("[{}] 🔔 {t}：{b}", now()));
-    crate::autopilot::Autopilot::new(db.clone(), q.clone(), notify, Arc::new(|_, _| {}))
+    studio_core::autopilot::Autopilot::new(db.clone(), q.clone(), notify, Arc::new(|_, _| {}))
 }
 
 /// The app's two background loops (queue scheduler + autopilot) in the foreground, until no production is active.
 fn auto_run(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
-    let _lock = crate::util::scheduler_lock()?;
+    let _lock = studio_core::util::scheduler_lock()?;
     let timeout = Duration::from_secs(arg(args, "--timeout").and_then(|s| s.parse().ok()).unwrap_or(24 * 3600));
     let ap = autopilot(db, q);
     let rec = q.recover();
@@ -667,14 +667,14 @@ fn auto_run(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
     loop {
         q.tick();
         ap.tick();
-        if last_hb.elapsed() >= Duration::from_secs(crate::queue::HEARTBEAT_SECS) {
+        if last_hb.elapsed() >= Duration::from_secs(studio_core::queue::HEARTBEAT_SECS) {
             q.heartbeat();
             last_hb = Instant::now();
         }
-        let prods = crate::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
+        let prods = studio_core::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
         for p in &prods {
             let after = *last_pev.get(&p.id).unwrap_or(&0);
-            let evs = crate::autopilot::events(&db.lock().unwrap_or_else(|e| e.into_inner()), &p.id, after, 1000)?;
+            let evs = studio_core::autopilot::events(&db.lock().unwrap_or_else(|e| e.into_inner()), &p.id, after, 1000)?;
             for e in &evs {
                 println!("[{}] {} {:<9} {:<5} {}", now(), p.episode.to_uppercase(), e.stage, e.level, e.line.chars().take(600).collect::<String>());
             }
@@ -717,7 +717,7 @@ fn auto_run(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
         }
         std::thread::sleep(Duration::from_millis(1000));
     }
-    let prods = crate::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
+    let prods = studio_core::autopilot::list(&db.lock().unwrap_or_else(|e| e.into_inner()), 50)?;
     out(&json!(prods.iter().take(5).map(|p| json!({"id": p.id, "episode": p.episode, "status": p.status, "message": p.message, "warnings": p.warnings, "outputs": p.outputs, "activeMinutes": p.active_ms / 60000, "claudeRuns": p.claude_runs, "claudeCostUsdEstimate": p.claude_cost_usd, "stages": p.stages.iter().map(|s| json!({"id": s.id, "status": s.status, "attempts": s.attempts, "note": s.note})).collect::<Vec<_>>()})).collect::<Vec<_>>()));
     Ok(if prods.first().map(|p| p.status == "succeeded").unwrap_or(false) { 0 } else { 1 })
 }
@@ -728,7 +728,7 @@ fn now() -> String {
 
 /// Run the real scheduler (recover → tick/heartbeat loop) until no job is queued, waiting or running.
 fn run_queue(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
-    let _lock = crate::util::scheduler_lock()?;
+    let _lock = studio_core::util::scheduler_lock()?;
     let timeout = Duration::from_secs(arg(args, "--timeout").and_then(|s| s.parse().ok()).unwrap_or(4 * 3600));
     let verbose = flag(args, "--verbose");
     let rec = q.recover();
@@ -745,7 +745,7 @@ fn run_queue(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
     let shown = Mutex::new(());
     loop {
         q.tick();
-        if last_hb.elapsed() >= Duration::from_secs(crate::queue::HEARTBEAT_SECS) {
+        if last_hb.elapsed() >= Duration::from_secs(studio_core::queue::HEARTBEAT_SECS) {
             q.heartbeat();
             last_hb = Instant::now();
         }
@@ -805,4 +805,18 @@ fn run_queue(args: &[String], db: &Db, q: &Arc<Queue>) -> Result<i32, String> {
         "jobs": mine.iter().map(|j| json!({"id": j.id, "kind": j.kind, "label": j.label, "status": j.status, "attempt": j.attempt, "error": j.error})).collect::<Vec<_>>()
     }));
     Ok(if failed == 0 { 0 } else { 1 })
+}
+
+/// Commands of this dispatcher (the new front end passes these through without `--cli`).
+const COMMANDS: &[&str] = &[
+    "agent-check", "agent-done", "agent-task", "auto-board", "auto-check", "auto-delete-files", "auto-delete-task", "auto-discard", "auto-get",
+    "auto-list", "auto-monitor", "auto-pause", "auto-preview", "auto-recover", "auto-resume", "auto-run", "auto-start", "auto-start-draft",
+    "auto-status", "auto-stop", "auto-update-config", "build-info", "db-backup", "db-backups", "db-restore", "enqueue", "env-venv", "episode-list",
+    "episode-new", "gpu-lease", "hardware", "hw-info", "hw-usage", "job-cancel", "job-log", "job-pause", "job-resume", "job-retry", "layout-migrate",
+    "line-set", "narration-get", "narration-set", "output-promote", "pipeline-sync", "project-new", "recover", "rerender-plan", "run-queue",
+    "settings-set", "ui-invoke", "validate", "voice-promote", "voice-restore", "voice-versions", "workspace",
+];
+
+pub fn knows(cmd: &str) -> bool {
+    COMMANDS.contains(&cmd)
 }
