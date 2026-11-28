@@ -94,6 +94,7 @@ macOS 27.0.1, M2 (4P + 4E, 10-core GPU, Metal 4), 16 GB. User-level install only
 | WebGL / Three.js | Chromium ANGLE → **Metal** (`ANGLE Metal Renderer: Apple M2`), hardware acceleration |
 | Rendering (1080p30) | 90 frames 10.1 fps; 300 frames **14.2 fps** (2–3 tabs, half the user's memory in use); VideoToolbox encodes 300 frames in 2 s |
 | PyTorch / MLX | CPU 496 GFLOPS; **MPS 864 GFLOPS** (works on real hardware, unlike the CI VM); **MLX 1308 GFLOPS** |
+| Voice A/B (user's narrator reference) | CPU fp32 11/11, CER 0.073; MPS hybrid 11/11, CER 0.256 (one line produced extra content; otherwise equal), **no speedup**, so CPU stays the default. Details in MACOS.md §3.4; **a human listening check is still required** |
 | Full production (CLI only, eco mode, while the user was using the Mac) | **Passed**: script → external agent → **CosyVoice 3 (CPU fp32, 4 threads)** → Whisper alignment → subtitles → mix → **render on Metal + VideoToolbox** (843 frames) → QA 0 issues → MP4 1920×1080 30 fps H.264, 28.1 s. **Interrupted during voice and resumed**: after the restart it generated only 3 of 5 lines. 472 s total (voice 6 min), peak 6.4 GiB |
 
 Problems this test found and fixed:

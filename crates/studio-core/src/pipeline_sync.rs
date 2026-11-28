@@ -63,7 +63,7 @@ pub const FILES: &[(&str, &[u8])] = embedded![
 
 /// pipeline/scripts entries deliberately not shipped (development tools).
 pub const NOT_SHIPPED_PREFIXES: &[&str] = &["test_", "bench_", "exp_"];
-pub const NOT_SHIPPED: &[&str] = &["cosy_ab_report.py", "cosy_variants.py", "voice_speed_ab.py", "voice_ab.py", "voice_ab_texts.json", "tts_profile.py", "finalize.sh", "ui_tour_capture.ps1"];
+pub const NOT_SHIPPED: &[&str] = &["cosy_ab_report.py", "cosy_variants.py", "voice_speed_ab.py", "voice_ab.py", "voice_ab_texts.json", "tts_cli_cosy.py", "tts_profile.py", "finalize.sh", "ui_tour_capture.ps1"];
 
 const MANIFEST: &str = ".studio/pipeline.json";
 

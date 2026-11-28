@@ -51,6 +51,21 @@ Edge-TTS（舊版線上語音）不列入：需要網路、不能克隆、不符
 - 安全批次由 `hardware::profile::budget` 給上限（`PIKARA_TTS_BATCH_MAX`）：可用預算＝(實體記憶體 − 系統保留 4 GiB，省電 6 GiB) × 模式比例；模型常駐估 5 GiB（CPU／MPS fp32），每句再估 600 MiB。M2 16 GB 平衡模式 → 約 4 句；8 GB → 1 句。這些常數必須用 voice_ab.py 的峰值 RSS 校正（BENCHMARK.md）。
 - 已驗證的音訊永不重新產生（沿用現有快取鍵與版本機制）；暫停＝SIGSTOP（模型留在記憶體）；取消／重配音／單句重試沿用佇列機制。
 
+### 3.4 Real-hardware A/B results (Mac mini M2, 2026-11-29)
+
+Same CosyVoice 3 model, same narrator reference voice (the user's own; copies only in `/Volumes/agars data/pikara-test/voiceab/reference/`), same 11 test lines (`voice_ab_texts.json`), the same production settings (prompt prefix, per-line seed, pronunciation dictionary). One take per line. Measured with `scripts/voice_ab.py` + `scripts/tts_cli_cosy.py`; CER from faster-whisper large-v3-turbo (CPU int8). This harness's CER **does not normalize numerals** (unlike production's asr_norm), so number lines score high.
+
+| Candidate | Lines OK | Mean CER | Mean CER without `tw-short` | Synthesis time (excluding model load) |
+|---|---|---|---|---|
+| A. CPU fp32 (Studio's current macOS path) | 11/11 | 0.073 (identical across two runs, reproducible) | 0.081 | 12 s of audio ≈ 40–45 s; 37 s of audio 127 s (about 3.4–4× real time) |
+| B. MPS hybrid (LLM + flow on the GPU, HiFi-GAN on the CPU) | 11/11 | 0.256 | 0.081 | Essentially the same as CPU (37 s of audio 130 s) |
+
+- MPS on the whole model isn't possible: the vocoder's F0 predictor deliberately runs in float64 (CosyVoice's own comment says precision is crucial), and MPS doesn't support float64. Forcing float32 could change the voice, so the vocoder stays on the CPU.
+- On the one-word line "什麼？", MPS produced 2.4 s of audio with extra content (CER 2.0); CPU was correct (1.3 s).
+- Both candidates mishear the same spots ("燙" as "碳", "時脈" in the number line), so those relate to pronunciation or recognition, not the device.
+- **Decision**: keep **CPU fp32** as the macOS default. MPS is no faster on the M2 and had one problem line. MLX ports (candidates C/D/E) haven't been tested.
+- **A human listening check is still required**: `voiceab/out2/listen.md` is the blind listening sheet (S001…, anonymized) and `listen.key.json` the key. Naturalness, Taiwan accent and similarity to the narrator haven't been rated by anyone.
+
 ## 4. ASR／字幕
 
 | 候選 | 字級時間戳 | 備註 |
