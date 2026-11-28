@@ -2,7 +2,7 @@
 
 > Updated 2026-11-28. Branch `feat/cross-platform`, based on main v0.3.4. **Not merged to main and not released** (the user's instruction: wait for their confirmation of the test results).
 >
-> CI status: commit ca79667 passed all 13 `cross-platform.yml` jobs (engine + CLI on Windows x64 / macOS arm64 / macOS x64 / Linux x64 / Linux arm64; GUI + CLI on Windows / macOS arm64 / macOS x64; media probes on macOS × 2 and Linux × 2; security). `linux-headless-e2e.yml` passed.
+> CI status: commit 1f90035 (latest; ca79667 before it) passed all 13 `cross-platform.yml` jobs (engine + CLI on Windows x64 / macOS arm64 / macOS x64 / Linux x64 / Linux arm64; GUI + CLI on Windows / macOS arm64 / macOS x64; media probes on macOS × 2 and Linux × 2; security). `linux-headless-e2e.yml` passed.
 >
 > Four categories, never mixed:
 > - **Real hardware**: run on a physical machine: this Windows PC, and the Mac mini M2 (from 2026-11-28 15:30, over SSH; everything under `/Volumes/agars data/pikara-test` on the external drive).
