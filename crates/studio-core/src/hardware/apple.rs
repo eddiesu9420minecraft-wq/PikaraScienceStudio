@@ -178,6 +178,28 @@ mod tests {
         assert_eq!(g[0].encoder_family.as_deref(), Some("videotoolbox"));
     }
 
+    /// Verbatim `system_profiler SPDisplaysDataType -json` from the real Mac mini M2 (macOS 27.0.1, 2026-11-28;
+    /// display identifiers trimmed) and its real `sysctl` answers.
+    const REAL_M2_PROFILER: &str = r#"{"SPDisplaysDataType":[{"_name":"Apple M2","spdisplays_mtlgpufamilysupport":"spdisplays_metal4",
+        "spdisplays_ndrvs":[{"_name":"P27FBB-RGGL","_spdisplays_pixels":"1920 x 1080","spdisplays_main":"spdisplays_yes",
+        "spdisplays_online":"spdisplays_yes","spdisplays_resolution":"1920 x 1080 @ 60.00Hz"}],
+        "spdisplays_vendor":"sppci_vendor_Apple","sppci_bus":"spdisplays_builtin","sppci_cores":"10",
+        "sppci_device_type":"spdisplays_gpu","sppci_model":"Apple M2"}]}"#;
+
+    #[test]
+    fn real_mac_mini_m2_output() {
+        let real_sysctl = "hw.optional.arm64: 1\nsysctl.proc_translated: 0\nhw.perflevel0.physicalcpu: 4\nhw.perflevel1.physicalcpu: 4\nhw.physicalcpu: 8\nhw.logicalcpu: 8\nhw.memsize: 17179869184\nmachdep.cpu.brand_string: Apple M2\n";
+        let cpu = cpu_from_sysctl(&parse_sysctl(real_sysctl));
+        assert!(cpu.apple_silicon && !cpu.rosetta);
+        assert_eq!((cpu.perf_cores, cpu.efficiency_cores, cpu.logical_cores), (Some(4), Some(4), Some(8)));
+        let g = gpus_from_profiler(&serde_json::from_str(REAL_M2_PROFILER).unwrap(), &cpu);
+        assert_eq!(g.len(), 1);
+        assert_eq!((g[0].name.as_str(), g[0].kind, g[0].dedicated_vram_mib, g[0].shared_system_mib), ("Apple M2", Kind::Integrated, 0, 16384));
+        assert_eq!(g[0].driver_version.as_deref(), Some("metal4"), "macOS 27 reports Metal 4");
+        assert_eq!(g[0].display_outputs, 1);
+        assert!(g[0].available);
+    }
+
     #[test]
     fn intel_mac_with_amd_dgpu_reports_real_vram_and_rosetta() {
         let cpu = cpu_from_sysctl(&parse_sysctl("machdep.cpu.brand_string: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz\nhw.physicalcpu: 8\nhw.logicalcpu: 16\nhw.memsize: 34359738368\nsysctl.proc_translated: 0\n"));
