@@ -412,6 +412,16 @@ pub fn job_env(a: &Assignment) -> Vec<(String, String)> {
         }
         v.push(("PIKARA_RENDER_GPU_NAME".into(), n.clone()));
     }
+    // Linux VA-API (Intel / AMD): open that GPU's DRM render node — the render GPU if it is a VA-API GPU, else the
+    // first VA-API-capable one — instead of whichever card is renderD128 on a multi-GPU machine (hwenc.mjs)
+    if cfg!(target_os = "linux") {
+        let snap = super::manager::snapshot();
+        let vaapi = |g: &&Gpu| g.available && g.encoder_family.as_deref() == Some("vaapi") && g.luid.starts_with("/dev/dri/renderD");
+        let node = snap.gpus.iter().filter(vaapi).find(|g| Some(&g.key) == a.render.gpu_key.as_ref()).or_else(|| snap.gpus.iter().find(vaapi));
+        if let Some(g) = node {
+            v.push(("PIKARA_VAAPI_DEVICE".into(), g.luid.clone()));
+        }
+    }
     if let Some(c) = a.render_vram_cap_mib {
         v.push(("PIKARA_VRAM_CAP".into(), c.to_string()));
     }

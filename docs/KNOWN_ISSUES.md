@@ -13,6 +13,12 @@
 | 9 | 全部 | 功率模式「自訂」的數值還不能從設定頁存入（`budget()` 支援，Settings 沒有欄位） | 自訂模式等同平衡 | P8 設定頁 |
 | 10 | 全部 | 預算常數（每分頁 700 MiB、模型 5 GiB、每句 600 MiB）是保守估計 | 可能過度保守 | BENCHMARK 真機校正 |
 | 11 | Windows | `GetCurrentPackageFullName` 偵測不到「由封裝程式啟動的子程序」仍被虛擬化 AppData 的情況 | 測試若用預設資料夾可能寫到容器 | 測試一律用 `PIKARA_STUDIO_DATA`（TESTING.md §2） |
-| 12 | 發佈 | Tauri 的 `.app.tar.gz` 檔名不含架構，CYW `products.json` 期待 `_aarch64.app.tar.gz` | CYW 找不到 macOS 更新包 | 發佈流程改名（ROADMAP P11） |
+| 12 | 發佈 | ~~Tauri 的 `.app.tar.gz` 檔名不含架構~~ | 已處理 | `scripts/package-macos.sh` 產生 `Pikara.Science.Studio_<ver>_<aarch64\|x64>.app.tar.gz`／`.dmg`（CI 實際產出驗證）；名稱已交給 CYW |
 | 13 | 全部 | Studio 沒有自我更新（P9 未實作） | — | ROADMAP |
-| 14 | Linux | 只有核心測試，沒有完整流程測試 | — | Linux-ready 架構，非本階段目標 |
+| 14 | Linux | 完整流程只在 GitHub VM（x86_64、無 GPU、CPU 配音）跑過，沒有實體 Linux 主機 | NVIDIA／AMD／Intel GPU 上的配音、渲染、VA-API 都未實測 | 需要實體 Linux 主機或使用者同意使用本機 WSL2 |
+| 15 | Linux | VA-API 試編碼原本固定用 `/dev/dri/renderD128` | 多 GPU 主機會開錯 GPU，實測失敗並退回 libx264 | 已改：Studio 傳 `PIKARA_VAAPI_DEVICE`（渲染 GPU 或第一個 Intel／AMD 的 render node），hwenc.mjs 使用它；**未在真機驗證** |
+| 16 | Linux | 混合顯卡筆電無法指定 Chromium 用哪張 GPU 渲染（Windows 有 LUID） | 由驅動決定；gpu-check 實測決定是否用 GPU | PRIME offload 環境變數待真機驗證 |
+| 17 | Linux | AMD ROCm：只偵測是否存在，CosyVoice／Whisper 一律用 CPU | 有 AMD 獨顯也不加速配音 | 真機 ROCm A/B 後才開放 |
+| 18 | Linux arm64 | CI 只跑單元／CLI 測試與媒體探測，沒有跑完整製作 | — | 同 #14 |
+| 19 | Windows | 用 Windows PowerShell／Python 讀 `--json` 輸出時要以 UTF-8 解碼（預設 cp950 會把中文弄壞） | 只影響呼叫端腳本 | docs/CLI.md 說明；輸出本身是正確的 UTF-8 |
+| 20 | 安全 | `chrono` 被 RustSec 標為 unmaintained（RUSTSEC-2026-0543，非漏洞、無修正版本） | 無已知漏洞 | 追蹤替代方案；CI audit 只對漏洞／unsound／yanked 失敗 |

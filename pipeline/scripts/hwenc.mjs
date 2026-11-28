@@ -94,7 +94,9 @@ export const encoderArgs = (id, {preview = false} = {}) => {
   if (!e) throw new Error(`未知的編碼器 ${id}`);
   return {
     id, family: e.family, label: TABLE.families[e.family].label, hardware: e.family !== 'cpu',
-    pre: e.pre ?? [],
+    // Linux VA-API: Studio passes the render node of the GPU it chose (hardware::linux); the table's
+    // /dev/dri/renderD128 is only the default for a single-GPU machine
+    pre: (e.pre ?? []).map((a) => (e.family === 'vaapi' && a.startsWith('/dev/dri/') && process.env.PIKARA_VAAPI_DEVICE) ? process.env.PIKARA_VAAPI_DEVICE : a),
     filter: `format=${e.pixFmt}${e.hwupload ? ',hwupload' : ''}`,
     args: ['-c:v', e.id, ...(preview ? e.preview : e.final)],
   };
