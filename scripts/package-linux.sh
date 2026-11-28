@@ -6,6 +6,7 @@
 # Produces <out>/PikaraScienceStudio_<version>_linux-<arch>.tar.gz containing
 #   PikaraScienceStudio/PikaraScienceStudio      the CLI (launch path for CYW)
 #   PikaraScienceStudio/pipeline-template/       project template (`project new` finds it next to the binary)
+#   PikaraScienceStudio/install-cosyvoice.sh     CosyVoice 3 installer for a project (CPU or CUDA)
 #   PikaraScienceStudio/README.txt, LICENSE, THIRD_PARTY_NOTICES.md, docs/CLI.md, docs/LINUX.md
 # and <out>/SHA256SUMS-linux-<arch>.txt.
 set -euo pipefail
@@ -26,6 +27,7 @@ install -m 0755 "$BIN" "$D/PikaraScienceStudio"
 # project template = the tracked files of pipeline/ (no node_modules, renders, tools or voice files)
 (cd "$ROOT/pipeline" && git ls-files -z | tar --null -T - -cf -) | (mkdir -p "$D/pipeline-template" && tar -xf - -C "$D/pipeline-template")
 cp "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$D/"
+install -m 0755 "$ROOT/scripts/install-cosyvoice.sh" "$D/install-cosyvoice.sh"
 cp "$ROOT/docs/CLI.md" "$ROOT/docs/LINUX.md" "$D/docs/"
 cat > "$D/README.txt" <<EOF
 Pikara Science Studio ${VERSION} — Linux (${ARCH}), command line only.

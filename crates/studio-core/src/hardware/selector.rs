@@ -104,6 +104,10 @@ fn ai_choice(s: &Snapshot, gs: &[&Gpu], pref: &str) -> Choice {
             let g = apple_gpu(gs).unwrap();
             Choice { target: "apple".into(), ..pick("ai", g, "Apple Silicon GPU（Metal，統一記憶體；MLX／MPS 由語音後端實測後選用）") }
         }
+        // AMD on Linux: ROCm PyTorch exists, but CosyVoice / Whisper on ROCm are not verified → CPU, said explicitly
+        None if gs.iter().any(|g| g.vendor_id == "1002" && g.driver_version.as_deref().is_some_and(|d| d.contains("ROCm"))) => {
+            none("ai", "cpu", "AMD GPU 有 ROCm 執行環境，但 CosyVoice／Whisper 尚未在 ROCm 驗證：使用 CPU（較慢，音質相同）")
+        }
         None => none("ai", "cpu", s.cuda.error.clone().map(|e| format!("沒有可用的 CUDA：{e}；使用 CPU（較慢）")).unwrap_or_else(|| "沒有可用的 CUDA，使用 CPU（較慢）".into())),
     };
     match pref {
@@ -173,6 +177,8 @@ fn family_encoder(family: &str) -> &'static str {
         "nvenc" => "h264_nvenc",
         "amf" => "h264_amf",
         "qsv" => "h264_qsv",
+        "vaapi" => "h264_vaapi",
+        "videotoolbox" => "h264_videotoolbox",
         _ => "libx264",
     }
 }

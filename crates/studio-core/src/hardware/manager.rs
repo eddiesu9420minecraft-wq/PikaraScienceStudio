@@ -229,8 +229,9 @@ fn detect_now() -> Snapshot {
         };
     }
     if !cfg!(windows) {
-        // Linux: adapters come from /sys/class/drm in hwenc.mjs; DXGI / CUDA driver API detection is Windows-only here
-        return Snapshot { detected_at: now_iso(), source: "Linux（DRM；Studio 偵測僅提供 CPU／編碼器實測）".into(), gpus: vec![], disabled: vec![], cuda: native::cuda(), encoders: Value::Null, error: None };
+        // Linux (also headless / SSH / containers): kernel DRM devices in sysfs + nvidia-smi + ROCm runtime presence
+        let (gpus, cuda, error) = super::linux::detect();
+        return Snapshot { detected_at: now_iso(), source: "Linux sysfs（/sys/class/drm）＋ nvidia-smi".into(), gpus, disabled: vec![], cuda, encoders: Value::Null, error };
     }
     // DXGI / D3D12 / CUDA on a worker thread with a time limit: a hung driver must not block Studio's start
     let (tx, rx) = std::sync::mpsc::channel();

@@ -229,10 +229,12 @@ jobs:
         working-directory: pipeline
         continue-on-error: true
         run: node scripts/gpu-check.mjs --force
-      - name: Short real render (render.mjs, 90 frames, measured encoder, no display)
+      - name: Short real render (render.mjs, 90 frames, no display; GPU only if its WebGL check passes)
         working-directory: pipeline
         shell: bash
-        run: env -u DISPLAY node scripts/render.mjs gpu --comp EP01-30fps --frames 0-89 --skip-check --allow-cpu-fallback --out out/ci-render.mp4
+        # no --skip-check: render.mjs measures WebGL first and falls back to SwiftShader (CPU) when the VM has no GPU,
+        # exactly as Studio's render jobs do
+        run: env -u DISPLAY node scripts/render.mjs gpu --comp EP01-30fps --frames 0-89 --allow-cpu-fallback --out out/ci-render.mp4
       - name: AI accelerator probe (torch CPU / CUDA / MPS / ROCm, MLX)
         shell: bash
         continue-on-error: true

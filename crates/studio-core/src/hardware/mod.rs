@@ -15,6 +15,7 @@
 
 pub mod adapters;
 pub mod apple;
+pub mod linux;
 pub mod profile;
 pub mod encoders;
 pub mod telemetry;
