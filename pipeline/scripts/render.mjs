@@ -15,7 +15,7 @@
 //    VRAM 目標上限 5300 MiB；出現熱降頻或溫度 ≥ 87°C 就降一級；穩定且有餘裕時升一級（上限 8，受 CPU 執行緒限制）。
 //  - 全程每 2 秒記錄 GPU 使用率、VRAM、溫度、功耗、SM 時脈、NVENC 使用率與 CPU 使用率到報告。
 //  - 不修改任何 GPU 功耗、時脈或散熱設定，保留原廠保護機制。
-import {spawn, execFile} from 'node:child_process';
+import {spawn, execFile, execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -68,6 +68,22 @@ const HARD_MAX = Math.max(1, os.cpus().length);
 // Studio's power-mode budget (PIKARA_RENDER_MAX_CONC, from hardware::profile) can only lower the ceiling
 const ENV_CAP = Number(process.env.PIKARA_RENDER_MAX_CONC) > 0 ? Number(process.env.PIKARA_RENDER_MAX_CONC) : Infinity;
 const MAX_CONC = Math.min(P.max, Math.max(1, Math.floor(os.cpus().length / 2)), ENV_CAP);
+
+// Memory that can be used without swapping. os.freemem() on macOS counts only completely free pages (66 MiB measured on
+// a 16 GB Mac mini M2 while 4 GiB were available), which would make the RAM guard below cut concurrency on every Mac.
+// macOS: free + file-backed + purgeable pages from vm_stat (the same rule Remotion uses); elsewhere os.freemem()
+// (Linux reports MemAvailable, Windows the available physical memory).
+const availMiB = () => {
+  if (process.platform !== 'darwin') return Math.round(os.freemem() / 1048576);
+  try {
+    const t = execFileSync('vm_stat', {encoding: 'utf8', timeout: 2000});
+    const page = Number(/page size of (\d+)/.exec(t)?.[1] ?? 16384);
+    const pages = (k) => Number(new RegExp(`${k}:\\s+(\\d+)`).exec(t)?.[1] ?? 0);
+    return Math.round(((pages('Pages free') + pages('File-backed pages') + pages('Pages purgeable')) * page) / 1048576);
+  } catch {
+    return Math.round(os.freemem() / 1048576);
+  }
+};
 
 const smi = () => {
   const r = run('nvidia-smi', ['--query-gpu=memory.used,memory.total,temperature.gpu,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.sw_thermal_slowdown', '--format=csv,noheader,nounits']);
@@ -291,9 +307,9 @@ const sampler = setInterval(() => {
   execFile('nvidia-smi', ['--query-gpu=utilization.gpu,memory.used,utilization.encoder,power.draw,temperature.gpu,clocks.sm,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.sw_thermal_slowdown', '--format=csv,noheader,nounits'], (err, stdout) => {
     if (err) return;
     const p = stdout.trim().split(',').map((s) => s.trim());
-    samples.push({t: Date.now(), phase: ph, cpu: +cpu.toFixed(1), ramFreeMiB: Math.round(os.freemem() / 1048576), gpu: +p[0], vramMiB: +p[1], enc: +p[2], powerW: +p[3], tempC: +p[4], smMHz: +p[5], throttle: p[6] === 'Active' || p[7] === 'Active'});
+    samples.push({t: Date.now(), phase: ph, cpu: +cpu.toFixed(1), ramFreeMiB: availMiB(), gpu: +p[0], vramMiB: +p[1], enc: +p[2], powerW: +p[3], tempC: +p[4], smMHz: +p[5], throttle: p[6] === 'Active' || p[7] === 'Active'});
   });
-  if (!hasTelemetry) samples.push({t: Date.now(), phase: ph, cpu: +cpu.toFixed(1), ramFreeMiB: Math.round(os.freemem() / 1048576), gpu: null, vramMiB: null, enc: null, tempC: null, throttle: false, noGpu: true});
+  if (!hasTelemetry) samples.push({t: Date.now(), phase: ph, cpu: +cpu.toFixed(1), ramFreeMiB: availMiB(), gpu: null, vramMiB: null, enc: null, tempC: null, throttle: false, noGpu: true});
 }, 2000);
 
 // ---- 3) 分段渲染 ----
@@ -379,7 +395,7 @@ for (const [a, z] of chunks) {
   const gs = cs_.filter((s) => !s.noGpu);
   const gpuAvg = gs.length ? gs.reduce((s, x) => s + x.gpu, 0) / gs.length : 0;
   const cpuAvg = cs_.length ? cs_.reduce((s, x) => s + x.cpu, 0) / cs_.length : 0;
-  const ramMin = cs_.length ? Math.min(...cs_.map((s) => s.ramFreeMiB ?? Infinity)) : Math.round(os.freemem() / 1048576);
+  const ramMin = cs_.length ? Math.min(...cs_.map((s) => s.ramFreeMiB ?? Infinity)) : availMiB();
   chunkLog.push({a, z, concurrency, secs, fps: need / secs, peakVram: peak, maxTemp: hot, throttled, gpuAvg});
   const fps = need / secs;
   console.log(`  區段 ${a}–${z}：${secs.toFixed(0)}s，${fps.toFixed(1)} fps，並行 ${concurrency}${gs.length ? `，GPU 平均 ${gpuAvg.toFixed(0)}%，VRAM 峰值 ${peak} MiB，最高 ${hot}°C${throttled ? '，⚠ 熱降頻' : ''}` : ''}，CPU 平均 ${cpuAvg.toFixed(0)}%，RAM 最少剩 ${ramMin} MiB`);

@@ -2,7 +2,7 @@
 
 | # | 平台 | 問題 | 影響 | 處理 |
 |---|---|---|---|---|
-| 1 | macOS | 沒有在 Mac mini M2 真機跑過完整製作流程 | 語音品質、渲染 FPS、VideoToolbox 都未經真機驗證 | 需要使用者提供 Mac 存取（SSH） |
+| 1 | macOS | Mac mini M2 真機（2026-11-28）：145 項測試、VideoToolbox、Metal WebGL、1080p 渲染已實測；**完整製作流程（含 CosyVoice 配音）尚未在真機跑** | 配音速度與品質未驗證 | 下載 CosyVoice 模型（約 6 GB）需使用者同意 |
 | 2 | macOS | CosyVoice 3 在 macOS 沒有 CUDA；MPS 是否完整可用未知；`ttsfrd` 沒有 macOS wheel | 速度、數字／單位念法可能與 Windows 不同 | MACOS.md §3 A/B 測試；發音字典 + CER 檢查 |
 | 3 | macOS | faster-whisper（CTranslate2）只有 CPU | ASR 慢 | 評估 mlx-whisper／whisper.cpp |
 | 4 | macOS | splash 視窗 `transparent: true` 在未開 `macOSPrivateApi` 時不透明 | 外觀（有底色），功能不受影響 | 共用 pikara-splash，需與 CYW 協調是否開啟 |
@@ -22,3 +22,6 @@
 | 18 | Linux arm64 | CI 只跑單元／CLI 測試與媒體探測，沒有跑完整製作 | — | 同 #14 |
 | 19 | Windows | 用 Windows PowerShell／Python 讀 `--json` 輸出時要以 UTF-8 解碼（預設 cp950 會把中文弄壞） | 只影響呼叫端腳本 | docs/CLI.md 說明；輸出本身是正確的 UTF-8 |
 | 20 | 安全 | `chrono` 被 RustSec 標為 unmaintained（RUSTSEC-2026-0543，非漏洞、無修正版本） | 無已知漏洞 | 追蹤替代方案；CI audit 只對漏洞／unsound／yanked 失敗 |
+| 21 | macOS | Chromium（Remotion）在「仍連線中的 SSH 工作階段」裡啟動時，GPU 程序起不來（icudtl.dat not found → Target closed）；同一指令以 `nohup … &` 脫離後 6／6 成功 | 從 SSH 前景執行渲染會失敗 | 在 Mac 上用視窗版，或 `nohup PikaraScienceStudio run --stay &`／tmux 後中斷 SSH 連線；docs/MACOS.md |
+| 22 | macOS | ~~render.mjs 用 os.freemem()，macOS 只算完全空閒的頁面（M2 實測 66 MiB，實際可用 4 GiB），會讓記憶體保護無故降低並行~~ | 已修正 | vm_stat：free + file-backed + purgeable（與 Remotion 相同規則）；真機實測讀到 2.4 GiB |
+| 23 | 全部 | ~~gpu-check 讀不到 WebGL renderer 時誤判「GPU 不可用」~~（Remotion still 不轉送 console；手動啟動瀏覽器在 Mac 會當掉） | 已修正 | 探測頁把結果 POST 到 gpu-check 在 127.0.0.1 的一次性接收端；M2 真機讀到「ANGLE Metal Renderer: Apple M2」 |

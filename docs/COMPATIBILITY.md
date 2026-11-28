@@ -5,7 +5,7 @@
 > CI status: commit ca79667 passed all 13 `cross-platform.yml` jobs (engine + CLI on Windows x64 / macOS arm64 / macOS x64 / Linux x64 / Linux arm64; GUI + CLI on Windows / macOS arm64 / macOS x64; media probes on macOS × 2 and Linux × 2; security). `linux-headless-e2e.yml` passed.
 >
 > Four categories, never mixed:
-> - **Real hardware**: run on a physical machine (this Windows PC). Only this PC was available.
+> - **Real hardware**: run on a physical machine: this Windows PC, and the Mac mini M2 (from 2026-11-28 15:30, over SSH; everything under `/Volumes/agars data/pikara-test` on the external drive).
 > - **CI**: run on GitHub Actions VMs. They have no display, no NVIDIA GPU, and no MPS on macOS. **This is not a real-hardware result.**
 > - **Compile only**: builds, but no test ran it.
 > - **Not supported / not done**: no implementation yet, or not tested, so not offered.
@@ -15,7 +15,7 @@
 | Target | Build | Unit + CLI integration tests | GUI | Packaging | Full production (script → MP4) |
 |---|---|---|---|---|---|
 | Windows x64 | Real hardware + CI | Real hardware (137 + 4) + CI | Real hardware (build, `check-ui --exe`, CLI mode); this branch hasn't run a full GUI production | NSIS + portable exe (unchanged) | Earlier releases were tested on real hardware; **not re-run on this branch** |
-| macOS ARM64 | CI | CI | CI: `.app` built, frontend fingerprint matches, CLI mode runs | CI: `.dmg`, `.app.tar.gz` (**not signed, not notarized**) | **Not done** (needs the Mac mini) |
+| macOS ARM64 | **Real hardware (M2)** + CI | **Real hardware: all 145 pass** (case-sensitive APFS) + CI | CI: `.app`, frontend fingerprint, CLI mode. The window hasn't been opened on the real machine | CI: `.dmg`, `.app.tar.gz` (**not signed, not notarized**) | **Not done** (CosyVoice model download needs approval) |
 | macOS x64 | CI | CI | CI (same as above) | CI (same as above) | **Not done** |
 | Linux x86_64 | CI | CI | Not offered (CLI by design) | CI: `.tar.gz` (unpacking and creating a project tested) | CI: see §4 |
 | Linux ARM64 | CI (`ubuntu-24.04-arm`) | CI | Not offered | CI: `.tar.gz` | **Not done** (media probes only) |
@@ -79,6 +79,27 @@ Problems this test found and fixed (all of them affect real servers too):
 4. `doctor` ran Windows checks on Linux and macOS.
 
 Limits: this is a VM result. Voice quality is only checked by the recognition error rate (with a test voice, no listening test), and no GPU path (CUDA, NVENC, VA-API, ROCm) was exercised.
+
+
+## 4b. Mac mini M2 real hardware (2026-11-28)
+
+macOS 27.0.1, M2 (4P + 4E, 10-core GPU, Metal 4), 16 GB. User-level install only (rustup, micromamba conda-forge: Python 3.10.22, Node 22, FFmpeg 9.1); no sudo, no Homebrew.
+
+| Item | Result |
+|---|---|
+| Hardware detection | Real `sysctl` and `system_profiler` output parses correctly: Apple Silicon, no Rosetta, 4P/4E, unified memory treated as 16 GiB (not as VRAM), Metal 4. Now a unit-test fixture |
+| Unit + CLI integration tests | 135 + 6 + 4 all pass; the repo sits on a case-sensitive APFS external drive |
+| `doctor` | Passes |
+| VideoToolbox | `h264_videotoolbox` real test encode works (347 ms) |
+| WebGL / Three.js | Chromium ANGLE → **Metal** (`ANGLE Metal Renderer: Apple M2`), hardware acceleration |
+| Rendering (1080p30) | 90 frames 10.1 fps; 300 frames **14.2 fps** (2–3 tabs, half the user's memory in use); VideoToolbox encodes 300 frames in 2 s |
+| PyTorch / MLX | CPU 496 GFLOPS; **MPS 864 GFLOPS** (works on real hardware, unlike the CI VM); **MLX 1308 GFLOPS** |
+| CosyVoice / Whisper / full production | **Not done**: about 6 GB of models to download, waiting for the user's approval |
+
+Problems this test found and fixed:
+1. `gpu-check` could misjudge "no GPU". `remotion still` doesn't forward the console, and a hand-launched browser crashes on the Mac. Now the probe page POSTs its result to a one-shot listener on 127.0.0.1, which read the Metal renderer correctly on the real machine.
+2. render.mjs read macOS's "completely free pages" (66 MiB) and would always have limited rendering concurrency. It now uses vm_stat's available memory (2.4 GiB on the real machine).
+3. A limit found but not fixed: started from inside a live SSH session, Chromium's GPU process fails to start; detached with `nohup … &` it worked 6 out of 6 times. On a Mac, use the window or a detached `run` (KNOWN_ISSUES #21).
 
 ## 5. Not supported / not done
 

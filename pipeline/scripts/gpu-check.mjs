@@ -9,7 +9,9 @@
 // WebGL 結果快取在 out/gpu-check.json（同一個瀏覽器、同一組顯示卡 24 小時內有效），避免每次渲染都多開兩次 Chromium。
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {chromiumFlagsArg, ensureBrowser, remotion, ROOT, run} from './lib.mjs';
+import {createServer} from 'node:http';
+import {spawn} from 'node:child_process';
+import {chromiumFlagsArg, ensureBrowser, remotionBin, ROOT, run} from './lib.mjs';
 import {detectAdapters, probe} from './hwenc.mjs';
 
 const argv = process.argv.slice(2);
@@ -37,6 +39,46 @@ const domProbe = (gl) => {
   const m = /data-renderer="([^"]*)"/.exec(r.out);
   return {renderer: m && m[1] !== 'NO_WEBGL' ? m[1].replace(/&amp;/g, '&') : null, log: r.out.slice(-4000)};
 };
+
+/**
+ * The probe page reports its WebGL info by POSTing it to a one-shot listener on 127.0.0.1 (input prop `probeUrl`;
+ * see src/diagnostics/GpuProbe.tsx). This needs neither console forwarding (absent for `still` in some Remotion
+ * versions) nor a second, hand-launched browser (`--dump-dom`, which crashed at start on the real Mac mini M2 with
+ * "icudtl.dat not found" while Remotion's own launch of the same binary rendered "ANGLE Metal Renderer: Apple M2").
+ * The still runs asynchronously so this process can answer the POST while Remotion renders.
+ */
+const reportServer = () => new Promise((resolve) => {
+  let got = null;
+  const srv = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      try {
+        got = JSON.parse(body);
+      } catch {}
+      res.writeHead(204, {'Access-Control-Allow-Origin': '*'});
+      res.end();
+    });
+  });
+  srv.listen(0, '127.0.0.1', () => resolve({url: `http://127.0.0.1:${srv.address().port}/`, info: () => got, close: () => srv.close()}));
+});
+
+const remotionAsync = (args) => new Promise((resolve) => {
+  const browser = ensureBrowser();
+  const p = spawn(process.execPath, [remotionBin, ...args, ...(browser ? [`--browser-executable=${browser}`] : [])], {cwd: ROOT});
+  let o = '';
+  p.stdout.on('data', (d) => (o += d));
+  p.stderr.on('data', (d) => (o += d));
+  const t = setTimeout(() => p.kill(), 180000);
+  p.on('close', (code) => {
+    clearTimeout(t);
+    resolve({code: code ?? -1, out: o});
+  });
+  p.on('error', (e) => {
+    clearTimeout(t);
+    resolve({code: -1, out: o + String(e)});
+  });
+});
 
 const out = {time: new Date().toISOString(), ok: true, problems: [], warnings: []};
 const fail = (msg) => {
@@ -70,7 +112,11 @@ if (!force && prev?.webglSig === sig && prev.webgl_angle?.renderer && Date.now()
   out.webglCached = true;
 } else {
   for (const gl of [GL, 'swangle']) {
-    const r = remotion(['still', 'src/index.ts', 'GpuProbe', `out/probe-${gl}.png`, `--gl=${gl}`, '--log=verbose', ...(gl === 'swangle' ? [] : chromiumFlagsArg())]);
+    const rep = await reportServer();
+    const props = JSON.stringify({probeUrl: rep.url});
+    const r = await remotionAsync(['still', 'src/index.ts', 'GpuProbe', `out/probe-${gl}.png`, `--gl=${gl}`, '--log=verbose', `--props=${props}`, ...(gl === 'swangle' ? [] : chromiumFlagsArg())]);
+    const reported = rep.info();
+    rep.close();
     // strip ANSI colours (CI terminals) and keep the whole log for diagnosis
     const plain = r.out.replace(/\u001b\[[0-9;]*m/g, '');
     try {
@@ -79,8 +125,8 @@ if (!force && prev?.webglSig === sig && prev.webgl_angle?.renderer && Date.now()
     } catch {}
     const line = plain.split(/\r?\n/).find((l) => l.includes('[gpu-probe]') && l.includes('renderer'));
     const m = line?.match(/\\?"renderer\\?"\s*:\s*\\?"((?:[^"\\]|\\.)+?)\\?"/);
-    let renderer = m ? m[1] : null;
-    let via = 'remotion-still';
+    let renderer = reported?.ok ? reported.renderer : m ? m[1] : null;
+    let via = reported?.ok ? 'remotion-still-report' : 'remotion-still';
     if (!renderer) {
       // Remotion versions that do not forward browser console.log for `still`: ask the same chrome-headless-shell
       // binary directly (--dump-dom prints the page after its script wrote the WebGL renderer into the DOM)
