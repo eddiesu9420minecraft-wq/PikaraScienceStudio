@@ -2,6 +2,8 @@
 
 > Updated 2026-11-28. Branch `feat/cross-platform`, based on main v0.3.4. **Not merged to main and not released** (the user's instruction: wait for their confirmation of the test results).
 >
+> CI status: commit ca79667 passed all 13 `cross-platform.yml` jobs (engine + CLI on Windows x64 / macOS arm64 / macOS x64 / Linux x64 / Linux arm64; GUI + CLI on Windows / macOS arm64 / macOS x64; media probes on macOS × 2 and Linux × 2; security). `linux-headless-e2e.yml` passed.
+>
 > Four categories, never mixed:
 > - **Real hardware**: run on a physical machine (this Windows PC). Only this PC was available.
 > - **CI**: run on GitHub Actions VMs. They have no display, no NVIDIA GPU, and no MPS on macOS. **This is not a real-hardware result.**
@@ -54,7 +56,7 @@
 
 `.github/workflows/linux-headless-e2e.yml` runs on GitHub `ubuntu-24.04`: 4 vCPU, no GPU, no display, CPU voice. The test voice is CosyVoice's own Apache-2.0 sample prompt, not the narrator.
 
-**Result: complete video produced** (run 46119361218, commit 2753764, 2026-11-28). The CLI was the only interface; no window, DISPLAY, X11 or Wayland was involved.
+**Result: complete video produced.** First full run: 46119361218 (2753764). Rerun with the test's own report step fixed: **46120511788 (ca79667) passed**: 503 s total, peak 8,351 MiB, `resume: {finishedBeforeInterrupt: 2, revoicedAfterRestart: 0}`; MP4 1920×1080 30 fps H.264 + AAC, 28.1 s. The CLI was the only interface; no window, DISPLAY, X11 or Wayland was involved.
 
 | Stage | Result (CI VM) |
 |---|---|
